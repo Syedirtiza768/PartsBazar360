@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SearchPage() {
+function SearchResults() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const vehicleConfigId = searchParams.get('vehicleConfigId');
@@ -26,10 +26,7 @@ export default function SearchPage() {
       });
   }, [vehicleConfigId, router]);
 
-  // Helper to render fitment badge based on evidence level (Mocking Evidence A as 'Exact Fit')
   const renderFitmentBadge = () => {
-    // We assume if it's returned by OpenSearch for this vehicle, it fits.
-    // In a real scenario, the evidence level (A-F) would be pulled from the indexed document.
     return (
       <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 w-fit">
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -52,7 +49,6 @@ export default function SearchPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {parts.map((part: any) => {
-            // Find lowest price
             const lowestPrice = part.offers?.reduce((min: number, offer: any) => Math.min(min, offer.price), Infinity);
 
             return (
@@ -99,5 +95,13 @@ export default function SearchPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-24 text-slate-500">Loading search...</div>}>
+      <SearchResults />
+    </Suspense>
   );
 }
