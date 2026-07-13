@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: partsbazar_user
       POSTGRES_PASSWORD: partsbazar_password
       POSTGRES_DB: partsbazar_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,8 +18,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -33,9 +29,6 @@ services:
     environment:
       - discovery.type=single-node
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=ComplexAdminPassword123!
-    ports:
-      - "9200:9200"
-      - "9600:9600"
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     networks:
