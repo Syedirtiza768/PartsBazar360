@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { OpenSearchService } from './src/modules/search/opensearch.service';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DATABASE_URL,
+});
 
 async function main() {
   console.log('Starting Phase 3 seed: Vehicle Hierarchy & Fitment...');
