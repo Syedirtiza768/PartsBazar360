@@ -54,6 +54,7 @@ model CanonicalPart {
   updatedAt       DateTime @updatedAt
 
   offers          SellerOffer[]
+  fitments        Fitment[]
 }
 
 model SellerOffer {
@@ -71,6 +72,8 @@ model SellerOffer {
   seller          Seller         @relation(fields: [sellerId], references: [id])
   canonicalPart   CanonicalPart  @relation(fields: [canonicalPartId], references: [id])
   inventory       Inventory[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
 }
 
 model Inventory {
