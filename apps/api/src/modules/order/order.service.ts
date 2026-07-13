@@ -35,7 +35,7 @@ export class OrderService {
         }
       });
 
-      for (const [sellerId, items] of Object.entries(itemsBySeller)) {
+      for (const [sellerId, items] of Object.entries(itemsBySeller) as [string, typeof cartItems][]) {
         let subTotal = 0;
         for (const item of items) {
           subTotal += (item.quantity * item.sellerOffer.price);

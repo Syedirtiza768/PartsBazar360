@@ -37,11 +37,11 @@ async function main() {
   }
 
   // 3. Initialize Services
-  const cartService = new CartService(prisma);
+  const cartService = new CartService(prisma as any);
   const reservationService = new ReservationService();
-  const orderService = new OrderService(prisma);
+  const orderService = new OrderService(prisma as any);
   const shippingService = new ShippingService();
-  const checkoutService = new CheckoutService(cartService, reservationService, orderService, shippingService, prisma);
+  const checkoutService = new CheckoutService(cartService, reservationService, orderService, shippingService, prisma as any);
 
   // 4. Create Cart and Add Items
   let cart = await cartService.getOrCreateCart(buyer.id);

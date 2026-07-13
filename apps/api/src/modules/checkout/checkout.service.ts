@@ -49,7 +49,7 @@ export class CheckoutService {
     const shippingTotalsBySeller: Record<string, number> = {};
     for (const [sellerId, items] of Object.entries(itemsBySeller)) {
       const formattedItemsForShipping = items.map(i => ({
-        weight: i.sellerOffer.canonicalPart?.weight,
+        weight: i.sellerOffer.canonicalPart?.weight ?? undefined,
         quantity: i.quantity
       }));
       shippingTotalsBySeller[sellerId] = this.shippingService.calculateSellerShippingTotal(formattedItemsForShipping);
