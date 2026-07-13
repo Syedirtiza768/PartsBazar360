@@ -3,7 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { OpenSearchService } from './src/modules/search/opensearch.service';
 
 const adapter = new PrismaPg(process.env.DATABASE_URL!);
-const prisma = new PrismaClient(adapter);
+const prisma = new PrismaClient(adapter as any);
 
 async function main() {
   console.log('Starting Phase 3 seed: Vehicle Hierarchy & Fitment...');

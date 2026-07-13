@@ -6,7 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor() {
     const adapter = new PrismaPg(process.env.DATABASE_URL!);
-    super(adapter);
+    super(adapter as any);
   }
 
   async onModuleInit() {
