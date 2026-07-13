@@ -1,9 +1,9 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { RealTrackService } from './src/modules/integration/realtrack.service';
 
-const prisma = new PrismaClient({
-  datasourceUrl: process.env.DATABASE_URL,
-} as any);
+const adapter = new PrismaPg(process.env.DATABASE_URL!);
+const prisma = new PrismaClient(adapter);
 
 async function main() {
   console.log('Starting seed...');
