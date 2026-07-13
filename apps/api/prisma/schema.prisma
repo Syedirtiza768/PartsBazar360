@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sellers     Seller[]
+}
+
+model Seller {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  storeId        String?      // RealTrack store ID
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  warehouses     Warehouse[]
+  offers         SellerOffer[]
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  sellerId  String
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seller    Seller   @relation(fields: [sellerId], references: [id])
+  inventory Inventory[]
+}
+
+model CanonicalPart {
+  id              String   @id @default(uuid())
+  title           String
+  brand           String?
+  manufacturer    String?
+  category        String?
+  weight          Float?   // Weight in kg for shipping calculations
+  oeNumbers       String[]
+  fitmentFlags    String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  offers          SellerOffer[]
+}
+
+model SellerOffer {
+  id              String         @id @default(uuid())
+  sellerId        String
+  canonicalPartId String
+  price           Float
+  currency        String         @default("AED")
+  condition       String         @default("NEW")
+  externalOfferId String?
+  status          String         @default("ACTIVE")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  seller          Seller         @relation(fields: [sellerId], references: [id])
+  canonicalPart   CanonicalPart  @relation(fields: [canonicalPartId], references: [id])
+  inventory       Inventory[]
+}
+
+model Inventory {
+  id              String      @id @default(uuid())
+  warehouseId     String
+  offerId         String
+  quantity        Int         @default(0)
+  status          String      @default("AVAILABLE")
+  updatedAt       DateTime    @updatedAt
+
+  warehouse       Warehouse   @relation(fields: [warehouseId], references: [id])
+  offer           SellerOffer @relation(fields: [offerId], references: [id])
+}
+
+model RawStagingListing {
+  id              String   @id @default(uuid())
+  sourceListingId String   @unique
+  storeId         String
+  marketplaceId   String?
+  title           String?
+  sku             String?
+  price           Float?
+  currency        String?
+  quantity        Int?
+  status          String?
+  rawPayload      Json
+  processed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VehicleMake {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  models    VehicleModel[]
+}
+
+model VehicleModel {
+  id          String   @id @default(uuid())
+  makeId      String
+  name        String
+  generations VehicleGeneration[]
+  make        VehicleMake @relation(fields: [makeId], references: [id])
+}
+
+model VehicleGeneration {
+  id             String   @id @default(uuid())
+  modelId        String
+  name           String
+  startYear      Int?
+  endYear        Int?
+  configurations VehicleConfiguration[]
+  model          VehicleModel @relation(fields: [modelId], references: [id])
+}
+
+model VehicleConfiguration {
+  id            String   @id @default(uuid())
+  generationId  String
+  trim          String?
+  engine        String?
+  transmission  String?
+  drivetrain    String?
+  fuel          String?
+  market        String?
+  productionStart DateTime?
+  productionEnd   DateTime?
+  
+  fitments      Fitment[]
+  userVehicles  UserVehicle[]
+  generation    VehicleGeneration @relation(fields: [generationId], references: [id])
+}
+
+model Fitment {
+  id              String   @id @default(uuid())
+  canonicalPartId String
+  vehicleConfigId String
+  evidenceLevel   String   // A, B, C, D, E, F
+  confidence      Float    @default(0.0)
+  reviewer        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  canonicalPart   CanonicalPart @relation(fields: [canonicalPartId], references: [id])
+  vehicleConfig   VehicleConfiguration @relation(fields: [vehicleConfigId], references: [id])
+
+  @@unique([canonicalPartId, vehicleConfigId])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("BUYER")
+  vehicles  UserVehicle[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserVehicle {
+  id              String   @id @default(uuid())
+  userId          String
+  vehicleConfigId String
+  nickname        String?
+  vin             String?
+  registration    String?
+  odometer        Int?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User @relation(fields: [userId], references: [id])
+  vehicleConfig   VehicleConfiguration @relation(fields: [vehicleConfigId], references: [id])
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String?
+  sessionId String?    @unique // For guest carts
+  status    String     @default("ACTIVE")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  items     CartItem[]
+}
+
+model CartItem {
+  id              String      @id @default(uuid())
+  cartId          String
+  sellerOfferId   String
+  quantity        Int
+  addedAt         DateTime    @default(now())
+
+  cart            Cart        @relation(fields: [cartId], references: [id])
+  sellerOffer     SellerOffer @relation(fields: [sellerOfferId], references: [id])
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  buyerId         String?
+  totalAmount     Float
+  currency        String        @default("AED")
+  status          String        @default("PENDING_PAYMENT")
+  shippingAddress Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sellerOrders    SellerOrder[]
+  paymentIntent   PaymentIntent?
+}
+
+model SellerOrder {
+  id              String      @id @default(uuid())
+  parentOrderId   String
+  sellerId        String
+  subTotal        Float
+  shippingTotal   Float
+  status          String      @default("PROCESSING")
+  trackingNumber  String?
+  carrier         String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  parentOrder     Order       @relation(fields: [parentOrderId], references: [id])
+  seller          Seller      @relation(fields: [sellerId], references: [id])
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id              String      @id @default(uuid())
+  sellerOrderId   String
+  sellerOfferId   String
+  quantity        Int
+  unitPrice       Float
+  weight          Float?
+
+  sellerOrder     SellerOrder @relation(fields: [sellerOrderId], references: [id])
+  sellerOffer     SellerOffer @relation(fields: [sellerOfferId], references: [id])
+}
+
+model PaymentIntent {
+  id              String      @id @default(uuid())
+  orderId         String      @unique
+  provider        String      // generic, stripe, checkout.com
+  externalId      String?
+  amount          Float
+  currency        String
+  status          String      @default("PENDING")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  order           Order       @relation(fields: [orderId], references: [id])
+}
