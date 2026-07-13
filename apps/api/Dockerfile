@@ -11,7 +11,8 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY . .
-RUN npx prisma generate --schema=apps/api/prisma/schema.prisma 2>/dev/null || true
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
 RUN npm run build --workspace=api
 
 FROM base AS runner
@@ -20,6 +21,6 @@ WORKDIR /app
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/apps/api/package.json ./
-COPY --from=builder /app/apps/api/prisma ./prisma 2>/dev/null || true
+COPY --from=builder /app/apps/api/prisma ./prisma
 EXPOSE 3001
 CMD ["node", "dist/main.js"]
