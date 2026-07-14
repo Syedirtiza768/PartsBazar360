@@ -1,6 +1,12 @@
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL || 'postgresql://partsbazar_user:partsbazar_password@postgres:5432/partsbazar_db',
+    },
+  },
+});
 
 const REALTRACK_STORES = [
   { storeId: '79f249a5-31e0-42a8-978c-a99b0665c61b', name: 'All About Mercedes' },
