@@ -51,6 +51,9 @@ model CanonicalPart {
   oeNumbers       String[]
   fitmentFlags    String[]
   imageUrls       String[] @default([])
+  listingUrl      String?
+  ebayItemId      String?
+  compatibility   Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -94,12 +97,19 @@ model RawStagingListing {
   sourceListingId String   @unique
   storeId         String
   marketplaceId   String?
+  ebayItemId      String?
+  ebayAccountId   String?
+  offerId         String?
   title           String?
   sku             String?
   price           Float?
   currency        String?
   quantity        Int?
   status          String?
+  listingUrl      String?
+  imageUrls       String[] @default([])
+  healthFlags     Json?
+  compatibility   Json?
   rawPayload      Json
   processed       Boolean  @default(false)
   createdAt       DateTime @default(now())

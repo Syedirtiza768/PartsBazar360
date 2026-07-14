@@ -1,5 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+export interface FetchListingsOptions {
+  page?: number;
+  limit?: number;
+  storeId?: string;
+  marketplaceId?: string;
+  status?: string;
+  search?: string;
+}
+
+export interface FetchListingsResult {
+  items: any[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable()
 export class RealTrackService {
   private readonly logger = new Logger(RealTrackService.name);
@@ -10,7 +26,6 @@ export class RealTrackService {
   private tokenExpiry: number | null = null;
 
   async authenticate(): Promise<void> {
-    // Basic check to see if token is still valid (assuming 24h expiry)
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return;
     }
@@ -29,7 +44,6 @@ export class RealTrackService {
 
       const data = await response.json();
       this.accessToken = data.accessToken;
-      // Set expiry to 23 hours from now to be safe
       this.tokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
       this.logger.log('Successfully authenticated with RealTrack API');
     } catch (error) {
@@ -38,17 +52,21 @@ export class RealTrackService {
     }
   }
 
-  async fetchListings(page: number = 1, limit: number = 200, storeId?: string): Promise<any[]> {
+  async fetchListings(options: FetchListingsOptions = {}): Promise<FetchListingsResult> {
     await this.authenticate();
-    this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit})`);
-    
+
+    const { page = 1, limit = 200, storeId, marketplaceId, status, search } = options;
+
+    this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit}, storeId: ${storeId || 'all'}, marketplaceId: ${marketplaceId || 'all'})`);
+
     try {
       const url = new URL(`${this.baseUrl}/published-listings`);
       url.searchParams.append('page', page.toString());
       url.searchParams.append('limit', limit.toString());
-      if (storeId) {
-        url.searchParams.append('storeId', storeId);
-      }
+      if (storeId) url.searchParams.append('storeId', storeId);
+      if (marketplaceId) url.searchParams.append('marketplaceId', marketplaceId);
+      if (status) url.searchParams.append('status', status);
+      if (search) url.searchParams.append('search', search);
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -62,11 +80,37 @@ export class RealTrackService {
       }
 
       const data = await response.json();
-      return data.items || [];
+      return {
+        items: data.items || [],
+        total: data.total || 0,
+        page: data.page || page,
+        limit: data.limit || limit,
+      };
     } catch (error) {
       this.logger.error(`Failed to fetch listings: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  async fetchAllListings(options: FetchListingsOptions = {}): Promise<any[]> {
+    const allItems: any[] = [];
+    let currentPage = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const result = await this.fetchListings({ ...options, page: currentPage });
+      allItems.push(...result.items);
+
+      this.logger.log(`Fetched ${allItems.length}/${result.total} listings`);
+
+      if (result.items.length === 0 || allItems.length >= result.total) {
+        hasMore = false;
+      } else {
+        currentPage++;
+      }
+    }
+
+    return allItems;
   }
 }
 

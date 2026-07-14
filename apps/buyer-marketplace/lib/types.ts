@@ -25,6 +25,9 @@ export interface Part {
   category?: string | null;
   oeNumbers?: string[];
   imageUrls?: string[];
+  listingUrl?: string | null;
+  ebayItemId?: string | null;
+  compatibility?: any;
   createdAt?: string;
   minPrice?: number | null;
   fitments?: string[];

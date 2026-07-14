@@ -30,6 +30,9 @@ export class OpenSearchService implements OnModuleInit {
           category: part.category,
           oeNumbers: part.oeNumbers,
           imageUrls: part.imageUrls || [],
+          listingUrl: part.listingUrl || null,
+          ebayItemId: part.ebayItemId || null,
+          compatibility: part.compatibility || null,
           createdAt: part.createdAt || new Date().toISOString(),
           minPrice,
           fitments: (part.fitments || []).map((f: any) => f.vehicleConfigId),
@@ -40,7 +43,7 @@ export class OpenSearchService implements OnModuleInit {
             sellerId: o.sellerId,
           })),
         },
-        refresh: true, // Force refresh for MVP visibility
+        refresh: true,
       });
       this.logger.log(`Indexed part ${part.id} into OpenSearch`);
     } catch (error) {

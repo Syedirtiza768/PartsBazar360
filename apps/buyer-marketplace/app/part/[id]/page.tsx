@@ -60,6 +60,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
   const images = part.imageUrls || [];
   const compatibleVehicles = part.compatibleVehicles || [];
   const hasFitment = compatibleVehicles.length > 0;
+  const ebayCompatibility = part.compatibility || [];
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -116,7 +117,58 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.oeNumbers && part.oeNumbers.length > 0 && (
                 <span className="text-slate-500 text-sm">OE: {part.oeNumbers.join(', ')}</span>
               )}
+              {part.ebayItemId && (
+                <span className="text-slate-500 text-sm">eBay #{part.ebayItemId}</span>
+              )}
             </div>
+
+            {/* eBay Listing Link */}
+            {part.listingUrl && (
+              <div className="mt-4">
+                <a
+                  href={part.listingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16c-.169 1.858-.896 3.433-.896 3.433s-.724 1.655-2.384 2.68c-1.659 1.025-2.668.5-2.668.5s1.163-.5 1.833-1.5c.67-1 .833-2.167.833-2.167s-1.5.333-2.667.333c-1.167 0-2-.5-2-.5s.5 1.333-.167 2.5c-.667 1.167-2 1.5-2 1.5s1.167.167 2.167-.5c1-.667 1.5-1.667 1.5-1.667s-.667 1-1.833 1.5c-1.167.5-2.167.333-2.167.333s.667.667 2.167.667c1.5 0 2.5-.667 3.167-1.333.667-.667 1-1.5 1.167-2.167.167-.667.333-1.5.333-1.5s.833 1.167 1.5 1.833c.667.667 1.5 1 1.5 1s-.5-.833-.833-1.667c-.333-.833-.5-1.5-.5-1.5s.667.5 1.333.833c.667.333 1.333.5 1.333.5s-.333-.667-.833-1.333c-.5-.667-1-1.167-1-1.167s.833.167 1.5.333c.667.167 1.167.333 1.167.333s-.167-.5-.667-1.167c-.5-.667-1-1-1-1s.667 0 1.167.167c.5.167.833.333.833.333s0-.5-.333-1c-.333-.5-.667-.833-.667-.833s.5-.167 1-.167c.5 0 .833.167.833.167s-.167-.5-.5-.833c-.333-.333-.667-.5-.667-.5s.5-.333 1-.333c.5 0 .833.167.833.167s-.167-.5-.5-.833z"/>
+                  </svg>
+                  View on eBay
+                </a>
+              </div>
+            )}
+
+            {/* eBay Compatibility Data */}
+            {ebayCompatibility.length > 0 && (
+              <div className="mt-6 border-t border-slate-200 pt-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-4">eBay Compatibility</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Year</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Make</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Model</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Trim</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Engine</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {ebayCompatibility.map((item: any, i: number) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <td className="px-4 py-3 text-sm text-slate-900">{item.year || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-900">{item.make || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-900">{item.model || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-900">{item.trim || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-900">{item.engine || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="mt-8 border-t border-slate-200 pt-8">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Fitment Verification</h2>
