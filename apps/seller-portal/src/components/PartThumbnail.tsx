@@ -4,7 +4,11 @@ import { useState } from 'react';
 
 function proxyUrl(src: string): string {
   if (src.startsWith('http://') || src.startsWith('https://')) {
-    return `/img-proxy/?url=${src}`;
+    // Request larger images from eBay CDN
+    let url = src;
+    // Replace eBay thumbnail size with larger version
+    url = url.replace(/\/s-l\d+\.jpg$/, '/s-l500.jpg');
+    return `/img-proxy/?url=${encodeURIComponent(url)}`;
   }
   return src;
 }
