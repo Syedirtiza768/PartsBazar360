@@ -130,81 +130,87 @@ export default function OperationsCommandCenterPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Operations Command Center</h1>
-        <p className="text-zinc-400">
-          Monitor checkout flow, seller upload exceptions, customer support, and fulfilment readiness from one place.
-        </p>
+      <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-amber-700 uppercase tracking-wide">Operator Workspace</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Operations command center</h1>
+          <p className="text-slate-600 mt-1">
+            Monitor checkout flow, seller upload exceptions, customer support, and fulfilment readiness from one place.
+          </p>
+        </div>
+        <button onClick={loadOperations} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+          Refresh operations
+        </button>
       </header>
 
-      {error && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
+      {error && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard label="Open support tickets" value={loading ? '...' : metrics.openTickets} tone="text-amber-300" />
-        <MetricCard label="Uploads needing ops" value={loading ? '...' : metrics.uploadJobs} tone="text-blue-300" />
-        <MetricCard label="Seller orders pending" value={loading ? '...' : metrics.pendingSellerOrders} tone="text-emerald-300" />
-        <MetricCard label="Recent orders" value={loading ? '...' : metrics.recentOrderCount} tone="text-white" />
+        <MetricCard label="Open support tickets" value={loading ? '...' : metrics.openTickets} tone="text-amber-700" />
+        <MetricCard label="Uploads needing ops" value={loading ? '...' : metrics.uploadJobs} tone="text-blue-700" />
+        <MetricCard label="Seller orders pending" value={loading ? '...' : metrics.pendingSellerOrders} tone="text-emerald-700" />
+        <MetricCard label="Recent orders" value={loading ? '...' : metrics.recentOrderCount} tone="text-slate-950" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
-            <h2 className="font-medium text-sm text-zinc-400 uppercase tracking-wider">Fulfilment Queue</h2>
-            <button onClick={loadOperations} className="text-xs font-medium text-zinc-300 hover:text-white">Refresh</button>
+        <section className="xl:col-span-2 rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Fulfilment queue</h2>
+            <span className="text-xs font-semibold text-slate-500">{fulfillmentQueue.length} pending</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-900 border-b border-zinc-800 text-zinc-400">
+              <thead className="bg-white border-b border-slate-200 text-slate-500">
                 <tr>
-                  <th className="px-6 py-4 font-medium">Order</th>
-                  <th className="px-6 py-4 font-medium">Seller</th>
-                  <th className="px-6 py-4 font-medium">Items</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium text-right">Action</th>
+                  <th className="px-6 py-4 font-semibold">Order</th>
+                  <th className="px-6 py-4 font-semibold">Seller</th>
+                  <th className="px-6 py-4 font-semibold">Items</th>
+                  <th className="px-6 py-4 font-semibold">Status</th>
+                  <th className="px-6 py-4 font-semibold text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-slate-100">
                 {fulfillmentQueue.map((sellerOrder) => (
-                  <tr key={sellerOrder.id} className="hover:bg-zinc-800/40">
+                  <tr key={sellerOrder.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="font-mono text-xs text-zinc-300">{sellerOrder.parentOrderId}</p>
-                      <p className="text-xs text-zinc-500">{sellerOrder.customerEmail || 'Customer email missing'}</p>
+                      <p className="font-mono text-xs text-slate-600">{sellerOrder.parentOrderId}</p>
+                      <p className="text-xs text-slate-500">{sellerOrder.customerEmail || 'Customer email missing'}</p>
                     </td>
-                    <td className="px-6 py-4 text-white">{sellerOrder.seller?.name || 'Seller'}</td>
-                    <td className="px-6 py-4 text-zinc-300">{sellerOrder.items?.length || 0}</td>
+                    <td className="px-6 py-4 font-medium text-slate-950">{sellerOrder.seller?.name || 'Seller'}</td>
+                    <td className="px-6 py-4 text-slate-700">{sellerOrder.items?.length || 0}</td>
                     <td className="px-6 py-4">
-                      <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">{sellerOrder.status}</span>
+                      <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{sellerOrder.status}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => updateSellerOrder(sellerOrder.id)} className="text-sm font-medium text-emerald-400 hover:text-emerald-300">
+                      <button onClick={() => updateSellerOrder(sellerOrder.id)} className="text-sm font-semibold text-emerald-700 hover:text-emerald-600">
                         Mark shipped
                       </button>
                     </td>
                   </tr>
                 ))}
                 {fulfillmentQueue.length === 0 && (
-                  <tr><td colSpan={5} className="px-6 py-8 text-center text-zinc-500">No seller orders waiting on fulfilment.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-500">No seller orders waiting on fulfilment.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </section>
 
-        <section className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 space-y-4">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
           <div>
-            <h2 className="font-medium text-sm text-zinc-400 uppercase tracking-wider">RealTrack Catalogue Sync</h2>
-            <p className="mt-1 text-xs text-zinc-500">Queue an ingestion job for a source store without leaving operations.</p>
+            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">RealTrack catalogue sync</h2>
+            <p className="mt-1 text-xs text-slate-500">Queue an ingestion job for a source store without leaving operations.</p>
           </div>
-          <input value={storeId} onChange={(e) => setStoreId(e.target.value)} placeholder="Store ID" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-amber-500" />
-          <input type="number" min={1} value={page} onChange={(e) => setPage(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-amber-500" />
-          <button onClick={handleTriggerSync} disabled={submitting} className="w-full px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-lg disabled:opacity-50">
+          <input value={storeId} onChange={(e) => setStoreId(e.target.value)} placeholder="Store ID" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <input type="number" min={1} value={page} onChange={(e) => setPage(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <button onClick={handleTriggerSync} disabled={submitting} className="w-full px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg disabled:opacity-50 transition-colors">
             {submitting ? 'Queuing job...' : 'Trigger sync'}
           </button>
-          {result && <p className="text-sm text-emerald-400">Queued job <span className="font-mono">{result.jobId}</span>.</p>}
+          {result && <p className="text-sm text-emerald-700">Queued job <span className="font-mono">{result.jobId}</span>.</p>}
           {history.length > 0 && (
             <ul className="space-y-2 pt-2">
               {history.slice(0, 3).map((item, idx) => (
-                <li key={`${item.jobId}-${idx}`} className="text-xs text-zinc-500">Store {item.storeId}: <span className="font-mono">{item.jobId}</span></li>
+                <li key={`${item.jobId}-${idx}`} className="text-xs text-slate-500">Store {item.storeId}: <span className="font-mono">{item.jobId}</span></li>
               ))}
             </ul>
           )}
@@ -212,44 +218,44 @@ export default function OperationsCommandCenterPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800">
-            <h2 className="font-medium text-sm text-zinc-400 uppercase tracking-wider">Support Tickets</h2>
+        <section className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Support tickets</h2>
           </div>
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-slate-100">
             {tickets.slice(0, 8).map((ticket) => (
-              <li key={ticket.id} className="px-6 py-4 flex items-start justify-between gap-4">
+              <li key={ticket.id} className="px-6 py-4 flex items-start justify-between gap-4 hover:bg-slate-50 transition-colors">
                 <div>
-                  <p className="font-medium text-white">{ticket.subject}</p>
-                  <p className="mt-1 text-xs text-zinc-500">{ticket.category} / {ticket.priority} / {ticket.customerEmail}</p>
+                  <p className="font-semibold text-slate-950">{ticket.subject}</p>
+                  <p className="mt-1 text-xs text-slate-500">{ticket.category} / {ticket.priority} / {ticket.customerEmail}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <button onClick={() => updateTicket(ticket.id, 'IN_PROGRESS')} className="text-xs font-medium text-blue-300 hover:text-blue-200">Start</button>
-                  <button onClick={() => updateTicket(ticket.id, 'RESOLVED')} className="text-xs font-medium text-emerald-300 hover:text-emerald-200">Resolve</button>
+                  <button onClick={() => updateTicket(ticket.id, 'IN_PROGRESS')} className="text-xs font-semibold text-blue-700 hover:text-blue-600">Start</button>
+                  <button onClick={() => updateTicket(ticket.id, 'RESOLVED')} className="text-xs font-semibold text-emerald-700 hover:text-emerald-600">Resolve</button>
                 </div>
               </li>
             ))}
-            {tickets.length === 0 && <li className="px-6 py-8 text-center text-zinc-500 text-sm">No support tickets yet.</li>}
+            {tickets.length === 0 && <li className="px-6 py-10 text-center text-slate-500 text-sm">No support tickets yet.</li>}
           </ul>
         </section>
 
-        <section className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800">
-            <h2 className="font-medium text-sm text-zinc-400 uppercase tracking-wider">Seller Upload Exceptions</h2>
+        <section className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Seller upload exceptions</h2>
           </div>
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-slate-100">
             {(dashboard?.recentUploads || []).map((job: any) => (
-              <li key={job.id} className="px-6 py-4">
+              <li key={job.id} className="px-6 py-4 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-medium text-white truncate">{job.fileName}</p>
-                  <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{job.status}</span>
+                  <p className="font-semibold text-slate-950 truncate">{job.fileName}</p>
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{job.status}</span>
                 </div>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-slate-500">
                   {job.seller?.name || 'Seller'}: {job.insertedRows} imported, {job.reviewRows} review, {job.invalidRows} invalid
                 </p>
               </li>
             ))}
-            {(dashboard?.recentUploads || []).length === 0 && <li className="px-6 py-8 text-center text-zinc-500 text-sm">No upload jobs yet.</li>}
+            {(dashboard?.recentUploads || []).length === 0 && <li className="px-6 py-10 text-center text-slate-500 text-sm">No upload jobs yet.</li>}
           </ul>
         </section>
       </div>
@@ -259,8 +265,8 @@ export default function OperationsCommandCenterPage() {
 
 function MetricCard({ label, value, tone }: { label: string; value: number | string; tone: string }) {
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-      <h3 className="text-sm font-medium text-zinc-400">{label}</h3>
+    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-sm font-medium text-slate-500">{label}</h3>
       <div className={`text-4xl font-bold mt-2 ${tone}`}>{value}</div>
     </div>
   );

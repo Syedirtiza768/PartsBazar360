@@ -1,0 +1,25 @@
+services:
+  nginx:
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx-local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - admin-portal
+      - buyer-marketplace
+      - seller-portal
+      - operations-portal
+      - workshop-portal
+
+  api:
+    environment:
+      CORS_ORIGIN: http://localhost
+
+  buyer-marketplace:
+    environment:
+      SITE_URL: http://localhost/buyer
+
+  certbot:
+    profiles:
+      - donotstart

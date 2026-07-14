@@ -12,6 +12,7 @@ export function ProductCard({ part, showFitBadge = false }: { part: Part; showFi
     .filter(Boolean)
     .join(' ')
     .replace(/_/g, ' ');
+  const sellerName = part.offers?.[0]?.seller?.name || part.offers?.[0]?.sellerName || null;
 
   return (
     <Link
@@ -52,6 +53,12 @@ export function ProductCard({ part, showFitBadge = false }: { part: Part; showFi
         </h3>
         {part.category && (
           <p className="mt-1 text-xs text-slate-400">{part.category}</p>
+        )}
+        {sellerName && (
+          <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+            <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            {sellerName}
+          </p>
         )}
         <div className="mt-3 flex items-baseline justify-between">
           <div>

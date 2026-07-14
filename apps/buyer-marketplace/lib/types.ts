@@ -6,6 +6,7 @@ export interface Offer {
   partSource?: string;
   qualityTier?: string;
   sellerId?: string;
+  sellerName?: string;
   seller?: { id: string; name: string };
 }
 

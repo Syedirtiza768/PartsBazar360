@@ -276,7 +276,7 @@ export class IngestionProcessor extends WorkerHost {
       compatibility: canonicalPart.compatibility,
       createdAt: canonicalPart.createdAt,
       fitments,
-      offers: [{ id: offer.id, price: offer.price, condition: offer.condition, sellerId: offer.sellerId }],
+      offers: [{ id: offer.id, price: offer.price, condition: offer.condition, sellerId: offer.sellerId, sellerName: seller.name }],
     });
 
     // Mark as processed

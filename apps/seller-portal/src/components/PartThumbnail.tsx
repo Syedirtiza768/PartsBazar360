@@ -25,9 +25,9 @@ export function PartThumbnail({ src, alt, size = 48 }: { src?: string | null; al
     return (
       <div
         style={{ width: size, height: size }}
-        className="flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded-md shrink-0"
+        className="flex items-center justify-center bg-slate-100 border border-slate-200 rounded-md shrink-0"
       >
-        <svg className="w-1/2 h-1/2 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-1/2 h-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -40,7 +40,7 @@ export function PartThumbnail({ src, alt, size = 48 }: { src?: string | null; al
   }
 
   return (
-    <div style={{ width: size, height: size }} className="relative shrink-0 bg-zinc-800 border border-zinc-700 rounded-md overflow-hidden">
+    <div style={{ width: size, height: size }} className="relative shrink-0 bg-slate-100 border border-slate-200 rounded-md overflow-hidden">
       <img
         src={proxyUrl(src)}
         alt={alt}

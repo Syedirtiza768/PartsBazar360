@@ -50,7 +50,7 @@ export function OffersPanel({ offers }: { offers: Offer[] }) {
                     Best price
                   </span>
                 )}
-                <p className="font-semibold text-slate-900">{offer.seller?.name || 'Marketplace Seller'}</p>
+                <p className="font-semibold text-slate-900">{offer.seller?.name || offer.sellerName || 'Marketplace Seller'}</p>
                 <p className="text-sm text-slate-500 mt-0.5">Condition: {offer.condition}</p>
                 {(offer.partSource || offer.qualityTier) && (
                   <p className="text-xs font-medium text-emerald-700 mt-1">

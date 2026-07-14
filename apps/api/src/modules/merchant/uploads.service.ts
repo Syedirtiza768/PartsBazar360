@@ -196,7 +196,7 @@ export class MerchantUploadsService {
     const warnings: string[] = [];
 
     for (const row of parsedRows) {
-      const result = await this.processRow(job.id, sellerId, warehouse.id, row, {
+      const result = await this.processRow(job.id, sellerId, seller.name, warehouse.id, row, {
         defaultPartSource,
         defaultQualityTier,
       });
@@ -224,6 +224,7 @@ export class MerchantUploadsService {
   private async processRow(
     uploadJobId: string,
     sellerId: string,
+    sellerName: string,
     warehouseId: string,
     row: ParsedUploadRow,
     defaults: { defaultPartSource: string; defaultQualityTier: string },
@@ -338,6 +339,7 @@ export class MerchantUploadsService {
         partSource: offer.partSource,
         qualityTier: offer.qualityTier,
         sellerId: offer.sellerId,
+        sellerName,
       }],
     });
 

@@ -47,6 +47,7 @@ export class OpenSearchService implements OnModuleInit {
             partSource: o.partSource || null,
             qualityTier: o.qualityTier || null,
             sellerId: o.sellerId,
+            sellerName: o.sellerName || null,
           })),
         },
         refresh: true,
