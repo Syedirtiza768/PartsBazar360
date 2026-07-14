@@ -8,7 +8,7 @@ function proxyUrl(src: string): string {
     let url = src;
     // Replace eBay thumbnail size with larger version
     url = url.replace(/\/s-l\d+\.jpg$/, '/s-l500.jpg');
-    return `/img-proxy/?url=${encodeURIComponent(url)}`;
+    return `/img-proxy/?url=${url}`;
   }
   return src;
 }
