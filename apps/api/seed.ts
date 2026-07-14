@@ -39,9 +39,9 @@ async function main() {
   // 4. Trigger the mock API to simulate initial data ingestion
   console.log('Running Ingestion Sync Job with Live RealTrack API...');
   const realTrackService = new RealTrackService();
-  const listings = await realTrackService.fetchListings(1, 5, storeId);
+  const result = await realTrackService.fetchListings({ page: 1, limit: 5, storeId });
 
-  for (const listing of listings) {
+  for (const listing of result.items) {
     console.log(`Ingesting listing: ${listing.title}`);
     
     // Save to Raw Staging
