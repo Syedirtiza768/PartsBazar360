@@ -26,10 +26,9 @@ interface PartImageProps {
 
 function proxyUrl(src: string): string {
   if (src.startsWith('http://') || src.startsWith('https://')) {
-    // Request larger images from eBay CDN
+    // Request large gallery images from eBay CDN
     let url = src;
-    // Replace eBay thumbnail size with larger version
-    url = url.replace(/\/s-l\d+\.jpg$/, '/s-l500.jpg');
+    url = url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1');
     return `/img-proxy/?url=${url}`;
   }
   return src;

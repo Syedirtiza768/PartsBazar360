@@ -20,6 +20,16 @@ export interface CompatibleVehicle {
   confidence: number;
 }
 
+export interface CompatibilityRow {
+  year: number | string;
+  make: string;
+  model: string;
+  trim?: string;
+  engine?: string;
+  notes?: string;
+  source?: string;
+}
+
 export interface Part {
   id: string;
   title: string;
@@ -30,7 +40,8 @@ export interface Part {
   imageUrls?: string[];
   listingUrl?: string | null;
   ebayItemId?: string | null;
-  compatibility?: any;
+  compatibility?: CompatibilityRow[] | any;
+  compatibilityTable?: CompatibilityRow[];
   partSource?: string;
   qualityTier?: string;
   fitmentStatus?: string;

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { INTERNAL_API_URL, SITE_URL } from '@/lib/api';
 import { ImageGallery } from '@/components/ImageGallery';
+import { CompatibilityTable } from '@/components/CompatibilityTable';
 import { OffersPanel } from '@/components/OffersPanel';
 import { lowestOfferPrice, offerCurrency } from '@/lib/format';
 import type { Part } from '@/lib/types';

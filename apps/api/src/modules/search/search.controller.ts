@@ -92,6 +92,55 @@ export class SearchController {
       };
     });
 
-    return { ...part, compatibleVehicles };
+    // eBay-style per-year compatibility rows for the product page table.
+    // Prefer stored compatibility JSON; fall back to expanding fitment year ranges.
+    let compatibilityTable: Array<{
+      year: number | string;
+      make: string;
+      model: string;
+      trim: string;
+      engine: string;
+      source?: string;
+    }> = [];
+
+    if (Array.isArray(part.compatibility) && part.compatibility.length > 0) {
+      compatibilityTable = part.compatibility.map((row: any) => ({
+        year: row.year ?? '-',
+        make: row.make ?? '-',
+        model: row.model ?? '-',
+        trim: row.trim ?? '-',
+        engine: row.engine ?? '-',
+        source: row.source,
+      }));
+    } else {
+      for (const v of compatibleVehicles) {
+        if (!v.startYear || !v.endYear) continue;
+        const from = Math.min(v.startYear, v.endYear);
+        const to = Math.max(v.startYear, v.endYear);
+        for (let year = from; year <= Math.min(to, from + 40); year++) {
+          compatibilityTable.push({
+            year,
+            make: v.make,
+            model: v.model,
+            trim: '-',
+            engine: '-',
+            source: 'title',
+          });
+        }
+      }
+    }
+
+    // Upgrade any remaining thumbnail URLs for display
+    const imageUrls = (part.imageUrls || []).map((url: string) =>
+      url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1'),
+    );
+
+    return {
+      ...part,
+      imageUrls,
+      compatibleVehicles,
+      compatibility: compatibilityTable,
+      compatibilityTable,
+    };
   }
 }
