@@ -75,7 +75,7 @@ export default function CheckoutPage() {
           <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
         </div>
         <h1 className="mt-6 text-3xl font-bold text-slate-900">Order Confirmed!</h1>
-        <p className="mt-2 text-slate-500">Thank you — your order has been placed and is awaiting payment confirmation.</p>
+        <p className="mt-2 text-slate-500">Thank you. Your order has been placed and is awaiting payment confirmation.</p>
 
         <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-6 text-left space-y-3">
           <div className="flex justify-between text-sm">
@@ -96,9 +96,14 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        <Link href="/search" className="mt-8 inline-block rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-500 transition-colors">
-          Continue Shopping
-        </Link>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link href="/search" className="inline-block rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-500 transition-colors">
+            Continue shopping
+          </Link>
+          <Link href={`/support?orderId=${encodeURIComponent(result.order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent('Question about order ' + result.order.id)}`} className="inline-block rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+            Contact support
+          </Link>
+        </div>
       </div>
     );
   }
@@ -150,7 +155,7 @@ export default function CheckoutPage() {
             disabled={submitting}
             className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:bg-blue-400"
           >
-            {submitting ? 'Placing Order...' : `Place Order — ${formatPrice(subtotal, currency)}`}
+            {submitting ? 'Placing Order...' : `Place Order - ${formatPrice(subtotal, currency)}`}
           </button>
         </form>
 

@@ -27,6 +27,7 @@ model Seller {
   warehouses     Warehouse[]
   offers         SellerOffer[]
   sellerOrders   SellerOrder[]
+  uploadJobs     SellerUploadJob[]
 }
 
 model Warehouse {
@@ -54,11 +55,17 @@ model CanonicalPart {
   listingUrl      String?
   ebayItemId      String?
   compatibility   Json?
+  partSource      String   @default("OEM") // OEM, AFTERMARKET
+  qualityTier     String   @default("USED") // NEW, USED, REFURBISHED, REMANUFACTURED, FOR_PARTS
+  fitmentStatus   String   @default("NEEDS_REVIEW")
+  fitmentConfidence Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   offers          SellerOffer[]
   fitments        Fitment[]
+  supportTickets  SupportTicket[]
+  uploadRows      SellerUploadRow[]
 }
 
 model SellerOffer {
@@ -68,6 +75,8 @@ model SellerOffer {
   price           Float
   currency        String         @default("AED")
   condition       String         @default("NEW")
+  partSource      String         @default("OEM")
+  qualityTier     String         @default("NEW")
   externalOfferId String?
   status          String         @default("ACTIVE")
   createdAt       DateTime       @default(now())
@@ -78,6 +87,8 @@ model SellerOffer {
   inventory       Inventory[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
+  supportTickets  SupportTicket[]
+  uploadRows      SellerUploadRow[]
 }
 
 model Inventory {
@@ -233,6 +244,7 @@ model Order {
 
   sellerOrders    SellerOrder[]
   paymentIntent   PaymentIntent?
+  supportTickets  SupportTicket[]
 }
 
 model SellerOrder {
@@ -250,6 +262,7 @@ model SellerOrder {
   parentOrder     Order       @relation(fields: [parentOrderId], references: [id])
   seller          Seller      @relation(fields: [sellerId], references: [id])
   items           OrderItem[]
+  supportTickets  SupportTicket[]
 }
 
 model OrderItem {
@@ -276,4 +289,81 @@ model PaymentIntent {
   updatedAt       DateTime    @updatedAt
 
   order           Order       @relation(fields: [orderId], references: [id])
+}
+
+model SellerUploadJob {
+  id              String   @id @default(uuid())
+  sellerId        String
+  fileName        String
+  status          String   @default("PROCESSING")
+  totalRows       Int      @default(0)
+  processedRows   Int      @default(0)
+  insertedRows    Int      @default(0)
+  reviewRows      Int      @default(0)
+  invalidRows     Int      @default(0)
+  defaultPartSource String @default("OEM")
+  defaultQualityTier String @default("USED")
+  warnings        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+
+  seller          Seller   @relation(fields: [sellerId], references: [id])
+  rows            SellerUploadRow[]
+}
+
+model SellerUploadRow {
+  id              String   @id @default(uuid())
+  uploadJobId     String
+  rowNumber       Int
+  status          String   @default("IMPORTED")
+  sku             String?
+  title           String?
+  brand           String?
+  category        String?
+  oemPartNumber   String?
+  partSource      String   @default("OEM")
+  qualityTier     String   @default("USED")
+  condition       String   @default("USED")
+  price           Float?
+  quantity        Int      @default(1)
+  currency        String   @default("AED")
+  imageUrls       String[] @default([])
+  fitmentSummary  Json?
+  reviewReasons   Json?
+  message         String?
+  rawData         Json
+  canonicalPartId String?
+  sellerOfferId   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  uploadJob       SellerUploadJob @relation(fields: [uploadJobId], references: [id], onDelete: Cascade)
+  canonicalPart   CanonicalPart? @relation(fields: [canonicalPartId], references: [id])
+  sellerOffer     SellerOffer? @relation(fields: [sellerOfferId], references: [id])
+
+  @@unique([uploadJobId, rowNumber])
+}
+
+model SupportTicket {
+  id              String   @id @default(uuid())
+  orderId         String?
+  sellerOrderId   String?
+  canonicalPartId String?
+  sellerOfferId   String?
+  customerName    String?
+  customerEmail   String
+  category        String
+  subject         String
+  message         String
+  status          String   @default("OPEN")
+  priority        String   @default("NORMAL")
+  internalNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  order           Order? @relation(fields: [orderId], references: [id])
+  sellerOrder     SellerOrder? @relation(fields: [sellerOrderId], references: [id])
+  canonicalPart   CanonicalPart? @relation(fields: [canonicalPartId], references: [id])
+  sellerOffer     SellerOffer? @relation(fields: [sellerOfferId], references: [id])
 }

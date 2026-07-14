@@ -52,6 +52,11 @@ export function OffersPanel({ offers }: { offers: Offer[] }) {
                 )}
                 <p className="font-semibold text-slate-900">{offer.seller?.name || 'Marketplace Seller'}</p>
                 <p className="text-sm text-slate-500 mt-0.5">Condition: {offer.condition}</p>
+                {(offer.partSource || offer.qualityTier) && (
+                  <p className="text-xs font-medium text-emerald-700 mt-1">
+                    {[offer.partSource, offer.qualityTier].filter(Boolean).join(' ').replace(/_/g, ' ')}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-slate-900">{formatPrice(offer.price, offer.currency)}</p>

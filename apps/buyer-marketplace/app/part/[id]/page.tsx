@@ -114,6 +114,11 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.category && (
                 <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">{part.category}</span>
               )}
+              {(part.partSource || part.qualityTier) && (
+                <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {[part.partSource, part.qualityTier].filter(Boolean).join(' ').replace(/_/g, ' ')}
+                </span>
+              )}
               {part.oeNumbers && part.oeNumbers.length > 0 && (
                 <span className="text-slate-500 text-sm">OE: {part.oeNumbers.join(', ')}</span>
               )}
@@ -207,6 +212,15 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="mt-6">
+              <Link
+                href={`/support?partId=${part.id}&subject=${encodeURIComponent(`Compatibility question: ${part.title}`)}`}
+                className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+              >
+                Ask support to verify this part
+              </Link>
             </div>
           </div>
         </div>

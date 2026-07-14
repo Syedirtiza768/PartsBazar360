@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-const NAV_ITEMS = [{ label: 'Catalogue Sync', href: '/' }];
+const NAV_ITEMS = [{ label: 'Command Center', href: '/' }];
 
 export function Sidebar() {
   return (

@@ -22,7 +22,7 @@ export function Header() {
       {/* Top utility bar */}
       <div className="hidden sm:block bg-slate-900 text-slate-300 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center justify-between">
-          <p>Fitment-verified used &amp; OEM auto parts, shipped worldwide.</p>
+          <p>Fitment-verified OEM used and aftermarket auto parts, shipped worldwide.</p>
           <div className="flex items-center gap-4">
             <Link href="/garage" className="hover:text-white transition-colors">My Garage</Link>
             <span className="text-slate-600">|</span>
@@ -39,6 +39,7 @@ export function Header() {
         <nav className="hidden md:flex items-center gap-5 text-sm font-medium text-slate-600 shrink-0">
           <Link href="/search" className="hover:text-blue-600 transition-colors">Shop All Parts</Link>
           <Link href="/" className="hover:text-blue-600 transition-colors">Find by Vehicle</Link>
+          <Link href="/support" className="hover:text-blue-600 transition-colors">Support</Link>
         </nav>
 
         <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { API_BASE_URL } from '@/lib/api';
 import { DEMO_SELLER_ID } from '@/lib/config';
 import { PartThumbnail } from '@/components/PartThumbnail';
@@ -39,9 +40,9 @@ export default function InventoryPage() {
           <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
           <p className="text-zinc-400 mt-1">Manage pricing, stock levels, and active status.</p>
         </div>
-        <button className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+        <Link href="/uploads" className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-zinc-200 transition-colors">
           Import CSV
-        </button>
+        </Link>
       </header>
 
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden backdrop-blur-sm">

@@ -18,6 +18,9 @@ export function Sidebar() {
         <Link href="/inventory" className="flex items-center px-4 py-3 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors group">
           <span className="font-medium group-hover:translate-x-1 transition-transform">Inventory</span>
         </Link>
+        <Link href="/uploads" className="flex items-center px-4 py-3 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors group">
+          <span className="font-medium group-hover:translate-x-1 transition-transform">Upload Pipeline</span>
+        </Link>
         <Link href="/orders" className="flex items-center px-4 py-3 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors group">
           <span className="font-medium group-hover:translate-x-1 transition-transform">Orders & Fulfillment</span>
         </Link>

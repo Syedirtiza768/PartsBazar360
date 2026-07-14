@@ -3,6 +3,8 @@ export interface Offer {
   price: number;
   currency?: string;
   condition: string;
+  partSource?: string;
+  qualityTier?: string;
   sellerId?: string;
   seller?: { id: string; name: string };
 }
@@ -28,6 +30,10 @@ export interface Part {
   listingUrl?: string | null;
   ebayItemId?: string | null;
   compatibility?: any;
+  partSource?: string;
+  qualityTier?: string;
+  fitmentStatus?: string;
+  fitmentConfidence?: number | null;
   createdAt?: string;
   minPrice?: number | null;
   fitments?: string[];

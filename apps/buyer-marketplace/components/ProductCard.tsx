@@ -8,6 +8,10 @@ export function ProductCard({ part, showFitBadge = false }: { part: Part; showFi
   const currency = offerCurrency(part.offers);
   const offerCount = part.offers?.length || 0;
   const image = part.imageUrls?.[0];
+  const sourceLabel = [part.partSource, part.qualityTier]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/_/g, ' ');
 
   return (
     <Link
@@ -34,6 +38,11 @@ export function ProductCard({ part, showFitBadge = false }: { part: Part; showFi
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
             Fits your vehicle
           </div>
+        )}
+        {sourceLabel && (
+          <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">
+            {sourceLabel}
+          </p>
         )}
         {part.brand && (
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{part.brand}</p>
