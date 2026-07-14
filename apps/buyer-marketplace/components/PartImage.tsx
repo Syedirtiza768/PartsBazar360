@@ -61,7 +61,8 @@ export function PartImage({ src, alt, className, fill = true }: PartImageProps) 
         loading="lazy"
         decoding="async"
         referrerPolicy="no-referrer"
-        className={`absolute inset-0 w-full h-full ${className ?? ''}`}
+        className={`absolute inset-0 h-full w-full object-contain ${className ?? ''}`}
+        style={{ minHeight: '100%' }}
         onError={() => setErrored(true)}
       />
     );

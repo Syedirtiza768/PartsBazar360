@@ -7,3 +7,12 @@
     @apply bg-slate-50 text-slate-900 antialiased;
   }
 }
+
+/* Ensure aspect-ratio utilities survive even if Tailwind purging misses a class */
+.aspect-square {
+  aspect-ratio: 1 / 1;
+}
+
+.aspect-video {
+  aspect-ratio: 16 / 9;
+}
