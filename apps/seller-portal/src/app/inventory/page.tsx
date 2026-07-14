@@ -1,22 +1,29 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { API_BASE_URL } from '@/lib/api';
+import { DEMO_SELLER_ID } from '@/lib/config';
+import { PartThumbnail } from '@/components/PartThumbnail';
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:3001/merchant/inventory?sellerId=store-1')
+    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}`)
       .then(res => res.json())
       .then(data => {
-        setInventory(data);
+        setInventory(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
         setLoading(false);
       });
   }, []);
 
   const handlePriceUpdate = async (id: string, newPrice: number) => {
-    await fetch(`http://localhost:3001/merchant/inventory/${id}?sellerId=store-1`, {
+    await fetch(`${API_BASE_URL}/merchant/inventory/${id}?sellerId=${DEMO_SELLER_ID}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ price: newPrice })
@@ -41,6 +48,7 @@ export default function InventoryPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-zinc-900 border-b border-zinc-800 text-zinc-400">
             <tr>
+              <th className="px-6 py-4 font-medium w-16"></th>
               <th className="px-6 py-4 font-medium">Part Title</th>
               <th className="px-6 py-4 font-medium">Condition</th>
               <th className="px-6 py-4 font-medium">Price (AED)</th>
@@ -50,9 +58,12 @@ export default function InventoryPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {loading && <tr><td colSpan={6} className="px-6 py-8 text-center text-zinc-500">Loading inventory...</td></tr>}
+            {loading && <tr><td colSpan={7} className="px-6 py-8 text-center text-zinc-500">Loading inventory...</td></tr>}
             {!loading && inventory.map((item) => (
               <tr key={item.id} className="hover:bg-zinc-800/50 transition-colors">
+                <td className="px-6 py-4">
+                  <PartThumbnail src={item.canonicalPart?.imageUrls?.[0]} alt={item.canonicalPart?.title || 'Part'} />
+                </td>
                 <td className="px-6 py-4 font-medium text-white">{item.canonicalPart?.title || 'Unknown Part'}</td>
                 <td className="px-6 py-4">
                   <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300">

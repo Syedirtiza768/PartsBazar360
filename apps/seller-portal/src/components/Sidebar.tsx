@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DEMO_SELLER_NAME } from '@/lib/config';
 
 export function Sidebar() {
   return (
@@ -28,8 +29,8 @@ export function Sidebar() {
             M
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-white">Merchant Account</span>
-            <span className="text-xs text-zinc-500">store-1</span>
+            <span className="text-sm font-medium text-white">{DEMO_SELLER_NAME}</span>
+            <span className="text-xs text-zinc-500">Merchant Account</span>
           </div>
         </div>
       </div>

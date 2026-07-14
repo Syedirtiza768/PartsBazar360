@@ -21,6 +21,11 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
 
@@ -29,8 +34,17 @@ services:
     environment:
       - discovery.type=single-node
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=ComplexAdminPassword123!
+      # Security plugin disabled for local/MVP use so the API can talk to
+      # OpenSearch over plain HTTP without managing TLS certs.
+      - plugins.security.disabled=true
     volumes:
       - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - app-network
 
@@ -43,12 +57,23 @@ services:
       DATABASE_URL: postgresql://partsbazar_user:partsbazar_password@postgres:5432/partsbazar_db
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OPENSEARCH_NODE: http://opensearch:9200
+      OPENSEARCH_URL: http://opensearch:9200
       PORT: 3001
+      CORS_ORIGIN: https://partsbazar360.realtrackapp.com
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
-      - postgres
-      - redis
-      - opensearch
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -58,6 +83,7 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: admin-portal
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -67,6 +93,13 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: buyer-marketplace
+    environment:
+      # Server components/route handlers run inside this container and can
+      # reach the API directly over the compose network (faster + avoids an
+      # extra hop through nginx for SSR data fetching).
+      INTERNAL_API_URL: http://api:3001
+      SITE_URL: https://partsbazar360.realtrackapp.com/buyer
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -76,6 +109,7 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: seller-portal
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -85,6 +119,7 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: operations-portal
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -94,6 +129,7 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: workshop-portal
+    restart: unless-stopped
     networks:
       - app-network
 
@@ -101,9 +137,12 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "7070:80"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - api
       - admin-portal
@@ -111,6 +150,18 @@ services:
       - seller-portal
       - operations-portal
       - workshop-portal
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - nginx
     networks:
       - app-network
 

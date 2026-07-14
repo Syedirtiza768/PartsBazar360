@@ -50,6 +50,7 @@ model CanonicalPart {
   weight          Float?   // Weight in kg for shipping calculations
   oeNumbers       String[]
   fitmentFlags    String[]
+  imageUrls       String[] @default([])
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

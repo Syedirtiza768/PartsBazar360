@@ -1,16 +1,23 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { API_BASE_URL } from '@/lib/api';
+import { DEMO_SELLER_ID } from '@/lib/config';
+import { PartThumbnail } from '@/components/PartThumbnail';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchOrders = () => {
-    fetch('http://localhost:3001/merchant/orders?sellerId=store-1')
+    fetch(`${API_BASE_URL}/merchant/orders?sellerId=${DEMO_SELLER_ID}`)
       .then(res => res.json())
       .then(data => {
-        setOrders(data);
+        setOrders(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
         setLoading(false);
       });
   };
@@ -23,7 +30,7 @@ export default function OrdersPage() {
     const tracking = prompt("Enter Tracking Number:");
     if (!tracking) return;
 
-    await fetch(`http://localhost:3001/merchant/orders/${orderId}/fulfill?sellerId=store-1`, {
+    await fetch(`${API_BASE_URL}/merchant/orders/${orderId}/fulfill?sellerId=${DEMO_SELLER_ID}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trackingNumber: tracking, carrier: 'DHL' }) // Mocking carrier for MVP
@@ -63,9 +70,14 @@ export default function OrdersPage() {
 
             <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 w-full md:w-auto min-w-[300px]">
               <h4 className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Items to ship</h4>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {order.items.map((item: any) => (
-                  <li key={item.id} className="text-sm flex justify-between text-zinc-300">
+                  <li key={item.id} className="text-sm flex items-center gap-3 text-zinc-300">
+                    <PartThumbnail
+                      src={item.sellerOffer.canonicalPart?.imageUrls?.[0]}
+                      alt={item.sellerOffer.canonicalPart?.title || 'Part'}
+                      size={36}
+                    />
                     <span className="truncate max-w-[200px]">{item.quantity}x {item.sellerOffer.canonicalPart?.title}</span>
                   </li>
                 ))}

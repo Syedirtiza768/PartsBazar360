@@ -3,6 +3,8 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { RealTrackService } from '../integration/realtrack.service';
 import { PrismaService } from '../../prisma.service';
+import { OpenSearchService } from '../search/opensearch.service';
+import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
 
 @Processor('ingestion', {
   concurrency: 2, // BullMQ recommended concurrency practice
@@ -13,6 +15,7 @@ export class IngestionProcessor extends WorkerHost {
   constructor(
     private readonly realTrackService: RealTrackService,
     private readonly prisma: PrismaService,
+    private readonly searchService: OpenSearchService,
   ) {
     super();
   }
@@ -95,14 +98,20 @@ export class IngestionProcessor extends WorkerHost {
       return;
     }
 
-    // 3. Normalize into CanonicalPart
+    // 3. Best-effort normalization from the raw title (year/make/model, category)
+    const title: string = listing.title || 'Unknown Part';
+    const parsedVehicle = parseVehicleFromTitle(title);
+    const category = extractCategory(title);
+    const oeNumbers = extractOeNumbers(title);
+
     const canonicalPart = await this.prisma.canonicalPart.create({
       data: {
-        title: listing.title,
-        brand: 'Extracted Brand', // Placeholder for actual extraction logic
-        category: 'Extracted Category',
-        oeNumbers: [],
+        title,
+        brand: parsedVehicle?.make || null,
+        category,
+        oeNumbers,
         fitmentFlags: [],
+        imageUrls: Array.isArray(listing.imageUrls) ? listing.imageUrls : [],
       }
     });
 
@@ -115,7 +124,10 @@ export class IngestionProcessor extends WorkerHost {
         currency: listing.currency || 'AED',
         condition: 'USED', // Assume used for salvage parts
         externalOfferId: listing.id,
-        status: listing.listingStatus || 'ACTIVE'
+        // Normalize to the app's internal convention (ACTIVE/ENDED/...) — RealTrack
+        // returns lowercase statuses (e.g. "active") which otherwise silently fail
+        // the status === 'ACTIVE' checks used by cart/checkout/analytics.
+        status: (listing.listingStatus || 'active').toUpperCase(),
       }
     });
 
@@ -129,10 +141,95 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
+    // 5. Best-effort vehicle fitment inferred from the title (unverified — evidenceLevel 'D')
+    let fitments: { vehicleConfigId: string }[] = [];
+    if (parsedVehicle) {
+      const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
+      const fitment = await this.prisma.fitment.upsert({
+        where: {
+          canonicalPartId_vehicleConfigId: {
+            canonicalPartId: canonicalPart.id,
+            vehicleConfigId: vehicleConfig.id,
+          },
+        },
+        update: {},
+        create: {
+          canonicalPartId: canonicalPart.id,
+          vehicleConfigId: vehicleConfig.id,
+          evidenceLevel: 'D', // title-inferred, unverified
+          confidence: 0.4,
+          reviewer: 'Auto (title-inferred)',
+        },
+      });
+      fitments = [{ vehicleConfigId: fitment.vehicleConfigId }];
+    }
+
+    // 6. Index into OpenSearch so the part is immediately searchable
+    await this.searchService.indexPart({
+      id: canonicalPart.id,
+      title: canonicalPart.title,
+      brand: canonicalPart.brand,
+      category: canonicalPart.category,
+      oeNumbers: canonicalPart.oeNumbers,
+      imageUrls: canonicalPart.imageUrls,
+      createdAt: canonicalPart.createdAt,
+      fitments,
+      offers: [{ id: offer.id, price: offer.price, condition: offer.condition, sellerId: offer.sellerId }],
+    });
+
     // Mark as processed
     await this.prisma.rawStagingListing.update({
       where: { sourceListingId: listing.id },
       data: { processed: true }
     });
+  }
+
+  private async findOrCreateVehicleConfig(vehicle: ParsedVehicle) {
+    const make = await this.prisma.vehicleMake.upsert({
+      where: { name: vehicle.make },
+      update: {},
+      create: { name: vehicle.make },
+    });
+
+    let model = await this.prisma.vehicleModel.findFirst({
+      where: { makeId: make.id, name: vehicle.model },
+    });
+    if (!model) {
+      model = await this.prisma.vehicleModel.create({
+        data: { makeId: make.id, name: vehicle.model },
+      });
+    }
+
+    // Prefer a generation whose range overlaps the parsed year(s), so that a
+    // "2012 Jetta" listing can attach to an existing "2011-2018 Jetta"
+    // generation instead of creating a redundant single-year record.
+    let generation = await this.prisma.vehicleGeneration.findFirst({
+      where: {
+        modelId: model.id,
+        startYear: { lte: vehicle.endYear },
+        endYear: { gte: vehicle.startYear },
+      },
+    });
+    if (!generation) {
+      generation = await this.prisma.vehicleGeneration.create({
+        data: {
+          modelId: model.id,
+          name: vehicle.startYear === vehicle.endYear ? `${vehicle.startYear}` : `${vehicle.startYear}-${vehicle.endYear}`,
+          startYear: vehicle.startYear,
+          endYear: vehicle.endYear,
+        },
+      });
+    }
+
+    let config = await this.prisma.vehicleConfiguration.findFirst({
+      where: { generationId: generation.id },
+    });
+    if (!config) {
+      config = await this.prisma.vehicleConfiguration.create({
+        data: { generationId: generation.id, market: 'GLOBAL' },
+      });
+    }
+
+    return config;
   }
 }

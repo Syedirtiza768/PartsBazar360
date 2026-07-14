@@ -1,107 +1,201 @@
-"use client";
-
-import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+import { INTERNAL_API_URL, SITE_URL } from '@/lib/api';
+import { ProductCard } from '@/components/ProductCard';
+import { SortSelect } from '@/components/SortSelect';
+import type { BrowseResponse, FacetsResponse } from '@/lib/types';
 
-function SearchResults() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const vehicleConfigId = searchParams.get('vehicleConfigId');
+interface SearchPageProps {
+  searchParams: Promise<{
+    vehicleConfigId?: string;
+    q?: string;
+    category?: string;
+    brand?: string;
+    sort?: 'newest' | 'price_asc' | 'price_desc';
+    page?: string;
+  }>;
+}
 
-  const [parts, setParts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+async function getResults(params: Awaited<SearchPageProps['searchParams']>): Promise<BrowseResponse> {
+  const qs = new URLSearchParams();
+  if (params.vehicleConfigId) qs.set('vehicleConfigId', params.vehicleConfigId);
+  if (params.q) qs.set('q', params.q);
+  if (params.category) qs.set('category', params.category);
+  if (params.brand) qs.set('brand', params.brand);
+  if (params.sort) qs.set('sort', params.sort);
+  if (params.page) qs.set('page', params.page);
+  qs.set('limit', '24');
 
-  useEffect(() => {
-    if (!vehicleConfigId) {
-      router.push('/');
-      return;
-    }
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/search/parts?${qs.toString()}`, { cache: 'no-store' });
+    if (!res.ok) return { items: [], total: 0, page: 1, limit: 24 };
+    return res.json();
+  } catch {
+    return { items: [], total: 0, page: 1, limit: 24 };
+  }
+}
 
-    fetch(`http://localhost:3001/search/parts?vehicleConfigId=${vehicleConfigId}`)
-      .then(res => res.json())
-      .then(data => {
-        setParts(data);
-        setLoading(false);
-      });
-  }, [vehicleConfigId, router]);
+async function getFacets(): Promise<FacetsResponse> {
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/search/facets`, { cache: 'no-store' });
+    if (!res.ok) return { brands: [], categories: [] };
+    return res.json();
+  } catch {
+    return { brands: [], categories: [] };
+  }
+}
 
-  const renderFitmentBadge = () => {
-    return (
-      <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 w-fit">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-        Exact Fit - OE Verified
-      </div>
-    );
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const parts: string[] = [];
+  if (params.brand) parts.push(params.brand);
+  if (params.category) parts.push(params.category);
+  if (params.q) parts.push(`"${params.q}"`);
+  const title = parts.length > 0
+    ? `${parts.join(' ')} Parts | PartsBazar360`
+    : 'Shop All Auto Parts | PartsBazar360';
+  const description = params.vehicleConfigId
+    ? 'Browse fitment-verified parts for your exact vehicle configuration.'
+    : 'Browse thousands of live, fitment-checked used and OEM auto parts from verified marketplace sellers.';
+
+  const canonicalParams = new URLSearchParams();
+  if (params.vehicleConfigId) canonicalParams.set('vehicleConfigId', params.vehicleConfigId);
+  if (params.category) canonicalParams.set('category', params.category);
+  if (params.brand) canonicalParams.set('brand', params.brand);
+  if (params.q) canonicalParams.set('q', params.q);
+  const canonicalQs = canonicalParams.toString();
+
+  return {
+    title,
+    description,
+    alternates: { canonical: `${SITE_URL}/search${canonicalQs ? `?${canonicalQs}` : ''}` },
   };
+}
+
+function buildHref(base: Record<string, string | undefined>, overrides: Record<string, string | undefined>) {
+  const merged = { ...base, ...overrides };
+  const qs = new URLSearchParams();
+  Object.entries(merged).forEach(([key, value]) => {
+    if (value) qs.set(key, value);
+  });
+  const str = qs.toString();
+  return `/search${str ? `?${str}` : ''}`;
+}
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams;
+  const isFitmentMode = Boolean(params.vehicleConfigId);
+  const page = params.page ? parseInt(params.page, 10) : 1;
+  const sort = params.sort || 'newest';
+
+  const [results, facets] = await Promise.all([getResults(params), getFacets()]);
+  const totalPages = Math.max(1, Math.ceil(results.total / (results.limit || 24)));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-baseline justify-between border-b border-slate-200 pb-6 mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          Parts that fit your vehicle
-        </h1>
-        <p className="text-sm text-slate-500">{parts.length} results found</p>
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between border-b border-slate-200 pb-6 mb-6 gap-2">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            {isFitmentMode ? 'Parts that fit your vehicle' : params.q ? `Results for "${params.q}"` : 'Shop All Parts'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">{results.total.toLocaleString()} results found</p>
+        </div>
+        {!isFitmentMode && <SortSelect current={sort} />}
       </div>
 
-      {loading ? (
-        <div className="text-center py-24 text-slate-500">Searching catalogues...</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {parts.map((part: any) => {
-            const lowestPrice = part.offers?.reduce((min: number, offer: any) => Math.min(min, offer.price), Infinity);
-
-            return (
-              <div key={part.id} className="group relative flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
-                <div className="aspect-[4/3] bg-slate-100 flex items-center justify-center overflow-hidden">
-                  <div className="text-slate-300">
-                    <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  </div>
-                </div>
-                
-                <div className="p-5 flex flex-col flex-1">
-                  {renderFitmentBadge()}
-                  
-                  <h3 className="mt-4 text-sm font-medium text-slate-500">{part.brand}</h3>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 line-clamp-2">
-                    <Link href={`/part/${part.id}`}>
-                      <span className="absolute inset-0" />
-                      {part.title}
-                    </Link>
-                  </p>
-                  
-                  <div className="mt-auto pt-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500">Starting from</p>
-                      <p className="text-xl font-bold text-slate-900">AED {lowestPrice === Infinity ? 'N/A' : lowestPrice}</p>
-                    </div>
-                    <div className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                      {part.offers?.length || 0} Offers
-                    </div>
-                  </div>
-                </div>
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Filters sidebar — plain links so filtering works without JS and is fully crawlable */}
+        {!isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0) && (
+          <aside className="lg:w-56 shrink-0 space-y-8">
+            {facets.categories.length > 0 && (
+              <div>
+                <h3 className="font-semibold text-slate-900 text-sm mb-3">Category</h3>
+                <ul className="space-y-1.5 text-sm">
+                  {params.category && (
+                    <li>
+                      <Link href={buildHref(params, { category: undefined })} className="text-blue-600 hover:underline">
+                        Clear filter &times;
+                      </Link>
+                    </li>
+                  )}
+                  {facets.categories.map((cat) => (
+                    <li key={cat.name}>
+                      <Link
+                        href={buildHref(params, { category: params.category === cat.name ? undefined : cat.name })}
+                        className={params.category === cat.name ? 'font-semibold text-blue-600' : 'text-slate-600 hover:text-blue-600'}
+                      >
+                        {cat.name} <span className="text-slate-400">({cat.count})</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            );
-          })}
-          
-          {parts.length === 0 && (
-            <div className="col-span-full py-24 text-center">
-              <p className="text-lg text-slate-600">No parts found for this vehicle configuration.</p>
-              <button onClick={() => router.push('/')} className="mt-4 text-blue-600 font-medium hover:underline">
-                Try a different vehicle
-              </button>
+            )}
+
+            {facets.brands.length > 0 && (
+              <div>
+                <h3 className="font-semibold text-slate-900 text-sm mb-3">Brand</h3>
+                <ul className="space-y-1.5 text-sm">
+                  {params.brand && (
+                    <li>
+                      <Link href={buildHref(params, { brand: undefined })} className="text-blue-600 hover:underline">
+                        Clear filter &times;
+                      </Link>
+                    </li>
+                  )}
+                  {facets.brands.map((b) => (
+                    <li key={b.name}>
+                      <Link
+                        href={buildHref(params, { brand: params.brand === b.name ? undefined : b.name })}
+                        className={params.brand === b.name ? 'font-semibold text-blue-600' : 'text-slate-600 hover:text-blue-600'}
+                      >
+                        {b.name} <span className="text-slate-400">({b.count})</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </aside>
+        )}
+
+        <div className="flex-1">
+          {results.items.length === 0 ? (
+            <div className="py-24 text-center">
+              <p className="text-lg text-slate-600">No parts found{isFitmentMode ? ' for this vehicle configuration' : ''}.</p>
+              <Link href={isFitmentMode ? '/' : '/search'} className="mt-4 inline-block text-blue-600 font-medium hover:underline">
+                {isFitmentMode ? 'Try a different vehicle' : 'Clear filters'}
+              </Link>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                {results.items.map((part) => (
+                  <ProductCard key={part.id} part={part} showFitBadge={isFitmentMode} />
+                ))}
+              </div>
+
+              {!isFitmentMode && totalPages > 1 && (
+                <nav className="flex items-center justify-center gap-2 mt-10" aria-label="Pagination">
+                  <Link
+                    href={buildHref(params, { page: String(Math.max(1, page - 1)) })}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border ${page <= 1 ? 'pointer-events-none text-slate-300 border-slate-100' : 'text-slate-700 border-slate-200 hover:border-blue-300'}`}
+                  >
+                    Previous
+                  </Link>
+                  <span className="text-sm text-slate-500 px-2">Page {page} of {totalPages}</span>
+                  <Link
+                    href={buildHref(params, { page: String(Math.min(totalPages, page + 1)) })}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border ${page >= totalPages ? 'pointer-events-none text-slate-300 border-slate-100' : 'text-slate-700 border-slate-200 hover:border-blue-300'}`}
+                  >
+                    Next
+                  </Link>
+                </nav>
+              )}
+            </>
           )}
         </div>
-      )}
+      </div>
     </div>
-  );
-}
-
-export default function SearchPage() {
-  return (
-    <Suspense fallback={<div className="text-center py-24 text-slate-500">Loading search...</div>}>
-      <SearchResults />
-    </Suspense>
   );
 }

@@ -16,20 +16,29 @@ export class OpenSearchService implements OnModuleInit {
 
   async indexPart(part: any) {
     try {
+      const minPrice = Array.isArray(part.offers) && part.offers.length > 0
+        ? Math.min(...part.offers.map((o: any) => o.price ?? Infinity))
+        : null;
+
       await this.client.index({
         index: this.INDEX_NAME,
         id: part.id,
         body: {
+          id: part.id,
           title: part.title,
           brand: part.brand,
           category: part.category,
-          fitments: part.fitments.map(f => f.vehicleConfigId),
-          offers: part.offers.map(o => ({
+          oeNumbers: part.oeNumbers,
+          imageUrls: part.imageUrls || [],
+          createdAt: part.createdAt || new Date().toISOString(),
+          minPrice,
+          fitments: (part.fitments || []).map((f: any) => f.vehicleConfigId),
+          offers: (part.offers || []).map((o: any) => ({
             id: o.id,
             price: o.price,
             condition: o.condition,
             sellerId: o.sellerId,
-          }))
+          })),
         },
         refresh: true, // Force refresh for MVP visibility
       });
@@ -42,7 +51,7 @@ export class OpenSearchService implements OnModuleInit {
   async searchCompatibleParts(vehicleConfigId: string, query?: string) {
     try {
       const must: any[] = [
-        { term: { fitments: vehicleConfigId } }
+        { term: { 'fitments.keyword': vehicleConfigId } }
       ];
 
       if (query) {
@@ -57,18 +66,99 @@ export class OpenSearchService implements OnModuleInit {
       const response = await this.client.search({
         index: this.INDEX_NAME,
         body: {
+          size: 200,
           query: {
             bool: {
               must
             }
-          }
-        }
+          },
+          sort: [{ minPrice: { order: 'asc', missing: '_last' } }],
+        } as any,
       });
 
-      return response.body.hits.hits.map(hit => hit._source);
+      return response.body.hits.hits.map((hit: any) => ({ id: hit._id, ...(hit._source as object) }));
     } catch (error) {
       this.logger.error(`Search failed for vehicleConfigId ${vehicleConfigId}`, error.stack);
       throw error;
+    }
+  }
+
+  /**
+   * General catalog browsing — no vehicle selection required. Powers the
+   * "shop all parts" experience (and SEO-crawlable listing pages) with
+   * keyword search, brand/category filters, sorting and pagination.
+   */
+  async browseParts(opts: {
+    q?: string;
+    category?: string;
+    brand?: string;
+    sort?: 'newest' | 'price_asc' | 'price_desc';
+    page?: number;
+    limit?: number;
+  }) {
+    const { q, category, brand, sort = 'newest', page = 1, limit = 24 } = opts;
+
+    const must: any[] = q
+      ? [{ multi_match: { query: q, fields: ['title^2', 'brand', 'category', 'oeNumbers'] } }]
+      : [{ match_all: {} }];
+
+    const filter: any[] = [];
+    if (category) filter.push({ term: { 'category.keyword': category } });
+    if (brand) filter.push({ term: { 'brand.keyword': brand } });
+
+    const sortClause: any[] =
+      sort === 'price_asc' ? [{ minPrice: { order: 'asc', missing: '_last' } }] :
+      sort === 'price_desc' ? [{ minPrice: { order: 'desc', missing: '_last' } }] :
+      [{ createdAt: { order: 'desc' } }];
+
+    try {
+      const response = await this.client.search({
+        index: this.INDEX_NAME,
+        body: {
+          from: (page - 1) * limit,
+          size: limit,
+          query: { bool: { must, filter } },
+          sort: sortClause,
+        } as any,
+      });
+
+      const totalRaw: any = response.body.hits.total;
+      const total = typeof totalRaw === 'object' ? totalRaw.value : totalRaw;
+
+      return {
+        items: response.body.hits.hits.map((hit: any) => ({ id: hit._id, ...(hit._source as object) })),
+        total,
+        page,
+        limit,
+      };
+    } catch (error) {
+      this.logger.error('browseParts failed', error.stack);
+      return { items: [], total: 0, page, limit };
+    }
+  }
+
+  /** Distinct brand/category facets with counts, for building filter sidebars. */
+  async getFacets() {
+    try {
+      const response = await this.client.search({
+        index: this.INDEX_NAME,
+        body: {
+          size: 0,
+          aggs: {
+            brands: { terms: { field: 'brand.keyword', size: 50 } },
+            categories: { terms: { field: 'category.keyword', size: 50 } },
+          },
+        },
+      });
+
+      const aggs: any = response.body.aggregations;
+      return {
+        brands: (aggs?.brands?.buckets || []).map((b: any) => ({ name: b.key, count: b.doc_count })),
+        categories: (aggs?.categories?.buckets || []).map((b: any) => ({ name: b.key, count: b.doc_count })),
+      };
+    } catch (error) {
+      this.logger.error('getFacets failed', error.stack);
+      return { brands: [], categories: [] };
     }
   }
 }

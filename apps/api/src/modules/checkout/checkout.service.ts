@@ -17,12 +17,18 @@ export class CheckoutService {
     private prisma: PrismaService,
   ) {}
 
-  async processCheckout(cartId: string, buyerId: string, shippingAddress: any) {
+  async processCheckout(
+    cartId: string,
+    buyer: { buyerId?: string; email?: string; name?: string },
+    shippingAddress: any,
+  ) {
     const cart = await this.cartService.getCart(cartId);
 
     if (cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
     }
+
+    const buyerId = await this.resolveBuyerId(buyer);
 
     // 1. Lock stock for all items
     const reservedOffers: string[] = [];
@@ -82,5 +88,17 @@ export class CheckoutService {
       paymentIntent,
       message: 'Checkout successful. Awaiting payment.',
     };
+  }
+
+  private async resolveBuyerId(buyer: { buyerId?: string; email?: string; name?: string }): Promise<string | undefined> {
+    if (buyer.buyerId) return buyer.buyerId;
+    if (!buyer.email) return undefined;
+
+    const user = await this.prisma.user.upsert({
+      where: { email: buyer.email },
+      update: buyer.name ? { name: buyer.name } : {},
+      create: { email: buyer.email, name: buyer.name, role: 'BUYER' },
+    });
+    return user.id;
   }
 }

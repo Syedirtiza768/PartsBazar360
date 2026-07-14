@@ -27,6 +27,6 @@ ENV APP_NAME=${APP_NAME}
 WORKDIR /app
 COPY --from=builder /app/apps/${APP_NAME}/.next/standalone ./
 COPY --from=builder /app/apps/${APP_NAME}/.next/static ./apps/${APP_NAME}/.next/static
-RUN if [ -d "apps/${APP_NAME}/public" ]; then echo "public exists"; else mkdir -p apps/${APP_NAME}/public; fi
+COPY --from=builder /app/apps/${APP_NAME}/public ./apps/${APP_NAME}/public
 EXPOSE 3000
 CMD ["sh", "-c", "node apps/${APP_NAME}/server.js"]

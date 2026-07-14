@@ -8,7 +8,7 @@ export class OrderService {
   constructor(private prisma: PrismaService) {}
 
   async createMultiSellerOrder(
-    buyerId: string,
+    buyerId: string | undefined,
     cartItems: any[],
     shippingAddress: any,
     shippingTotalsBySeller: Record<string, number>

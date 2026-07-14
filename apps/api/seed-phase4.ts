@@ -60,7 +60,7 @@ async function main() {
   const shippingAddress = { line1: '123 Fake Street', city: 'Dubai', country: 'UAE' };
   
   try {
-    const checkoutResult = await checkoutService.processCheckout(cart.id, buyer.id, shippingAddress);
+    const checkoutResult = await checkoutService.processCheckout(cart.id, { buyerId: buyer.id }, shippingAddress);
     console.log(`\nCheckout Successful!`);
     console.log(`Parent Order ID: ${checkoutResult.order.id}`);
     console.log(`Total Amount (incl Shipping): ${checkoutResult.order.totalAmount} ${checkoutResult.order.currency}`);

@@ -87,4 +87,37 @@ export class CartService {
 
     return this.getCart(cartId);
   }
+
+  async updateItemQuantity(cartId: string, itemId: string, quantity: number) {
+    const item = await this.prisma.cartItem.findFirst({ where: { id: itemId, cartId } });
+    if (!item) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    if (quantity <= 0) {
+      await this.prisma.cartItem.delete({ where: { id: itemId } });
+      return this.getCart(cartId);
+    }
+
+    const offer = await this.prisma.sellerOffer.findUnique({
+      where: { id: item.sellerOfferId },
+      include: { inventory: true },
+    });
+    const totalStock = offer?.inventory.reduce((sum, inv) => sum + inv.quantity, 0) ?? 0;
+    if (totalStock < quantity) {
+      throw new BadRequestException(`Insufficient stock. Only ${totalStock} available.`);
+    }
+
+    await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
+    return this.getCart(cartId);
+  }
+
+  async removeItem(cartId: string, itemId: string) {
+    const item = await this.prisma.cartItem.findFirst({ where: { id: itemId, cartId } });
+    if (!item) {
+      throw new NotFoundException('Cart item not found');
+    }
+    await this.prisma.cartItem.delete({ where: { id: itemId } });
+    return this.getCart(cartId);
+  }
 }

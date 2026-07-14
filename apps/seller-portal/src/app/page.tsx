@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { API_BASE_URL } from '@/lib/api';
+import { DEMO_SELLER_ID } from '@/lib/config';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState({ activeListings: 0, pendingOrders: 0, totalRevenue: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mocking merchant sellerId for MVP
-    fetch('http://localhost:3001/merchant/analytics/summary?sellerId=store-1')
+    fetch(`${API_BASE_URL}/merchant/analytics/summary?sellerId=${DEMO_SELLER_ID}`)
       .then(res => res.json())
       .then(data => {
         setStats(data);

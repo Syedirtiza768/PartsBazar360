@@ -1,136 +1,127 @@
-"use client";
+import Link from 'next/link';
+import { INTERNAL_API_URL } from '@/lib/api';
+import { VehicleSelector } from '@/components/VehicleSelector';
+import { ProductCard } from '@/components/ProductCard';
+import type { BrowseResponse, FacetsResponse } from '@/lib/types';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+// Rendered dynamically on every request rather than cached at build time —
+// the build-time container has no network route to the API, and ISR would
+// otherwise bake in an empty "featured parts" snapshot until the first
+// revalidation window passes.
+export const dynamic = 'force-dynamic';
 
-export default function Home() {
-  const router = useRouter();
-  const [makes, setMakes] = useState<any[]>([]);
-  const [models, setModels] = useState<any[]>([]);
-  const [generations, setGenerations] = useState<any[]>([]);
-  const [configs, setConfigs] = useState<any[]>([]);
+async function getFeaturedParts(): Promise<BrowseResponse> {
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/search/parts?sort=newest&limit=8`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return { items: [], total: 0, page: 1, limit: 8 };
+    return res.json();
+  } catch {
+    return { items: [], total: 0, page: 1, limit: 8 };
+  }
+}
 
-  const [selectedMake, setSelectedMake] = useState('');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [selectedGen, setSelectedGen] = useState('');
-  const [selectedConfig, setSelectedConfig] = useState('');
+async function getFacets(): Promise<FacetsResponse> {
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/search/facets`, { cache: 'no-store' });
+    if (!res.ok) return { brands: [], categories: [] };
+    return res.json();
+  } catch {
+    return { brands: [], categories: [] };
+  }
+}
 
-  // Fetch Makes on load
-  useEffect(() => {
-    fetch('http://localhost:3001/vehicles/makes')
-      .then(res => res.json())
-      .then(data => setMakes(data));
-  }, []);
+const VALUE_PROPS = [
+  { title: 'Fitment-verified search', desc: 'Match parts to your exact make, model, generation and trim.', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { title: '11 vetted marketplace sellers', desc: 'Live inventory sourced directly from trusted global salvage & OEM sellers.', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a4 4 0 11-8 0 4 4 0 018 0z' },
+  { title: 'Worldwide shipping', desc: 'Every seller order is calculated with real, weight-based shipping.', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4M4 17h12m0 0l-4-4m4 4l-4 4' },
+];
 
-  // Fetch Models when Make selected
-  useEffect(() => {
-    if (selectedMake) {
-      fetch(`http://localhost:3001/vehicles/makes/${selectedMake}/models`)
-        .then(res => res.json())
-        .then(data => setModels(data));
-      setSelectedModel('');
-      setGenerations([]);
-      setConfigs([]);
-    }
-  }, [selectedMake]);
-
-  // Fetch Generations when Model selected
-  useEffect(() => {
-    if (selectedModel) {
-      fetch(`http://localhost:3001/vehicles/models/${selectedModel}/generations`)
-        .then(res => res.json())
-        .then(data => setGenerations(data));
-      setSelectedGen('');
-      setConfigs([]);
-    }
-  }, [selectedModel]);
-
-  // Fetch Configs when Gen selected
-  useEffect(() => {
-    if (selectedGen) {
-      fetch(`http://localhost:3001/vehicles/generations/${selectedGen}/configurations`)
-        .then(res => res.json())
-        .then(data => setConfigs(data));
-      setSelectedConfig('');
-    }
-  }, [selectedGen]);
-
-  const handleSearch = () => {
-    if (selectedConfig) {
-      router.push(`/search?vehicleConfigId=${selectedConfig}`);
-    }
-  };
+export default async function Home() {
+  const [featured, facets] = await Promise.all([getFeaturedParts(), getFacets()]);
 
   return (
-    <div className="relative isolate overflow-hidden bg-white">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,theme(colors.blue.50),white)] opacity-50" />
-      <div className="absolute inset-y-0 right-1/2 -z-10 mr-16 w-[200%] origin-bottom-left skew-x-[-30deg] bg-white shadow-xl shadow-blue-600/10 ring-1 ring-blue-50 sm:mr-28 lg:mr-0 xl:mr-16 xl:origin-center" />
-      
-      <div className="mx-auto max-w-7xl px-6 pb-24 pt-10 sm:pb-32 lg:flex lg:px-8 lg:py-40 items-center">
-        <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-xl lg:flex-shrink-0 pt-8">
-          <h1 className="mt-10 text-4xl font-black tracking-tight text-slate-900 sm:text-6xl">
-            Find the exact part.<br />
-            <span className="text-blue-600">Guaranteed to fit.</span>
-          </h1>
-          <p className="mt-6 text-lg leading-8 text-slate-600">
-            Tell us what you drive, and we'll instantly filter millions of parts to show you only the ones that match your specific vehicle configuration.
-          </p>
-          
-          {/* Vehicle Selector Form */}
-          <div className="mt-10 bg-white p-6 rounded-2xl shadow-xl border border-slate-100 flex flex-col gap-4">
-            <h3 className="font-semibold text-slate-900 text-lg">Select Your Vehicle</h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <select 
-                className="block w-full rounded-lg border-0 py-3 pl-4 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm sm:leading-6 bg-slate-50"
-                value={selectedMake}
-                onChange={e => setSelectedMake(e.target.value)}
-              >
-                <option value="">1. Select Make</option>
-                {makes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+    <div>
+      {/* Hero */}
+      <div className="relative isolate overflow-hidden bg-white">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,theme(colors.blue.50),white)] opacity-50" />
+        <div className="absolute inset-y-0 right-1/2 -z-10 mr-16 w-[200%] origin-bottom-left skew-x-[-30deg] bg-white shadow-xl shadow-blue-600/10 ring-1 ring-blue-50 sm:mr-28 lg:mr-0 xl:mr-16 xl:origin-center" />
 
-              <select 
-                className="block w-full rounded-lg border-0 py-3 pl-4 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm sm:leading-6 bg-slate-50 disabled:opacity-50"
-                value={selectedModel}
-                onChange={e => setSelectedModel(e.target.value)}
-                disabled={!selectedMake}
-              >
-                <option value="">2. Select Model</option>
-                {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-
-              <select 
-                className="block w-full rounded-lg border-0 py-3 pl-4 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm sm:leading-6 bg-slate-50 disabled:opacity-50"
-                value={selectedGen}
-                onChange={e => setSelectedGen(e.target.value)}
-                disabled={!selectedModel}
-              >
-                <option value="">3. Select Year / Gen</option>
-                {generations.map(m => <option key={m.id} value={m.id}>{m.name} ({m.startYear}-{m.endYear})</option>)}
-              </select>
-
-              <select 
-                className="block w-full rounded-lg border-0 py-3 pl-4 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-blue-600 sm:text-sm sm:leading-6 bg-slate-50 disabled:opacity-50"
-                value={selectedConfig}
-                onChange={e => setSelectedConfig(e.target.value)}
-                disabled={!selectedGen}
-              >
-                <option value="">4. Select Engine / Trim</option>
-                {configs.map(m => <option key={m.id} value={m.id}>{m.engine} - {m.transmission}</option>)}
-              </select>
+        <div className="mx-auto max-w-7xl px-6 pb-16 pt-10 sm:pb-20 lg:flex lg:px-8 lg:py-24 items-center gap-12">
+          <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-xl lg:flex-shrink-0 pt-8">
+            <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-900 sm:text-6xl">
+              Find the exact part.<br />
+              <span className="text-blue-600">Guaranteed to fit.</span>
+            </h1>
+            <p className="mt-6 text-lg leading-8 text-slate-600">
+              Tell us what you drive, and we'll instantly filter thousands of live parts to show you only the ones that match your specific vehicle configuration.
+            </p>
+            <div className="mt-6 flex items-center gap-3">
+              <Link href="/search" className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                Or browse all parts without a vehicle
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+              </Link>
             </div>
+          </div>
 
-            <button 
-              onClick={handleSearch}
-              disabled={!selectedConfig}
-              className="mt-4 w-full rounded-lg bg-blue-600 px-3.5 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-            >
-              Shop Parts for this Vehicle
-            </button>
+          <div className="mx-auto mt-10 max-w-xl lg:mt-0 lg:mx-0 lg:flex-shrink-0">
+            <VehicleSelector />
           </div>
         </div>
       </div>
+
+      {/* Value props */}
+      <div className="border-y border-slate-100 bg-slate-50/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 sm:grid-cols-3 gap-8">
+          {VALUE_PROPS.map((prop) => (
+            <div key={prop.title} className="flex items-start gap-3">
+              <div className="shrink-0 bg-blue-50 text-blue-600 rounded-lg p-2">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={prop.icon} /></svg>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">{prop.title}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{prop.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Shop by category */}
+      {facets.categories.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Shop by Category</h2>
+          <div className="flex flex-wrap gap-2">
+            {facets.categories.map((cat) => (
+              <Link
+                key={cat.name}
+                href={`/search?category=${encodeURIComponent(cat.name)}`}
+                className="px-4 py-2 rounded-full text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 transition-colors"
+              >
+                {cat.name} <span className="text-slate-400">({cat.count})</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Featured / newest real listings */}
+      {featured.items.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="flex items-baseline justify-between mb-6">
+            <h2 className="text-xl font-bold text-slate-900">Recently Listed Parts</h2>
+            <Link href="/search" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+              Browse all {featured.total.toLocaleString()} parts &rarr;
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            {featured.items.map((part) => (
+              <ProductCard key={part.id} part={part} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
