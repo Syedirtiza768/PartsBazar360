@@ -4,5 +4,10 @@ node_modules
 dist
 coverage
 .commandcode
+certbot
+docx-temp
+screenshot-*.png
+test-images*.ps1
+{
 *.log
 .DS_Store
