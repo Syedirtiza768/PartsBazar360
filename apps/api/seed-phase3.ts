@@ -66,7 +66,7 @@ async function main() {
     title: part.title,
     brand: part.brand,
     category: part.category,
-    fitments: [{ vehicleConfigId: fitment.vehicleConfigId }],
+    fitments: [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel: fitment.evidenceLevel, confidence: fitment.confidence }],
     offers: part.offers
   });
 

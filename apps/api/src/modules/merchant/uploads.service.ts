@@ -7,6 +7,7 @@ import {
   parseVehicleFromTitle,
 } from '../ingestion/listing-parser.util';
 import type { ParsedVehicle } from '../ingestion/listing-parser.util';
+import { PricingService } from '../pricing/pricing.service';
 
 interface ParsedUploadRow {
   rowNumber: number;
@@ -129,6 +130,7 @@ export class MerchantUploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly search: OpenSearchService,
+    private readonly pricing: PricingService,
   ) {}
 
   async listJobs(sellerId: string) {
@@ -196,7 +198,7 @@ export class MerchantUploadsService {
     const warnings: string[] = [];
 
     for (const row of parsedRows) {
-      const result = await this.processRow(job.id, sellerId, seller.name, warehouse.id, row, {
+      const result = await this.processRow(job.id, sellerId, seller.name, seller.onboardingStatus, warehouse.id, row, {
         defaultPartSource,
         defaultQualityTier,
       });
@@ -225,6 +227,7 @@ export class MerchantUploadsService {
     uploadJobId: string,
     sellerId: string,
     sellerName: string,
+    sellerStatus: string,
     warehouseId: string,
     row: ParsedUploadRow,
     defaults: { defaultPartSource: string; defaultQualityTier: string },
@@ -280,17 +283,25 @@ export class MerchantUploadsService {
       },
     });
 
+    const sellerBasePrice = Number.isFinite(price) && price > 0 ? price : 0;
+    const priceQuote = await this.pricing.quote(sellerId, category, sellerBasePrice);
     const offer = await this.prisma.sellerOffer.create({
       data: {
         sellerId,
         canonicalPartId: canonicalPart.id,
-        price: Number.isFinite(price) && price > 0 ? price : 0,
-        currency: raw.currency?.trim() || 'AED',
+        price: priceQuote.customerPrice,
+        sellerBasePrice: priceQuote.sellerBasePrice,
+        marketplaceFee: priceQuote.marketplaceFee,
+        sellerProceeds: priceQuote.sellerProceeds,
+        pricingPolicyId: priceQuote.pricingPolicyId,
+        pricingPolicyVersion: priceQuote.pricingPolicyVersion,
+        pricedAt: new Date(),
+        currency: priceQuote.pricingPolicyId ? priceQuote.currency : raw.currency?.trim() || 'AED',
         condition: qualityTier,
         partSource,
         qualityTier,
         externalOfferId: raw.sku?.trim() || null,
-        status: status === 'IMPORTED' ? 'ACTIVE' : 'REVIEW',
+        status: status === 'IMPORTED' && sellerStatus === 'ACTIVE' ? 'ACTIVE' : 'REVIEW',
       },
     });
 
@@ -303,7 +314,11 @@ export class MerchantUploadsService {
     });
 
     const fitments = parsedVehicle
-      ? [{ vehicleConfigId: (await this.findOrCreateVehicleConfig(parsedVehicle)).id }]
+      ? [{
+          vehicleConfigId: (await this.findOrCreateVehicleConfig(parsedVehicle)).id,
+          evidenceLevel: 'D',
+          confidence: 0.5,
+        }]
       : [];
 
     if (parsedVehicle && fitments[0]) {
@@ -437,6 +452,15 @@ export class MerchantUploadsService {
     if (!row) throw new NotFoundException('Upload row not found');
 
     if (row.sellerOfferId && body.offerStatus) {
+      if (body.offerStatus === 'ACTIVE') {
+        const offer = await this.prisma.sellerOffer.findUnique({
+          where: { id: row.sellerOfferId },
+          include: { seller: true },
+        });
+        if (offer?.seller.onboardingStatus !== 'ACTIVE') {
+          throw new BadRequestException('Seller must be ACTIVE before an offer can be activated');
+        }
+      }
       await this.prisma.sellerOffer.update({
         where: { id: row.sellerOfferId },
         data: { status: body.offerStatus },

@@ -1,9 +1,13 @@
 import { Controller, Get, Patch, Body, Param, Query, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { PricingService } from '../pricing/pricing.service';
 
 @Controller('merchant/inventory')
 export class InventoryController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pricing: PricingService,
+  ) {}
 
   @Get()
   async getInventory(@Query('sellerId') sellerId: string) {
@@ -30,12 +34,13 @@ export class InventoryController {
 
     if (!offer) throw new NotFoundException('Offer not found');
 
-    return this.prisma.sellerOffer.update({
+    if (body.status !== undefined) {
+      await this.prisma.sellerOffer.update({ where: { id: offerId }, data: { status: body.status } });
+    }
+    if (body.price !== undefined) return this.pricing.repriceOffer(offerId, Number(body.price));
+    return this.prisma.sellerOffer.findUnique({
       where: { id: offerId },
-      data: {
-        price: body.price !== undefined ? body.price : offer.price,
-        status: body.status !== undefined ? body.status : offer.status,
-      }
+      include: { canonicalPart: true, inventory: true, pricingPolicy: true },
     });
   }
 }

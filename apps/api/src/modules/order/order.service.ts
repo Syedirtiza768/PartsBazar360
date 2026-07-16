@@ -37,8 +37,12 @@ export class OrderService {
 
       for (const [sellerId, items] of Object.entries(itemsBySeller) as [string, typeof cartItems][]) {
         let subTotal = 0;
+        let marketplaceFeeTotal = 0;
+        let sellerProceedsTotal = 0;
         for (const item of items) {
           subTotal += (item.quantity * item.sellerOffer.price);
+          marketplaceFeeTotal += item.quantity * (item.sellerOffer.marketplaceFee ?? 0);
+          sellerProceedsTotal += item.quantity * (item.sellerOffer.sellerProceeds ?? item.sellerOffer.price);
         }
 
         const shippingTotal = shippingTotalsBySeller[sellerId] || 0;
@@ -51,7 +55,9 @@ export class OrderService {
             sellerId: sellerId,
             subTotal,
             shippingTotal,
-            status: 'PROCESSING',
+            marketplaceFeeTotal,
+            sellerProceedsTotal,
+            status: 'AWAITING_PAYMENT',
           }
         });
 
@@ -63,6 +69,11 @@ export class OrderService {
               sellerOfferId: item.sellerOfferId,
               quantity: item.quantity,
               unitPrice: item.sellerOffer.price,
+              sellerBaseUnitPrice: item.sellerOffer.sellerBasePrice,
+              marketplaceFeeUnit: item.sellerOffer.marketplaceFee,
+              sellerProceedsUnit: item.sellerOffer.sellerProceeds,
+              pricingPolicyId: item.sellerOffer.pricingPolicyId,
+              pricingPolicyVersion: item.sellerOffer.pricingPolicyVersion,
               weight: item.sellerOffer.canonicalPart?.weight
             }
           });

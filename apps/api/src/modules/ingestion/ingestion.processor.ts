@@ -6,6 +6,8 @@ import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
 import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
 import { buildCompatibility, extractListingImages } from './listing-enrichment.util';
+import { Prisma } from '@prisma/client';
+import { PricingService } from '../pricing/pricing.service';
 
 @Processor('ingestion', {
   concurrency: 2,
@@ -17,6 +19,7 @@ export class IngestionProcessor extends WorkerHost {
     private readonly realTrackService: RealTrackService,
     private readonly prisma: PrismaService,
     private readonly searchService: OpenSearchService,
+    private readonly pricing: PricingService,
   ) {
     super();
   }
@@ -86,7 +89,6 @@ export class IngestionProcessor extends WorkerHost {
   private async syncAllUSStores() {
     this.logger.log('Starting full US marketplace sync...');
 
-    // All 11 stores
     const stores = [
       { id: '79f249a5-31e0-42a8-978c-a99b0665c61b', name: 'All About Mercedes' },
       { id: 'fa528c8a-f249-4816-94f6-f2ce8b932449', name: 'B.JLRWORLD' },
@@ -144,7 +146,13 @@ export class IngestionProcessor extends WorkerHost {
   }
 
   private async processListing(listing: any, storeId: string) {
-    // 1. Idempotent save to RawStagingListing
+    const imageUrls = extractListingImages(listing);
+    const title: string = listing.title || 'Unknown Part';
+    const parsedVehicle = parseVehicleFromTitle(title);
+    const category = extractCategory(title);
+    const oeNumbers = extractOeNumbers(title);
+    const compatibility = buildCompatibility(listing, parsedVehicle);
+
     await this.prisma.rawStagingListing.upsert({
       where: { sourceListingId: listing.id },
       update: {
@@ -157,15 +165,15 @@ export class IngestionProcessor extends WorkerHost {
         ebayAccountId: listing.ebayAccountId,
         offerId: listing.offerId,
         listingUrl: listing.listingUrl,
-        imageUrls: Array.isArray(listing.imageUrls) ? listing.imageUrls : [],
+        imageUrls,
         healthFlags: listing.healthFlags || null,
-        compatibility: listing.compatibility || null,
+        compatibility: compatibility.length > 0 ? compatibility : listing.compatibility || null,
         rawPayload: listing,
         updatedAt: new Date(),
       },
       create: {
         sourceListingId: listing.id,
-        storeId: storeId,
+        storeId,
         marketplaceId: listing.marketplaceId,
         ebayItemId: listing.ebayItemId,
         ebayAccountId: listing.ebayAccountId,
@@ -177,17 +185,16 @@ export class IngestionProcessor extends WorkerHost {
         quantity: listing.quantityAvailable || 1,
         status: listing.listingStatus,
         listingUrl: listing.listingUrl,
-        imageUrls: Array.isArray(listing.imageUrls) ? listing.imageUrls : [],
+        imageUrls,
         healthFlags: listing.healthFlags || null,
-        compatibility: listing.compatibility || null,
+        compatibility: compatibility.length > 0 ? compatibility : listing.compatibility || null,
         rawPayload: listing,
       },
     });
 
-    // 2. Map to Seller
     const seller = await this.prisma.seller.findFirst({
       where: { storeId },
-      include: { warehouses: true }
+      include: { warehouses: true },
     });
 
     if (!seller) {
@@ -195,54 +202,125 @@ export class IngestionProcessor extends WorkerHost {
       return;
     }
 
-    // 3. Best-effort normalization from the raw title (year/make/model, category)
-    const title: string = listing.title || 'Unknown Part';
-    const parsedVehicle = parseVehicleFromTitle(title);
-    const category = extractCategory(title);
-    const oeNumbers = extractOeNumbers(title);
+    let mergedImages = imageUrls;
+    if (listing.sku) {
+      const siblings = await this.prisma.rawStagingListing.findMany({
+        where: { sku: listing.sku },
+        select: { imageUrls: true },
+        take: 20,
+      });
+      const all = siblings.flatMap((s) => s.imageUrls || []);
+      mergedImages = [
+        ...new Set([
+          ...imageUrls,
+          ...all.map((u) => String(u).replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')),
+        ]),
+      ];
+    }
 
-    const canonicalPart = await this.prisma.canonicalPart.create({
-      data: {
-        title,
-        brand: parsedVehicle?.make || null,
-        category,
-        oeNumbers,
-        fitmentFlags: [],
-        imageUrls: Array.isArray(listing.imageUrls) ? listing.imageUrls : [],
-        listingUrl: listing.listingUrl || null,
-        ebayItemId: listing.ebayItemId || null,
-        compatibility: listing.compatibility || null,
-      }
-    });
+    let canonicalPart = listing.ebayItemId
+      ? await this.prisma.canonicalPart.findFirst({ where: { ebayItemId: listing.ebayItemId } })
+      : null;
 
-    // 4. Create Seller Offer & Inventory
-    const offer = await this.prisma.sellerOffer.create({
-      data: {
-        sellerId: seller.id,
-        canonicalPartId: canonicalPart.id,
-        price: listing.price ? parseFloat(listing.price) : 0,
-        currency: listing.currency || 'AED',
-        condition: 'USED', // Assume used for salvage parts
-        externalOfferId: listing.id,
-        // Normalize to the app's internal convention (ACTIVE/ENDED/...) — RealTrack
-        // returns lowercase statuses (e.g. "active") which otherwise silently fail
-        // the status === 'ACTIVE' checks used by cart/checkout/analytics.
-        status: (listing.listingStatus || 'active').toUpperCase(),
-      }
-    });
-
-    if (seller.warehouses.length > 0) {
-      await this.prisma.inventory.create({
+    if (canonicalPart) {
+      const combinedImages = [...new Set([...(canonicalPart.imageUrls || []), ...mergedImages])];
+      canonicalPart = await this.prisma.canonicalPart.update({
+        where: { id: canonicalPart.id },
         data: {
-          warehouseId: seller.warehouses[0].id,
-          offerId: offer.id,
-          quantity: listing.quantityAvailable || 1,
-        }
+          title,
+          brand: parsedVehicle?.make || canonicalPart.brand,
+          category: category || canonicalPart.category,
+          oeNumbers: oeNumbers.length > 0 ? oeNumbers : canonicalPart.oeNumbers,
+          imageUrls: combinedImages,
+          listingUrl: listing.listingUrl || canonicalPart.listingUrl,
+          compatibility: compatibility.length > 0
+            ? compatibility as unknown as Prisma.InputJsonValue
+            : canonicalPart.compatibility === null
+              ? Prisma.JsonNull
+              : canonicalPart.compatibility as Prisma.InputJsonValue,
+        },
+      });
+    } else {
+      canonicalPart = await this.prisma.canonicalPart.create({
+        data: {
+          title,
+          brand: parsedVehicle?.make || null,
+          category,
+          oeNumbers,
+          fitmentFlags: [],
+          imageUrls: mergedImages,
+          listingUrl: listing.listingUrl || null,
+          ebayItemId: listing.ebayItemId || null,
+          compatibility: compatibility.length > 0 ? compatibility as unknown as Prisma.InputJsonValue : Prisma.JsonNull,
+        },
       });
     }
 
-    // 5. Best-effort vehicle fitment inferred from the title (unverified — evidenceLevel 'D')
-    let fitments: { vehicleConfigId: string }[] = [];
+    let offer = await this.prisma.sellerOffer.findFirst({
+      where: { externalOfferId: listing.id },
+    });
+    const sellerBasePrice = listing.price
+      ? parseFloat(listing.price)
+      : offer?.sellerBasePrice ?? offer?.price ?? 0;
+    const priceQuote = await this.pricing.quote(seller.id, canonicalPart.category, sellerBasePrice);
+
+    if (offer) {
+      offer = await this.prisma.sellerOffer.update({
+        where: { id: offer.id },
+        data: {
+          price: priceQuote.customerPrice,
+          sellerBasePrice: priceQuote.sellerBasePrice,
+          marketplaceFee: priceQuote.marketplaceFee,
+          sellerProceeds: priceQuote.sellerProceeds,
+          pricingPolicyId: priceQuote.pricingPolicyId,
+          pricingPolicyVersion: priceQuote.pricingPolicyVersion,
+          pricedAt: new Date(),
+          currency: priceQuote.pricingPolicyId ? priceQuote.currency : listing.currency || offer.currency,
+          status: (listing.listingStatus || 'active').toUpperCase(),
+          canonicalPartId: canonicalPart.id,
+        },
+      });
+    } else {
+      offer = await this.prisma.sellerOffer.create({
+        data: {
+          sellerId: seller.id,
+          canonicalPartId: canonicalPart.id,
+          price: priceQuote.customerPrice,
+          sellerBasePrice: priceQuote.sellerBasePrice,
+          marketplaceFee: priceQuote.marketplaceFee,
+          sellerProceeds: priceQuote.sellerProceeds,
+          pricingPolicyId: priceQuote.pricingPolicyId,
+          pricingPolicyVersion: priceQuote.pricingPolicyVersion,
+          pricedAt: new Date(),
+          currency: priceQuote.pricingPolicyId ? priceQuote.currency : listing.currency || 'AED',
+          condition: 'USED',
+          externalOfferId: listing.id,
+          status: (listing.listingStatus || 'active').toUpperCase(),
+        },
+      });
+    }
+
+    if (seller.warehouses.length > 0) {
+      const existingInventory = await this.prisma.inventory.findFirst({
+        where: { offerId: offer.id, warehouseId: seller.warehouses[0].id },
+      });
+      if (existingInventory) {
+        await this.prisma.inventory.update({
+          where: { id: existingInventory.id },
+          data: { quantity: listing.quantityAvailable || 1 },
+        });
+      } else {
+        await this.prisma.inventory.create({
+          data: {
+            warehouseId: seller.warehouses[0].id,
+            offerId: offer.id,
+            quantity: listing.quantityAvailable || 1,
+          },
+        });
+      }
+    }
+
+    let fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
     if (parsedVehicle) {
       const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
       const fitment = await this.prisma.fitment.upsert({
@@ -256,15 +334,14 @@ export class IngestionProcessor extends WorkerHost {
         create: {
           canonicalPartId: canonicalPart.id,
           vehicleConfigId: vehicleConfig.id,
-          evidenceLevel: 'D', // title-inferred, unverified
+          evidenceLevel: 'D',
           confidence: 0.4,
           reviewer: 'Auto (title-inferred)',
         },
       });
-      fitments = [{ vehicleConfigId: fitment.vehicleConfigId }];
+      fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel: 'D', confidence: 0.4 }];
     }
 
-    // 6. Index into OpenSearch so the part is immediately searchable
     await this.searchService.indexPart({
       id: canonicalPart.id,
       title: canonicalPart.title,
@@ -277,13 +354,18 @@ export class IngestionProcessor extends WorkerHost {
       compatibility: canonicalPart.compatibility,
       createdAt: canonicalPart.createdAt,
       fitments,
-      offers: [{ id: offer.id, price: offer.price, condition: offer.condition, sellerId: offer.sellerId, sellerName: seller.name }],
+      offers: [{
+        id: offer.id,
+        price: offer.price,
+        condition: offer.condition,
+        sellerId: offer.sellerId,
+        sellerName: seller.name,
+      }],
     });
 
-    // Mark as processed
     await this.prisma.rawStagingListing.update({
       where: { sourceListingId: listing.id },
-      data: { processed: true }
+      data: { processed: true },
     });
   }
 
@@ -303,9 +385,6 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
-    // Prefer a generation whose range overlaps the parsed year(s), so that a
-    // "2012 Jetta" listing can attach to an existing "2011-2018 Jetta"
-    // generation instead of creating a redundant single-year record.
     let generation = await this.prisma.vehicleGeneration.findFirst({
       where: {
         modelId: model.id,
@@ -317,68 +396,9 @@ export class IngestionProcessor extends WorkerHost {
       generation = await this.prisma.vehicleGeneration.create({
         data: {
           modelId: model.id,
-          name: vehicle.startYear === vehicle.endYear ? `${vehicle.startYear}` : `${vehicle.startYear}-${vehicle.endYear}`,
-          startYear: vehicle.startYear,
-          endYear: vehicle.endYear,
-        },
-      });
-    }
-
-    let config = await this.prisma.vehicleConfiguration.findFirst({
-      where: { generationId: generation.id },
-    });
-    if (!config) {
-      config = await this.prisma.vehicleConfiguration.create({
-        data: { generationId: generation.id, market: 'GLOBAL' },
-      });
-    }
-
-    return config;
-  }
-}
-reatedAt: canonicalPart.createdAt,
-      fitments,
-      offers: [{ id: offer.id, price: offer.price, condition: offer.condition, sellerId: offer.sellerId, sellerName: seller.name }],
-    });
-
-    // Mark as processed
-    await this.prisma.rawStagingListing.update({
-      where: { sourceListingId: listing.id },
-      data: { processed: true }
-    });
-  }
-
-  private async findOrCreateVehicleConfig(vehicle: ParsedVehicle) {
-    const make = await this.prisma.vehicleMake.upsert({
-      where: { name: vehicle.make },
-      update: {},
-      create: { name: vehicle.make },
-    });
-
-    let model = await this.prisma.vehicleModel.findFirst({
-      where: { makeId: make.id, name: vehicle.model },
-    });
-    if (!model) {
-      model = await this.prisma.vehicleModel.create({
-        data: { makeId: make.id, name: vehicle.model },
-      });
-    }
-
-    // Prefer a generation whose range overlaps the parsed year(s), so that a
-    // "2012 Jetta" listing can attach to an existing "2011-2018 Jetta"
-    // generation instead of creating a redundant single-year record.
-    let generation = await this.prisma.vehicleGeneration.findFirst({
-      where: {
-        modelId: model.id,
-        startYear: { lte: vehicle.endYear },
-        endYear: { gte: vehicle.startYear },
-      },
-    });
-    if (!generation) {
-      generation = await this.prisma.vehicleGeneration.create({
-        data: {
-          modelId: model.id,
-          name: vehicle.startYear === vehicle.endYear ? `${vehicle.startYear}` : `${vehicle.startYear}-${vehicle.endYear}`,
+          name: vehicle.startYear === vehicle.endYear
+            ? `${vehicle.startYear}`
+            : `${vehicle.startYear}-${vehicle.endYear}`,
           startYear: vehicle.startYear,
           endYear: vehicle.endYear,
         },

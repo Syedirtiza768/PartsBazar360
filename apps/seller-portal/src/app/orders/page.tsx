@@ -98,7 +98,7 @@ export default function OrdersPage() {
                   >
                     Mark as shipped
                   </button>
-                ) : (
+                ) : order.status === 'SHIPPED' ? (
                   <div className="xl:text-right">
                     <p className="text-sm text-emerald-700 font-semibold">Shipped</p>
                     {order.trackingNumber && (
@@ -106,6 +106,11 @@ export default function OrdersPage() {
                         {order.carrier} {order.trackingNumber}
                       </p>
                     )}
+                  </div>
+                ) : (
+                  <div className="xl:text-right">
+                    <p className="text-sm text-amber-700 font-semibold">Awaiting payment</p>
+                    <p className="text-xs text-slate-500 mt-1">Fulfilment unlocks after payment confirmation.</p>
                   </div>
                 )}
               </div>

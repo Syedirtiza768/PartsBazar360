@@ -24,12 +24,13 @@ export default function InventoryPage() {
   }, []);
 
   const handlePriceUpdate = async (id: string, newPrice: number) => {
-    await fetch(`${API_BASE_URL}/merchant/inventory/${id}?sellerId=${DEMO_SELLER_ID}`, {
+    const response = await fetch(`${API_BASE_URL}/merchant/inventory/${id}?sellerId=${DEMO_SELLER_ID}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ price: newPrice })
     });
-    setInventory(inventory.map(item => item.id === id ? { ...item, price: newPrice } : item));
+    const updated = await response.json();
+    if (response.ok) setInventory(inventory.map(item => item.id === id ? updated : item));
   };
 
   return (
@@ -52,15 +53,17 @@ export default function InventoryPage() {
               <th className="px-6 py-4 font-semibold w-16"></th>
               <th className="px-6 py-4 font-semibold">Part title</th>
               <th className="px-6 py-4 font-semibold">Condition</th>
-              <th className="px-6 py-4 font-semibold">Price (AED)</th>
+              <th className="px-6 py-4 font-semibold">Submitted price</th>
+              <th className="px-6 py-4 font-semibold">Buyer price</th>
+              <th className="px-6 py-4 font-semibold">Your proceeds</th>
               <th className="px-6 py-4 font-semibold">Stock</th>
               <th className="px-6 py-4 font-semibold">Status</th>
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {loading && <tr><td colSpan={7} className="px-6 py-10 text-center text-slate-500">Loading inventory...</td></tr>}
-            {!loading && inventory.length === 0 && <tr><td colSpan={7} className="px-6 py-10 text-center text-slate-500">No inventory found. Upload listings to start selling.</td></tr>}
+            {loading && <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">Loading inventory...</td></tr>}
+            {!loading && inventory.length === 0 && <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">No inventory found. Upload listings to start selling.</td></tr>}
             {!loading && inventory.map((item) => (
               <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4">
@@ -75,11 +78,13 @@ export default function InventoryPage() {
                 <td className="px-6 py-4">
                   <input
                     type="number"
-                    defaultValue={item.price}
+                    defaultValue={item.sellerBasePrice ?? item.price}
                     onBlur={(e) => handlePriceUpdate(item.id, parseFloat(e.target.value))}
                     className="bg-white border border-slate-300 rounded-md px-2 py-1.5 w-24 text-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </td>
+                <td className="px-6 py-4"><p className="font-semibold text-slate-950">{item.currency} {Number(item.price).toFixed(2)}</p><p className="text-xs text-slate-500">Fee {item.currency} {Number(item.marketplaceFee || 0).toFixed(2)}</p></td>
+                <td className="px-6 py-4 font-semibold text-emerald-700">{item.currency} {Number(item.sellerProceeds ?? item.price).toFixed(2)}</td>
                 <td className="px-6 py-4 text-slate-700">{item.inventory[0]?.quantity || 0}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${

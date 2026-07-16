@@ -2,8 +2,7 @@ import Link from 'next/link';
 
 const NAV_ITEMS = [
   { label: 'Command Center', href: '/' },
-  { label: 'Fulfillment Queue', href: '/' },
-  { label: 'Support Desk', href: '/' },
+  { label: 'Seller Onboarding', href: '/sellers' },
 ];
 
 export function Sidebar() {

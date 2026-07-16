@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { CartService } from '../cart/cart.service';
 import { ReservationService } from '../inventory/reservation.service';
 import { OrderService } from '../order/order.service';
@@ -100,5 +100,38 @@ export class CheckoutService {
       create: { email: buyer.email, name: buyer.name, role: 'BUYER' },
     });
     return user.id;
+  }
+
+  async confirmPayment(
+    paymentIntentId: string,
+    body: { status: 'SUCCEEDED' | 'FAILED'; externalId?: string },
+    webhookSecret?: string,
+  ) {
+    const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+    if (!expectedSecret) throw new ServiceUnavailableException('Payment webhook is not configured');
+    if (!webhookSecret || webhookSecret !== expectedSecret) throw new UnauthorizedException('Invalid payment webhook secret');
+    if (!['SUCCEEDED', 'FAILED'].includes(body.status)) throw new BadRequestException('Unsupported payment status');
+
+    const payment = await this.prisma.paymentIntent.findUnique({ where: { id: paymentIntentId } });
+    if (!payment) throw new BadRequestException('Payment intent not found');
+    if (payment.status === 'SUCCEEDED') return payment;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.paymentIntent.update({
+        where: { id: payment.id },
+        data: { status: body.status, externalId: body.externalId },
+      });
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { status: body.status === 'SUCCEEDED' ? 'PAID' : 'PAYMENT_FAILED' },
+      });
+      if (body.status === 'SUCCEEDED') {
+        await tx.sellerOrder.updateMany({
+          where: { parentOrderId: payment.orderId, status: 'AWAITING_PAYMENT' },
+          data: { status: 'PROCESSING' },
+        });
+      }
+      return updated;
+    });
   }
 }

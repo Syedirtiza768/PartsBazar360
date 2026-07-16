@@ -60,7 +60,11 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
 
   const images = part.imageUrls || [];
   const compatibleVehicles = part.compatibleVehicles || [];
-  const hasFitment = compatibleVehicles.length > 0;
+  const verifiedVehicles = compatibleVehicles.filter((vehicle) => (
+    ['A', 'B'].includes(vehicle.evidenceLevel || '') && Number(vehicle.confidence || 0) >= 0.8
+  ));
+  const advisoryVehicles = compatibleVehicles.filter((vehicle) => !verifiedVehicles.includes(vehicle));
+  const hasVerifiedFitment = verifiedVehicles.length > 0;
   const ebayCompatibility = part.compatibility || [];
 
   const jsonLd = {
@@ -178,15 +182,15 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
 
             <div className="mt-8 border-t border-slate-200 pt-8">
               <h2 className="text-xl font-bold text-slate-900 mb-4">Fitment Verification</h2>
-              {hasFitment ? (
+              {hasVerifiedFitment ? (
                 <div className="flex items-start gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                   <div className="bg-emerald-100 p-2 rounded-full text-emerald-600 shrink-0">
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-emerald-900">Fits the following vehicle(s)</h3>
+                    <h3 className="font-semibold text-emerald-900">Verified vehicle compatibility</h3>
                     <ul className="mt-2 flex flex-wrap gap-2">
-                      {compatibleVehicles.map((v, i) => (
+                      {verifiedVehicles.map((v, i) => (
                         <li key={i}>
                           <Link
                             href={`/search?q=${encodeURIComponent(`${v.make} ${v.model}`)}`}
@@ -198,7 +202,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                       ))}
                     </ul>
                     <p className="text-emerald-700 text-xs mt-3">
-                      Auto-matched from the listing details (unverified) — confirm exact trim/engine compatibility with the seller before purchase.
+                      Supported by structured, high-confidence compatibility evidence.
                     </p>
                   </div>
                 </div>
@@ -208,8 +212,12 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-amber-900">Fitment not yet verified</h3>
-                    <p className="text-amber-700 text-sm mt-1">Check the listing title and OE numbers, or contact the seller to confirm compatibility with your vehicle.</p>
+                    <h3 className="font-semibold text-amber-900">Compatibility requires confirmation</h3>
+                    <p className="text-amber-700 text-sm mt-1">
+                      {advisoryVehicles.length > 0
+                        ? `Possible title-inferred matches: ${advisoryVehicles.map((vehicle) => vehicle.label).join(', ')}. Confirm the exact trim, engine, and OE number before purchase.`
+                        : 'No verified vehicle compatibility is available. Check the OE number or ask support before purchase.'}
+                    </p>
                   </div>
                 </div>
               )}

@@ -17,15 +17,19 @@ export class AnalyticsController {
       where: { sellerId, status: 'ACTIVE' }
     });
 
-    const pendingOrders = orders.filter(o => o.status === 'PROCESSING').length;
-    const totalRevenue = orders
-      .filter(o => o.status !== 'CANCELLED')
-      .reduce((sum, o) => sum + o.subTotal + o.shippingTotal, 0);
+    const paidOrders = orders.filter(o => !['AWAITING_PAYMENT', 'CANCELLED'].includes(o.status));
+    const pendingOrders = paidOrders.filter(o => o.status === 'PROCESSING').length;
+    const grossSales = paidOrders.reduce((sum, o) => sum + o.subTotal + o.shippingTotal, 0);
+    const marketplaceFees = paidOrders.reduce((sum, o) => sum + o.marketplaceFeeTotal, 0);
+    const sellerProceeds = paidOrders.reduce((sum, o) => sum + o.sellerProceedsTotal + o.shippingTotal, 0);
 
     return {
       activeListings: activeOffers,
       pendingOrders,
-      totalRevenue
+      totalRevenue: sellerProceeds,
+      grossSales,
+      marketplaceFees,
+      sellerProceeds,
     };
   }
 }

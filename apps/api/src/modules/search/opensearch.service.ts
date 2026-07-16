@@ -39,7 +39,12 @@ export class OpenSearchService implements OnModuleInit {
           fitmentConfidence: part.fitmentConfidence ?? null,
           createdAt: part.createdAt || new Date().toISOString(),
           minPrice,
-          fitments: (part.fitments || []).map((f: any) => f.vehicleConfigId),
+          // Only structured, high-confidence evidence can power a green "fits"
+          // result. Title-inferred D-level matches remain available on the PDP
+          // as advisory compatibility and never enter guaranteed-fit search.
+          fitments: (part.fitments || [])
+            .filter((f: any) => ['A', 'B'].includes(f.evidenceLevel) && Number(f.confidence) >= 0.8)
+            .map((f: any) => f.vehicleConfigId),
           offers: (part.offers || []).map((o: any) => ({
             id: o.id,
             price: o.price,

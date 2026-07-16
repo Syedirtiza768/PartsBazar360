@@ -3,6 +3,8 @@ import { DEMO_SELLER_NAME } from '@/lib/config';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/' },
+  { label: 'Business Onboarding', href: '/onboarding' },
+  { label: 'Pricing & Terms', href: '/pricing' },
   { label: 'Inventory', href: '/inventory' },
   { label: 'Upload Pipeline', href: '/uploads' },
   { label: 'Orders & Fulfillment', href: '/orders' },

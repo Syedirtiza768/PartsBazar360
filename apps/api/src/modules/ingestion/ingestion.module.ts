@@ -4,11 +4,13 @@ import { IngestionProcessor } from './ingestion.processor';
 import { IntegrationModule } from '../integration/integration.module';
 import { SearchModule } from '../search/search.module';
 import { PrismaService } from '../../prisma.service';
+import { PricingModule } from '../pricing/pricing.module';
 
 @Module({
   imports: [
     IntegrationModule,
     SearchModule,
+    PricingModule,
     BullModule.registerQueue({
       name: 'ingestion',
     }),

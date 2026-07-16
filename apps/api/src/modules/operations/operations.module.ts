@@ -4,14 +4,18 @@ import { OperationsController } from './operations.controller';
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
 import { PrismaService } from '../../prisma.service';
+import { PricingModule } from '../pricing/pricing.module';
+import { SellerOperationsController } from './sellers.controller';
+import { PricingOperationsController } from './pricing.controller';
 
 @Module({
   imports: [
     BullModule.registerQueue({
       name: 'ingestion',
     }),
+    PricingModule,
   ],
-  controllers: [OperationsController, SupportController],
+  controllers: [OperationsController, SupportController, SellerOperationsController, PricingOperationsController],
   providers: [PrismaService, SupportService],
 })
 export class OperationsModule {}
