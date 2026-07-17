@@ -123,7 +123,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
       )}
 
       {!hasImages && (
-        <p className="mt-3 text-sm text-slate-500">
+        <p className="mt-3 text-sm text-graphite-600">
           No product photos available for this listing — ask support for photos before ordering.
         </p>
       )}
@@ -151,6 +151,8 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
           </div>
 
           <div className="relative flex-1">
+            {/* The proxy requests the original high-resolution asset for the zoom surface. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={fullSizeUrl(active)}
               alt={title}

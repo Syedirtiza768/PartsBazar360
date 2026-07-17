@@ -1,5 +1,7 @@
+/* global module, require */
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   presets: [require("@repo/ui/tailwind-preset.cjs")],
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",

@@ -21,13 +21,16 @@ import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
 import { API_BASE_URL } from "@/lib/api";
 import { formatPrice, humanize } from "@/lib/format";
 import { CartLineFitment } from "@/components/CartLineFitment";
+import { storeOrder } from "@/lib/order-history";
 
 interface OrderResult {
   order: {
     id: string;
+    status?: string;
+    createdAt?: string;
     totalAmount: number;
     currency: string;
-    sellerOrders: { id: string; subTotal: number; shippingTotal: number }[];
+    sellerOrders: { id: string; subTotal: number; shippingTotal: number; status?: string }[];
   };
   paymentIntent: { status: string; provider: string };
 }
@@ -94,7 +97,7 @@ function Steps({ current }: { current: 1 | 2 | 3 }) {
               aria-current={active ? "step" : undefined}
               className={cn(
                 "flex items-center gap-2 text-sm font-medium",
-                active ? "text-brand-700" : done ? "text-emerald-700" : "text-slate-400",
+                active ? "text-brand-700" : done ? "text-emerald-700" : "text-graphite-600",
               )}
             >
               <span
@@ -104,7 +107,7 @@ function Steps({ current }: { current: 1 | 2 | 3 }) {
                     ? "border-brand-600 bg-brand-600 text-white"
                     : done
                       ? "border-emerald-500 bg-emerald-500 text-white"
-                      : "border-slate-300 bg-white text-slate-400",
+                      : "border-slate-400 bg-white text-graphite-600",
                 )}
               >
                 {done ? "✓" : n}
@@ -140,15 +143,15 @@ function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtota
       </ul>
       <dl className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
         <div className="flex justify-between">
-          <dt className="text-slate-500">Subtotal</dt>
+          <dt className="text-graphite-600">Subtotal</dt>
           <dd className="price text-sm">{formatPrice(subtotal, currency)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-slate-500">Shipping</dt>
-          <dd className="text-slate-500">Per seller, added to total</dd>
+          <dt className="text-graphite-600">Shipping</dt>
+          <dd className="text-graphite-600">Per seller, added to total</dd>
         </div>
       </dl>
-      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
         Final weight-based shipping is calculated per seller shipment when the order is placed.
       </p>
@@ -230,6 +233,26 @@ export default function CheckoutPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Checkout failed. Please try again.");
       setResult(data);
+      storeOrder({
+        id: data.order.id,
+        createdAt: data.order.createdAt || new Date().toISOString(),
+        status: data.order.status || "PENDING_PAYMENT",
+        paymentStatus: data.paymentIntent.status,
+        totalAmount: data.order.totalAmount,
+        currency: data.order.currency,
+        sellerOrders: data.order.sellerOrders,
+        items,
+        shippingAddress: {
+          name: form.name,
+          email: form.email,
+          line1: form.line1,
+          line2: form.line2 || undefined,
+          city: form.city,
+          country: form.country,
+          postalCode: form.postalCode || undefined,
+        },
+        vehicle: activeVehicle,
+      });
       await refresh();
       window.scrollTo({ top: 0 });
     } catch (err: unknown) {
@@ -250,7 +273,7 @@ export default function CheckoutPage() {
           <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Order confirmed
           </h1>
-          <p className="mt-2 text-slate-500">
+          <p className="mt-2 text-graphite-600">
             Thank you, {form.name.split(" ")[0] || "there"}. We&apos;ve sent a confirmation to{" "}
             <span className="font-medium text-slate-700">{form.email}</span>.
           </p>
@@ -265,17 +288,17 @@ export default function CheckoutPage() {
           </div>
           <dl className="space-y-3 px-5 py-4 text-sm">
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Order ID</dt>
+              <dt className="text-graphite-600">Order ID</dt>
               <dd className="part-number text-slate-900">{result.order.id}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Seller shipments</dt>
+              <dt className="text-graphite-600">Seller shipments</dt>
               <dd className="font-medium text-slate-900">
                 {result.order.sellerOrders.length} — each ships with its own tracking
               </dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Payment status</dt>
+              <dt className="text-graphite-600">Payment status</dt>
               <dd className="font-medium capitalize text-slate-900">
                 {result.paymentIntent.status.toLowerCase().replace(/_/g, " ")}
               </dd>
@@ -299,6 +322,9 @@ export default function CheckoutPage() {
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/search" className={buttonClasses()}>
             Continue shopping
+          </Link>
+          <Link href={`/account/purchases/${encodeURIComponent(result.order.id)}`} className={buttonClasses({ variant: "outline" })}>
+            View purchase
           </Link>
           <Link
             href={`/support?orderId=${encodeURIComponent(result.order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent(
@@ -344,7 +370,7 @@ export default function CheckoutPage() {
           <form onSubmit={goToReview} noValidate className="space-y-6">
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
               <h2 className="text-base font-semibold text-slate-900">Contact information</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-graphite-600">
                 Order updates and tracking numbers go to this email. No account needed.
               </p>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -416,7 +442,7 @@ export default function CheckoutPage() {
             <div className="flex items-center justify-between gap-3">
               <Link
                 href="/cart"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-slate-700"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back to cart
@@ -441,7 +467,7 @@ export default function CheckoutPage() {
                     <br />
                     {[form.city, form.postalCode].filter(Boolean).join(" ")}, {form.country}
                     <br />
-                    <span className="text-slate-500">{form.email}</span>
+                    <span className="text-graphite-600">{form.email}</span>
                   </p>
                 </div>
                 <button
@@ -466,7 +492,7 @@ export default function CheckoutPage() {
                     <StoreIcon className="h-4 w-4 shrink-0 text-slate-400" />
                     <span className="truncate">{group.name}</span>
                   </p>
-                  <p className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
+                  <p className="flex shrink-0 items-center gap-1.5 text-xs text-graphite-600">
                     <TruckIcon className="h-3.5 w-3.5" />
                     Separate shipment
                   </p>
@@ -478,7 +504,7 @@ export default function CheckoutPage() {
                         <p className="line-clamp-2 text-sm font-medium text-slate-800">
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="mt-0.5 text-xs text-graphite-600">
                           {humanize(item.sellerOffer.condition || "USED")}
                         </p>
                         <div className="mt-1.5">
@@ -548,7 +574,7 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-slate-700"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back to details
@@ -558,7 +584,7 @@ export default function CheckoutPage() {
               </Button>
             </div>
 
-            <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+            <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
               <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
               Payment is captured securely after order placement; sellers only ship once payment is
               confirmed.

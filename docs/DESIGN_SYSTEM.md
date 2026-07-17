@@ -1,101 +1,120 @@
 # PartsBazar360 Design System
 
-Single source of truth: `packages/ui/tailwind-preset.cjs` (tokens) + `packages/ui/src/*` (primitives).
-Both apps consume the preset via `presets: [require("@repo/ui/tailwind-preset.cjs")]` and import
-primitives as `@repo/ui/<name>`.
+## Workshop Ledger direction
 
-## Principles
+PartsBazar360 uses a precise, editorial visual language inspired by parts counters, workshop job cards, technical catalogs, and industrial labeling. The interface is automotive without relying on racing cliches, carbon fibre, decorative gears, neon gradients, glass effects, or dashboard graphics.
 
-1. **Fitment is the hero.** The buyer's vehicle and whether a part fits it outrank every other
-   piece of information. Fitment states have a dedicated, consistent visual language.
-2. **Honest hierarchy.** Verified data looks verified; inferred data looks inferred. Uncertainty
-   is labeled, never hidden or dressed up.
-3. **Dense but calm.** Marketplace pages carry a lot of data; space is created with rhythm and
-   grouping, not by hiding information.
-4. **One accent per meaning.** Brand cobalt = action/interactive. Emerald = success/verified only.
-   Amber = attention/vehicle context. Red = destructive/incompatible. Never decorative.
+The system is designed around four ideas:
 
-## Color
+1. **Fitment before persuasion.** Vehicle context and compatibility evidence outrank promotional content.
+2. **Seller accountability.** A third-party offer never looks like stock sold directly by PartsBazar360.
+3. **Dense, calm evidence.** Part numbers, condition, price, seller, shipping, returns, and warranty remain scannable without hiding complexity.
+4. **Uncertainty is a state.** Confirmed, inferred, unknown, and incompatible fitment states use different labels and explanations. Color is never the only signal.
 
-| Token | Value | Use |
-|-------|-------|-----|
-| `brand.600` `#2f54e3` | Primary actions, links, active states (6.0:1 on white) |
-| `brand.700` `#2544c8` | Hover/pressed |
-| `brand.50/100` | Tinted chips, selected backgrounds |
-| `graphite.950` `#0a1022` | Header/footer surfaces, dark buy CTAs |
-| `slate.*` | Neutrals: bg `slate-50`, surface white, border `slate-200`, muted text `slate-500`, body `slate-700`, headings `slate-900` |
-| `emerald.*` | Success, verified fitment (text ≥ `emerald-700` on tints) |
-| `amber.*` | Warnings, needs-verification fitment, vehicle-context accent (text ≥ `amber-800` on tints) |
-| `red.*` | Errors, destructive, incompatible (text ≥ `red-700` on tints) |
-| `sky.*` | Informational notes |
+## Visual tokens
 
-### Fitment state language (FitmentBadge)
-| State | Visual | Copy |
-|-------|--------|------|
-| verified | emerald tint, shield-check icon | "Fits your {vehicle}" / "Verified fit" |
-| likely | teal tint, check icon | "Likely fits — confirm engine/trim" |
-| check | amber tint, alert icon | "Check fitment" |
-| incompatible | red tint, x icon | "Doesn't fit your {vehicle}" |
-| universal | slate tint, globe icon | "Universal part" |
-| unknown | slate outline, help icon | "Fitment not verified" |
+The implementation source is `packages/ui/tailwind-preset.cjs` plus `apps/buyer-marketplace/app/globals.css`.
+
+| Role | Token / value | Use |
+|---|---|---|
+| Workshop ink | `graphite.950` / `#0d1519` | Header, footer, primary editorial surfaces, dark actions |
+| Petrol | `brand.600` / `#116b6b` | Links, active controls, fitment context, information hierarchy |
+| Petrol light | `brand.50` / `#edf8f7` | Selected and informational backgrounds |
+| Safety orange | `signal.500` / `#f36b21` | Vehicle rail, primary home search, critical wayfinding only |
+| Canvas | `#f4f2ed` | Page background |
+| Ledger surface | `#ebe8e1` / `#e9e5dc` | Technical rails and section contrast |
+| White | `#ffffff` | Product, form, table, and evidence surfaces |
+| Verified fit | Emerald scale | Confirmed compatibility and success |
+| Verify required | Amber scale | Additional engine, VIN, or specification check |
+| Does not fit | Red scale | Incompatibility, destructive actions, validation errors |
+| Information | Sky / petrol scale | Neutral evidence and marketplace guidance |
 
 ## Typography
 
-Inter (existing). Scale: `display` 44–56/1.05/-0.03em (hero only) · `h1` 28–30 semibold ·
-`h2` 20–22 semibold · `h3` 16–18 semibold · body 14–16 · caption 12 (minimum size).
-Prices: `font-semibold tabular-nums`. Part/OE/VIN/order numbers: `font-mono text-[13px]`.
+- Display: condensed system stack (`Arial Narrow`, `Roboto Condensed`, then the body stack), uppercase only for short product or section statements.
+- Body: system sans stack; 14-16px in transactional surfaces.
+- Prices: bold tabular figures.
+- OE, VIN, marketplace, and order identifiers: monospace with deliberate tracking.
+- Minimum caption size: 11px only for uppercase technical labels; explanatory copy remains 12px or larger.
 
-## Spacing & layout
+## Spacing and layout
 
-4px base grid. Page container: `mx-auto max-w-7xl px-4 sm:px-6 lg:px-8`.
-Page vertical rhythm: `py-6 sm:py-8` (dense pages), `py-8 sm:py-12` (narrow/landing).
-Card padding: `p-4` (compact) / `p-5 sm:p-6` (standard). Section gaps: `space-y-8/10`.
-Breakpoints: Tailwind defaults; key layout switches at `sm` (640), `lg` (1024).
+- Base unit: 4px.
+- Main container: `max-w-[1440px]` with 16 / 24 / 32px responsive gutters.
+- Dense transactional page spacing: 24-40px.
+- Editorial home section spacing: 40-64px.
+- Technical relationships use borders, rules, aligned columns, and tables instead of a card around every item.
+- Desktop marketplace navigation is three-tiered: utility, search/actions, then vehicle/category context.
+- Mobile keeps menu, logo, cart, search, selected vehicle, and horizontally scrollable categories available without nesting the primary discovery actions.
 
-## Shape & elevation
+## Shape and elevation
 
-Radii: badges/pills `rounded-full` · buttons/inputs `rounded-lg` · cards/panels `rounded-xl` ·
-hero/modals `rounded-2xl`. Borders: `border-slate-200` (default), `border-slate-300` (inputs).
-Shadows (cool-tinted, subtle): `shadow-card` resting · `shadow-card-hover` hover ·
-`shadow-overlay` dialogs/drawers. Never stack heavy shadows; elevation expresses interactivity.
+- Technical and marketplace panels are square or minimally rounded.
+- Form controls retain moderate radii for usability and consistency with shared primitives.
+- Pills are reserved for compact statuses such as condition or fitment.
+- Resting surfaces use a one-pixel border; shadows indicate floating overlays, drawers, or interactive product hover only.
 
-## Components (`@repo/ui/*`)
+## Component inventory
 
-- `button` — primary / secondary / outline / ghost / danger / dark; sm / md / lg; `loading`,
-  full-width; consistent focus ring (`focus-visible:ring-2 ring-brand-500 ring-offset-2`).
-- `badge` — neutral / brand / success / warning / danger / info / outline tones, optional dot.
-- `card` — surface + border + radius; `interactive` adds hover elevation.
-- `field`/`input`/`select`/`textarea` — label, hint, error wiring with `aria-describedby`/`aria-invalid`.
-- `skeleton` — shimmer block; compose per layout.
-- `empty-state` — icon, title, description, action slot.
-- `spinner` — inline loading.
-- `icons` — typed 24×24 stroke-1.8 set shared by both apps.
+### Global marketplace
 
-App-level composites (buyer): FitmentBadge, ConditionBadge, Price, ProductCard(+Skeleton),
-GarageChip, VehiclePicker, FilterSidebar/FilterDrawer, Pagination, BuyBox, ImageGallery,
-CompatibilitySection, Toast, Breadcrumbs, QuantityStepper, StickyMobileBar.
-Seller: Shell/Sidebar, PageHeader, StatCard, ShipDialog, table patterns.
+- Header with utility navigation, intelligent search overlay, mobile drawer, garage context, category rail, account, watchlist, and cart
+- Footer with marketplace model, account paths, support paths, and buyer guidance
+- Search autocomplete with recent searches, part-number hint, and category shortcuts
+- Toasts, skeletons, empty states, error states, pagination, breadcrumbs, form primitives
 
-## Interaction & motion
+### Vehicle and fitment
 
-150ms ease-out for hover/press; 200–250ms for drawers/dialogs/toasts; `animate-fade-in`,
-`animate-slide-up`, skeleton shimmer. Respect `prefers-reduced-motion` (preset disables
-non-essential animation). No parallax, no decorative motion.
+- Vehicle picker: make -> model -> generation -> engine/trim
+- Device garage with multiple vehicles, nickname, VIN, active vehicle, switch, edit, and remove
+- Persistent selected-vehicle rail
+- Fitment badge: verified, likely, verify required, incompatible, universal, unavailable
+- Listing fitment checker and searchable compatibility table with evidence source
+- Cart and checkout compatibility recap
 
-## States
+### Catalog and listing
 
-Every async surface defines: loading (skeleton), empty (guidance + action), error (retry +
-support path), success (confirmation + next step). Buttons expose disabled and loading.
-Forms validate inline on blur/submit with error text tied via `aria-describedby`.
+- Category and brand entry grids
+- Filter sidebar and mobile drawer
+- Applied-filter summary and sort control
+- Product card with image, watch action, condition, source, OE number, seller, price, and fitment
+- Image gallery with thumbnails, zoom, keyboard control, and actual-item guidance
+- Offer comparison, buy now, add to cart, contact seller, watchlist, seller terms, and technical specification table
 
-## Accessibility requirements
+### Purchase and post-purchase
 
-WCAG 2.1 AA contrast (all tokens above pass), visible `:focus-visible` rings on every
-interactive element, skip-to-content link, labeled form controls, status conveyed by icon+text
-(never color alone), touch targets ≥ 40px, logical heading order, `aria-current` for nav/pagination.
+- Seller-grouped cart and checkout
+- Labeled delivery form, review step, fitment confirmation, and order confirmation
+- Device-local purchase index backed by real checkout responses
+- Order detail with seller shipments, item recap, delivery address, contact, and return actions
+- Messages, returns/issues, settings, and account overview surfaces
 
-## Imagery
+### Seller portal
 
-Product images on white/neutral `slate-50` tiles, `object-contain`, fixed square ratio.
-Fallback placeholder icon on error. First gallery image should be the part itself —
-document/datasheet photos are pushed later where detectable (multi-image listings).
+The seller portal consumes the same preset and shared primitives (`@repo/ui/*`), so both
+apps move together when tokens change.
+
+- Responsive shell: fixed sidebar with icons and `aria-current` active states ≥ lg,
+  top bar + slide-in drawer below
+- PageHeader (eyebrow / title / description / actions) and StatCard with loading state
+- StatusBadge mapping backend statuses (orders, uploads, onboarding, offers) to badge tones
+- Inventory table with explicit-save inline price editor (labeled input, save button,
+  "Saved" confirmation, validation error) instead of silent on-blur commits
+- Ship dialog (carrier select + tracking input with validation) replacing `window.prompt`
+- Onboarding stepper with labeled Field primitives; uploads pipeline with drag-target file
+  input, per-row approve actions, and job detail loading
+
+## Interaction states
+
+Every reusable control supports a relevant subset of default, hover, active, focus-visible, disabled, loading, error, empty, and success states. Dynamic actions announce outcomes through labeled status text or toasts. Motion is limited to fast drawers, overlays, search suggestions, gallery transitions, and feedback; reduced-motion preferences disable nonessential motion.
+
+## Accessibility
+
+- WCAG 2.2 AA-oriented color contrast and visible keyboard focus
+- Skip link and semantic landmarks
+- Labeled search, filter, checkout, support, and garage controls
+- Keyboard-accessible menus, gallery, filter drawer, and dialogs
+- Minimum 40px action targets; primary mobile actions are 44px or larger
+- Status always includes text or an icon plus text
+- Horizontal technical tables scroll inside their own container rather than the page
+- 320px layouts are verified without document-level horizontal overflow

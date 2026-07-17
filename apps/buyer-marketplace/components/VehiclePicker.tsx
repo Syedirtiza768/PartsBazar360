@@ -150,7 +150,7 @@ export function VehiclePicker({
 
   const stepDone = "border-emerald-300 bg-emerald-50 text-emerald-700";
   const stepActive = "border-brand-300 bg-brand-50 text-brand-700";
-  const stepIdle = "border-slate-200 bg-slate-50 text-slate-400";
+  const stepIdle = "border-slate-200 bg-slate-50 text-graphite-600";
 
   const steps = [
     { n: 1, done: !!makeId, active: !makeId },
@@ -163,15 +163,15 @@ export function VehiclePicker({
     <section
       aria-label="Select your vehicle"
       className={cn(
-        "rounded-2xl border bg-white",
+        "border bg-white",
         variant === "hero"
-          ? "border-slate-200/60 p-5 shadow-overlay sm:p-6"
-          : "border-slate-200 p-5 shadow-card sm:p-6",
+          ? "border-slate-950 p-4 sm:p-5"
+          : "border-stone-300 p-5 shadow-card sm:p-6",
       )}
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+        <h2 className="flex items-center gap-2 font-display text-lg font-black uppercase text-slate-950">
+          <span className="flex h-9 w-9 items-center justify-center bg-signal-500 text-graphite-950">
             <CarIcon className="h-5 w-5" />
           </span>
           Select your vehicle
@@ -181,7 +181,7 @@ export function VehiclePicker({
             <span
               key={s.n}
               className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold transition-colors",
+                "flex h-6 w-6 items-center justify-center border text-[11px] font-bold transition-colors",
                 s.done ? stepDone : s.active ? stepActive : stepIdle,
               )}
             >
@@ -252,7 +252,7 @@ export function VehiclePicker({
       </div>
 
       {status === "error" && (
-        <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           Couldn&apos;t load vehicle data. Check your connection and try again.
         </p>
       )}
@@ -266,7 +266,7 @@ export function VehiclePicker({
         </Button>
       </div>
 
-      <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+      <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
         Your vehicle is remembered on this device, and every listing shows whether it fits.
       </p>

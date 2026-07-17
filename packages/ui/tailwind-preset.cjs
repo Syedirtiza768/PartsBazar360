@@ -10,25 +10,43 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Brand cobalt — actions, links, active states. 600 passes AA on white (6.0:1).
+        // Brand petrol — actions, links, active states. 600 passes AA on white.
         brand: {
-          50: "#eef4ff",
-          100: "#dfe9ff",
-          200: "#c5d6fe",
-          300: "#a1bbfc",
-          400: "#7b96f8",
-          500: "#5472f1",
-          600: "#2f54e3",
-          700: "#2544c8",
-          800: "#2239a1",
-          900: "#21347f",
-          950: "#131c4a",
+          50: "#edf8f7",
+          100: "#d2efec",
+          200: "#a9ded9",
+          300: "#73c5bf",
+          400: "#3ba49f",
+          500: "#1f8582",
+          600: "#116b6b",
+          700: "#105656",
+          800: "#114545",
+          900: "#103a3b",
+          950: "#062224",
         },
         // Near-black cool graphite for header/footer/dark CTAs.
+        // 600/700 are the text ramp: both clear AA (4.5:1) on every ground we
+        // ship — white, canvas #f4f2ed, and ledger #e9e5dc. Use these for text
+        // rather than slate-400/500, which fail on the warmer surfaces
+        // (slate-500 on #e9e5dc is 3.79:1).
         graphite: {
-          800: "#1c2436",
-          900: "#111827",
-          950: "#0a1022",
+          600: "#4a5a63", // muted text — 7.16 white / 6.40 canvas / 5.69 ledger
+          700: "#33434b", // body text — 10.27 white / 9.18 canvas
+          800: "#273138",
+          900: "#182229",
+          950: "#0d1519", // headings, prices — 18.45 on white
+        },
+        // Safety orange. Carries graphite-950 text, never white: white on
+        // signal-500 is 3.03:1. The scale crosses the contrast midpoint, so
+        // dark text is only legible at 500/600 (6.09 / 4.59) and white only at
+        // 700 (6.01). Buttons therefore stop at 600 — see the `vehicle`
+        // variant in button.tsx.
+        signal: {
+          50: "#fff5ed",
+          100: "#ffe6d3",
+          500: "#f36b21",
+          600: "#d95412",
+          700: "#ad3f0e", // text-on-light only (7.31 on white); never a button ground
         },
       },
       fontSize: {
@@ -38,10 +56,10 @@ module.exports = {
         "display-lg": ["3.5rem", { lineHeight: "1.05", letterSpacing: "-0.03em" }],
       },
       boxShadow: {
-        card: "0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.06)",
+        card: "0 1px 0 rgb(13 21 25 / 0.08)",
         "card-hover":
-          "0 4px 12px rgb(15 23 42 / 0.08), 0 2px 4px rgb(15 23 42 / 0.05)",
-        overlay: "0 16px 48px rgb(15 23 42 / 0.18), 0 4px 12px rgb(15 23 42 / 0.08)",
+          "0 8px 24px rgb(13 21 25 / 0.11), 0 1px 0 rgb(13 21 25 / 0.08)",
+        overlay: "0 18px 50px rgb(13 21 25 / 0.22), 0 3px 10px rgb(13 21 25 / 0.10)",
         "top-bar": "0 -4px 16px rgb(15 23 42 / 0.08)",
       },
       keyframes: {

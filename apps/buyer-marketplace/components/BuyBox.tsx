@@ -26,6 +26,7 @@ import { pushRecentlyViewed } from "@/lib/recent";
 import { formatPrice, humanize, lowestOfferPrice, offerCurrency } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
+import { WatchlistButton } from "./WatchlistButton";
 import type { Part, Offer } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -76,10 +77,10 @@ function FitmentChecker({ part }: { part: Part }) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <CarIcon className="h-4 w-4 text-slate-500" />
+          <CarIcon className="h-4 w-4 text-graphite-600" />
           Will this fit your car?
         </p>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-graphite-600">
           Select your vehicle and we&apos;ll check this part against its compatibility evidence.
         </p>
         <Link
@@ -112,7 +113,7 @@ function FitmentChecker({ part }: { part: Part }) {
         <button
           type="button"
           onClick={() => setSwitching((v) => !v)}
-          className="shrink-0 text-xs font-semibold text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+          className="shrink-0 text-xs font-semibold text-graphite-600 underline-offset-2 hover:text-slate-700 hover:underline"
         >
           {switching ? "Close" : "Change vehicle"}
         </button>
@@ -168,10 +169,12 @@ function FitmentChecker({ part }: { part: Part }) {
 
 function OfferRow({
   offer,
+  part,
   isBest,
   showBestLabel,
 }: {
   offer: Offer;
+  part: Part;
   isBest: boolean;
   showBestLabel: boolean;
 }) {
@@ -196,6 +199,22 @@ function OfferRow({
     } catch (err: unknown) {
       push({
         title: "Couldn't add to cart",
+        description: err instanceof Error ? err.message : "Please try again.",
+        tone: "error",
+      });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    setAdding(true);
+    try {
+      await addToCart(offer.id, 1);
+      router.push("/checkout");
+    } catch (err: unknown) {
+      push({
+        title: "Couldn't start checkout",
         description: err instanceof Error ? err.message : "Please try again.",
         tone: "error",
       });
@@ -234,7 +253,7 @@ function OfferRow({
       </div>
 
       {profile && (
-        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
+        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-graphite-600">
           {profile.country && (
             <li className="flex items-center gap-1.5">
               <MapPinIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -263,15 +282,20 @@ function OfferRow({
         </ul>
       )}
 
-      <Button
-        fullWidth
-        className="mt-3.5"
-        onClick={handleAdd}
-        loading={adding}
-        disabled={loading && !adding}
+      <div className="mt-3.5 grid grid-cols-2 gap-2">
+        <Button variant="outline" fullWidth onClick={handleAdd} loading={adding} disabled={loading && !adding}>
+          Add to cart
+        </Button>
+        <Button fullWidth onClick={handleBuyNow} disabled={loading || adding}>
+          Buy now
+        </Button>
+      </div>
+      <Link
+        href={`/support?partId=${part.id}&category=GENERAL&subject=${encodeURIComponent(`Question for ${sellerName}: ${part.title}`)}`}
+        className="mt-3 flex min-h-10 items-center justify-center gap-2 border border-stone-300 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:text-slate-950"
       >
-        Add to cart
-      </Button>
+        <MessageIcon className="h-4 w-4" /> Contact seller
+      </Link>
     </div>
   );
 }
@@ -307,7 +331,7 @@ export function BuyBox({ part }: { part: Part }) {
         <h1 className="mt-2.5 text-xl font-bold leading-snug tracking-tight text-slate-900 sm:text-2xl">
           {part.title}
         </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-graphite-600">
           {part.brand && (
             <span>
               Brand: <span className="font-medium text-slate-700">{part.brand}</span>
@@ -324,7 +348,7 @@ export function BuyBox({ part }: { part: Part }) {
       {/* OE numbers */}
       {part.oeNumbers && part.oeNumbers.length > 0 && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-graphite-600">
             OE / part number{part.oeNumbers.length > 1 ? "s" : ""}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -338,11 +362,13 @@ export function BuyBox({ part }: { part: Part }) {
       {/* Fitment for the buyer's vehicle */}
       <FitmentChecker part={part} />
 
+      <WatchlistButton part={part} className="w-full" />
+
       {/* Offers */}
       {offers.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
           <p className="text-sm font-semibold text-slate-700">Currently unavailable</p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-graphite-600">
             No active offers for this part right now. Ask support to source it for you.
           </p>
           <Link
@@ -360,7 +386,7 @@ export function BuyBox({ part }: { part: Part }) {
             </p>
           )}
           {offers.map((offer, i) => (
-            <OfferRow key={offer.id} offer={offer} isBest={i === 0} showBestLabel={offers.length > 1} />
+            <OfferRow key={offer.id} offer={offer} part={part} isBest={i === 0} showBestLabel={offers.length > 1} />
           ))}
         </div>
       )}
@@ -427,7 +453,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
       <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="price text-lg leading-tight">{formatPrice(best.price, best.currency)}</p>
-          <p className="truncate text-xs text-slate-500">
+          <p className="truncate text-xs text-graphite-600">
             {humanize(best.condition || best.qualityTier)} ·{" "}
             {best.seller?.name || best.sellerName || "Marketplace seller"}
           </p>

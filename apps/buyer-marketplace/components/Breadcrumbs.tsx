@@ -9,7 +9,7 @@ export interface Crumb {
 export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
-      <ol className="flex items-center gap-1.5 overflow-hidden text-sm text-slate-500">
+      <ol className="flex items-center gap-1.5 overflow-hidden text-sm text-graphite-600">
         {crumbs.map((crumb, i) => {
           const last = i === crumbs.length - 1;
           return (

@@ -144,7 +144,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{heading}</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-graphite-600">
               {results === null ? (
                 "Results unavailable"
               ) : (
@@ -164,7 +164,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </FilterDrawer>
             )}
             {isFitmentMode ? (
-              <p className="text-sm text-slate-500">Sorted by lowest price</p>
+              <p className="text-sm text-graphite-600">Sorted by lowest price</p>
             ) : (
               <SortSelect current={sort} />
             )}

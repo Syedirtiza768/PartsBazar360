@@ -17,7 +17,7 @@ async function getPartUrls(): Promise<{ id: string; updatedAt?: string }[]> {
       const data = await res.json();
       const items = data.items || [];
       if (items.length === 0) break;
-      urls.push(...items.map((p: any) => ({ id: p.id, updatedAt: p.createdAt })));
+      urls.push(...items.map((p: { id: string; createdAt?: string }) => ({ id: p.id, updatedAt: p.createdAt })));
       if (items.length < pageSize) break;
     } catch {
       break;

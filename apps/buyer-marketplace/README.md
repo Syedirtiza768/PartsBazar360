@@ -14,11 +14,22 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000/buyer](http://localhost:3000/buyer) with your browser to see the result — the app is served under a `/buyer` basePath, so `http://localhost:3000/` will 404.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
+## Fonts
+
+Type is self-hosted with [`next/font/local`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts), configured in `app/layout.tsx`:
+
+| Role | Face | File |
+|---|---|---|
+| Body (`--font-sans`) | Inter, latin variable | `app/fonts/Inter-latin-var.woff2` |
+| Display (`--font-display`) | Roboto Condensed, latin variable | `app/fonts/RobotoCondensed-latin-var.woff2` |
+
+Both are SIL OFL 1.1, ~97KB combined, and committed to the repo — so the build never fetches fonts over the network and the rendered type is identical on every device.
+
+**Do not name a font family in `globals.css` that isn't loaded here.** The stack previously named `Inter` and `Arial Narrow` while loading neither, which resolved differently on Windows, Android and iOS — iOS ships neither condensed face, so headings silently lost their condensed treatment for iPhone traffic. Adding Arabic later means adding an arabic-subset file to this same config.
 
 ## Learn More
 

@@ -1,118 +1,36 @@
 import Link from "next/link";
-import {
-  ShieldCheckIcon,
-  TruckIcon,
-  RotateCcwIcon,
-  MessageIcon,
-} from "@repo/ui/icons";
+import { CarIcon, MessageIcon, ShieldCheckIcon, StoreIcon, TruckIcon } from "@repo/ui/icons";
 
-const COLUMNS = [
-  {
-    title: "Shop",
-    links: [
-      { href: "/search", label: "All parts" },
-      { href: "/garage", label: "Find by vehicle" },
-      { href: "/search?category=Engine", label: "Engine parts" },
-      { href: "/search?category=Body", label: "Body parts" },
-      { href: "/search?category=Electrical", label: "Electrical" },
-    ],
-  },
-  {
-    title: "Your account",
-    links: [
-      { href: "/garage", label: "My Garage" },
-      { href: "/cart", label: "Cart" },
-      { href: "/support", label: "Order help" },
-    ],
-  },
-  {
-    title: "Help & trust",
-    links: [
-      { href: "/support", label: "Contact support" },
-      { href: "/support", label: "Fitment verification" },
-      { href: "/support", label: "Returns & refunds" },
-      { href: "/support", label: "Shipping questions" },
-    ],
-  },
-];
-
-const TRUST_ITEMS = [
-  {
-    icon: <ShieldCheckIcon className="h-5 w-5 text-emerald-400" />,
-    title: "Fitment-verified",
-    desc: "Structured compatibility evidence on every verified listing",
-  },
-  {
-    icon: <TruckIcon className="h-5 w-5 text-emerald-400" />,
-    title: "Worldwide shipping",
-    desc: "Real weight-based rates from every seller",
-  },
-  {
-    icon: <RotateCcwIcon className="h-5 w-5 text-emerald-400" />,
-    title: "Seller return policies",
-    desc: "Return windows shown before you buy",
-  },
-  {
-    icon: <MessageIcon className="h-5 w-5 text-emerald-400" />,
-    title: "Human support",
-    desc: "Compatibility questions answered by our team",
-  },
+const GROUPS: Array<{ title: string; links: Array<[string, string]> }> = [
+  { title: "Shop", links: [["/search", "All parts"], ["/garage", "Shop by vehicle"], ["/watchlist", "Watchlist"], ["/cart", "Cart"]] },
+  { title: "My PartsBazar", links: [["/account", "Account overview"], ["/account/purchases", "Purchases"], ["/account/messages", "Messages"], ["/account/returns", "Returns & issues"]] },
+  { title: "Help", links: [["/support", "Customer support"], ["/support?category=FITMENT", "Fitment check"], ["/support?category=ORDER_ISSUE", "Order issue"], ["/support?category=RETURNS", "Returns & refunds"]] },
 ];
 
 export function Footer() {
   return (
-    <footer className="bg-graphite-950 text-slate-400">
-      {/* Trust strip */}
-      <div className="border-b border-white/10">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-8 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
-          {TRUST_ITEMS.map((item) => (
-            <div key={item.title} className="flex items-start gap-3">
-              <span className="mt-0.5 shrink-0">{item.icon}</span>
-              <div>
-                <p className="text-sm font-semibold text-white">{item.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{item.desc}</p>
-              </div>
-            </div>
-          ))}
+    <footer className="mt-auto border-t-2 border-slate-950 bg-graphite-950 text-slate-300">
+      <div className="border-b border-white/15">
+        <div className="mx-auto grid max-w-[1440px] sm:grid-cols-3">
+          {[
+            [CarIcon, "Vehicle context", "Fitment follows the buyer journey"],
+            [StoreIcon, "Marketplace sellers", "Seller identity and terms stay visible"],
+            [TruckIcon, "Separate shipments", "Delivery and returns remain seller-specific"],
+          ].map(([Icon, title, description]) => { const ItemIcon = Icon as typeof CarIcon; return <div key={title as string} className="flex gap-3 border-b border-white/15 px-4 py-5 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 sm:px-6 lg:px-8"><ItemIcon className="h-5 w-5 shrink-0 text-brand-300" /><div><p className="text-sm font-bold text-white">{title as string}</p><p className="mt-0.5 text-xs text-slate-400">{description as string}</p></div></div>; })}
         </div>
       </div>
-
-      {/* Link columns */}
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-4 py-12 sm:px-6 md:grid-cols-5 lg:px-8">
-        <div className="col-span-2">
-          <p className="text-xl font-black tracking-tight text-white">
-            PartsBazar<span className="text-brand-400">360</span>
-          </p>
-          <p className="mt-3 max-w-xs text-sm leading-relaxed">
-            Fitment-verified used &amp; OEM auto parts, sourced live from vetted
-            marketplace sellers worldwide.
-          </p>
-          <p className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs">
-            <ShieldCheckIcon className="h-4 w-4 text-emerald-400" />
-            Every listing discloses condition, source, and fitment evidence.
-          </p>
+      <div className="mx-auto grid max-w-[1440px] gap-10 px-4 py-10 sm:px-6 md:grid-cols-[1.25fr_2fr] lg:px-8 lg:py-12">
+        <div>
+          <p className="font-display text-2xl font-black uppercase tracking-tight text-white">PartsBazar360</p>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-400">A motor-parts marketplace built around compatibility evidence, honest condition, and clear seller responsibility.</p>
+          <Link href="/support" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-brand-200 hover:text-white"><MessageIcon className="h-4 w-4" />Get help from a human</Link>
         </div>
-        {COLUMNS.map((col) => (
-          <nav key={col.title} aria-label={col.title}>
-            <h3 className="text-sm font-semibold text-white">{col.title}</h3>
-            <ul className="mt-3 space-y-2 text-sm">
-              {col.links.map((link) => (
-                <li key={`${col.title}-${link.label}`}>
-                  <Link href={link.href} className="transition-colors hover:text-white">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
+        <div className="grid grid-cols-2 gap-7 sm:grid-cols-3">
+          {GROUPS.map((group) => <nav key={group.title} aria-label={group.title}><p className="text-[11px] font-black uppercase tracking-[0.18em] text-white">{group.title}</p><ul className="mt-3 space-y-2.5">{group.links.map(([href, label]) => <li key={href}><Link href={href} className="text-sm text-slate-400 hover:text-white">{label}</Link></li>)}</ul></nav>)}
+        </div>
       </div>
-
-      <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8">
-          <p>© {new Date().getFullYear()} PartsBazar360. All rights reserved.</p>
-          <p>Prices shown in each seller&apos;s listing currency.</p>
-        </div>
+      <div className="border-t border-white/15">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><p>© {new Date().getFullYear()} PartsBazar360</p><p className="flex items-center gap-2"><ShieldCheckIcon className="h-4 w-4 text-brand-300" />Compatibility uncertainty is labeled, never hidden.</p></div>
       </div>
     </footer>
   );

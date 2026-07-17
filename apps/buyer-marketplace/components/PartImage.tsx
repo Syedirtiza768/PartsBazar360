@@ -42,7 +42,7 @@ export function PartImage({ src, alt, className, priority = false, fill = true }
         aria-label={`No photo available for ${alt}`}
       >
         <CameraIcon className="h-10 w-10" />
-        <span className="text-[11px] font-medium text-slate-400">No photo</span>
+        <span className="text-[11px] font-medium text-graphite-600">No photo</span>
       </div>
     );
   }
@@ -50,6 +50,8 @@ export function PartImage({ src, alt, className, priority = false, fill = true }
   const proxied = proxyUrl(src);
 
   return (
+    // The marketplace proxy handles heterogeneous seller-CDN images and fallbacks.
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={proxied}
       alt={alt}

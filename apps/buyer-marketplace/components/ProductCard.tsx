@@ -7,6 +7,7 @@ import { PartImage } from "./PartImage";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
 import { Price } from "./Price";
+import { WatchlistButton } from "./WatchlistButton";
 import { lowestOfferPrice, offerCurrency } from "@/lib/format";
 import { fitmentForConfig } from "@/lib/fitment";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
@@ -57,25 +58,26 @@ export function ProductCard({
           : null;
 
   return (
-    <Link
-      href={`/part/${part.id}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
-    >
-      <div className="relative aspect-square overflow-hidden border-b border-slate-100 bg-slate-50">
+    <article className="group relative flex flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover">
+      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
+        <Link href={`/part/${part.id}`} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
         <PartImage
           src={image}
           alt={part.title}
-          className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.04]"
+          className="object-contain p-4 transition-transform duration-300 group-hover:scale-[1.035]"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
+        <span className="sr-only">View {part.title}</span>
+        </Link>
         {offerCount > 1 && (
-          <span className="absolute right-2 top-2 rounded-full border border-slate-200 bg-white/95 px-2 py-0.5 text-[11px] font-semibold text-slate-700 shadow-sm">
+          <span className="absolute left-0 top-0 border-b border-r border-stone-300 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700">
             {offerCount} offers
           </span>
         )}
+        <WatchlistButton part={part} compact className="absolute right-2 top-2 z-10 bg-white/95" />
       </div>
 
-      <div className="flex flex-1 flex-col p-3.5">
+      <div className="flex flex-1 flex-col p-4">
         {/* Fitment for the buyer's vehicle — most important signal. */}
         {fitment && (
           <div className="mb-2">
@@ -92,36 +94,37 @@ export function ProductCard({
           <SourceBadge partSource={partSource} size="sm" />
         </div>
 
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-slate-800 group-hover:text-slate-950">
-          {part.title}
+        <h3 className="min-h-10 text-sm font-semibold leading-snug text-slate-800 group-hover:text-brand-800">
+          <Link href={`/part/${part.id}`} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>
         </h3>
 
         <div className="mt-1.5 flex-1 space-y-1">
           {oeNumber && (
-            <p className="flex items-center gap-1 text-xs text-slate-500">
+            <p className="flex items-center gap-1 text-xs text-graphite-600">
               <TagIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
               <span className="part-number truncate">{oeNumber}</span>
             </p>
           )}
           {sellerName && (
-            <p className="flex items-center gap-1 text-xs text-slate-500">
+            <p className="flex items-center gap-1 text-xs text-graphite-600">
               <UserIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
               <span className="truncate">{sellerName}</span>
             </p>
           )}
         </div>
 
-        <div className="mt-2.5 border-t border-slate-100 pt-2.5">
+        <div className="mt-3 flex items-end justify-between gap-3 border-t border-stone-200 pt-3">
           <Price amount={price} currency={currency} from={offerCount > 1} />
+          <Link href={`/part/${part.id}`} className="text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 
 export function ProductCardSkeleton() {
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+    <div className="flex flex-col overflow-hidden border border-stone-200 bg-white shadow-card">
       <Skeleton className="aspect-square rounded-none" />
       <div className="space-y-2.5 p-3.5">
         <Skeleton className="h-4 w-20 rounded-full" />

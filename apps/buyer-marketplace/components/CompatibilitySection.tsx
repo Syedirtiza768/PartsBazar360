@@ -9,7 +9,6 @@ import {
   SearchIcon,
   InfoIcon,
 } from "@repo/ui/icons";
-import { cn } from "@repo/ui/cn";
 import type { CompatibilityRow, CompatibleVehicle } from "@/lib/types";
 
 /**
@@ -135,7 +134,7 @@ export function CompatibilitySection({
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">
                     Compatibility table
-                    <span className="ml-2 font-normal text-slate-500">
+                    <span className="ml-2 font-normal text-graphite-600">
                       {filtered.length} vehicle{filtered.length === 1 ? "" : "s"}
                     </span>
                   </h3>
@@ -148,7 +147,7 @@ export function CompatibilitySection({
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Filter by year, make, model…"
                     aria-label="Filter compatibility table"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-graphite-600 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                   />
                 </div>
               </div>
@@ -161,7 +160,7 @@ export function CompatibilitySection({
                         <th
                           key={h}
                           scope="col"
-                          className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                          className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-graphite-600"
                         >
                           {h}
                         </th>
@@ -171,7 +170,7 @@ export function CompatibilitySection({
                   <tbody className="divide-y divide-slate-100">
                     {visible.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={6} className="px-4 py-8 text-center text-graphite-600">
                           No vehicles match “{query}”.
                         </td>
                       </tr>
@@ -217,7 +216,7 @@ export function CompatibilitySection({
             </div>
           )}
 
-          <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
             <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
             Compatibility data comes from structured seller fitment and listing metadata. When in
             doubt, the OE number is the ground truth — match it against your vehicle&apos;s parts

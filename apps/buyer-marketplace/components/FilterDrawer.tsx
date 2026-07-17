@@ -73,7 +73,7 @@ export function FilterDrawer({
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close filters"
-                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
+                className="rounded-lg p-2 text-graphite-600 transition-colors hover:bg-slate-100"
               >
                 <XIcon className="h-5 w-5" />
               </button>

@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: PartPageProps): Promise<Metad
 function SpecRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[140px_1fr] gap-3 py-2.5 sm:grid-cols-[180px_1fr]">
-      <dt className="text-sm text-slate-500">{label}</dt>
+      <dt className="text-sm text-graphite-600">{label}</dt>
       <dd className="min-w-0 text-sm font-medium text-slate-800">{children}</dd>
     </div>
   );
@@ -99,7 +99,6 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-12">
-      {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <Breadcrumbs
@@ -177,7 +176,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                 </SpecRow>
               )}
             </dl>
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <p className="mt-3 text-xs leading-relaxed text-graphite-600">
               Photos show the actual item where provided by the seller. Report inaccurate listings{" "}
               <Link
                 href={`/support?partId=${part.id}&category=GENERAL&subject=${encodeURIComponent(

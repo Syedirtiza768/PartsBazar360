@@ -115,7 +115,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
       <Link
         href="/search"
         rel="nofollow"
-        className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+        className="text-xs font-medium text-graphite-600 underline-offset-2 hover:text-graphite-950 hover:underline"
       >
         Clear all
       </Link>

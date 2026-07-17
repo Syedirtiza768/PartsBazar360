@@ -42,7 +42,7 @@ function CartLine({ item }: { item: CartItem }) {
             >
               {part?.title || "Part"}
             </Link>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-graphite-600">
               Condition: {humanize(item.sellerOffer.condition || "USED")}
             </p>
             <div className="mt-1.5">
@@ -68,7 +68,7 @@ function CartLine({ item }: { item: CartItem }) {
             type="button"
             onClick={() => removeItem(item.id)}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-graphite-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
           >
             <TrashIcon className="h-4 w-4" />
             Remove
@@ -106,7 +106,7 @@ export default function CartPage() {
       <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
         Your cart
         {itemCount > 0 && (
-          <span className="ml-2 text-lg font-normal text-slate-400">
+          <span className="ml-2 text-lg font-normal text-graphite-600">
             ({itemCount} item{itemCount === 1 ? "" : "s"})
           </span>
         )}
@@ -151,7 +151,7 @@ export default function CartPage() {
                     <StoreIcon className="h-4 w-4 shrink-0 text-slate-400" />
                     <span className="truncate">{group.name}</span>
                   </p>
-                  <p className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
+                  <p className="flex shrink-0 items-center gap-1.5 text-xs text-graphite-600">
                     <TruckIcon className="h-3.5 w-3.5" />
                     Ships separately
                   </p>
@@ -171,21 +171,21 @@ export default function CartPage() {
               <h2 className="text-base font-bold text-slate-900">Order summary</h2>
               <dl className="mt-4 space-y-2.5 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">
+                  <dt className="text-graphite-600">
                     Subtotal ({itemCount} item{itemCount === 1 ? "" : "s"})
                   </dt>
                   <dd className="price">{formatPrice(subtotal, currency)}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Shipping</dt>
-                  <dd className="text-slate-500">Calculated at checkout</dd>
+                  <dt className="text-graphite-600">Shipping</dt>
+                  <dd className="text-graphite-600">Calculated at checkout</dd>
                 </div>
                 <div className="flex justify-between border-t border-slate-100 pt-2.5 text-base">
                   <dt className="font-semibold text-slate-900">Estimated total</dt>
                   <dd className="price">{formatPrice(subtotal, currency)}</dd>
                 </div>
               </dl>
-              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              <p className="mt-2 text-xs leading-relaxed text-graphite-600">
                 Weight-based shipping is added per seller shipment on the next step.
               </p>
               <Button

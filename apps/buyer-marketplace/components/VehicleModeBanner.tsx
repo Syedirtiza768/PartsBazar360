@@ -39,7 +39,7 @@ export function VehicleModeBanner({ configId }: { configId: string }) {
         </Link>
         <Link
           href="/search"
-          className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+          className="inline-flex items-center gap-1 text-sm font-medium text-graphite-600 transition-colors hover:text-slate-700"
         >
           <XIcon className="h-4 w-4" />
           Show all parts

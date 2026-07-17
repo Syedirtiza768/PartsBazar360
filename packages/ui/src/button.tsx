@@ -7,7 +7,8 @@ export type ButtonVariant =
   | "outline"
   | "ghost"
   | "danger"
-  | "dark";
+  | "dark"
+  | "vehicle";
 
 export type ButtonSize = "sm" | "md" | "lg";
 
@@ -23,6 +24,13 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger:
     "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 disabled:bg-slate-300 disabled:text-slate-50",
   dark: "bg-graphite-950 text-white hover:bg-graphite-900 active:bg-graphite-800 disabled:bg-slate-300 disabled:text-slate-50",
+  // Vehicle / primary-search action — the only place safety orange appears.
+  // Text is graphite-950, never white (white on signal-500 is 3.03:1, below AA).
+  // Deliberately stops darkening at signal-600 (4.59:1); signal-700 would drop
+  // dark text to 3.07:1, so the pressed state deepens the ring instead of the
+  // fill.
+  vehicle:
+    "bg-signal-500 text-graphite-950 hover:bg-signal-600 active:bg-signal-600 active:ring-2 active:ring-inset active:ring-graphite-950/30 disabled:bg-slate-300 disabled:text-slate-50",
 };
 
 const SIZES: Record<ButtonSize, string> = {

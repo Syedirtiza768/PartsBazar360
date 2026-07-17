@@ -21,7 +21,7 @@ export function SortSelect({ current }: { current: string }) {
 
   return (
     <label className="flex items-center gap-2">
-      <span className="hidden text-sm text-slate-500 sm:inline">Sort</span>
+      <span className="hidden text-sm text-graphite-600 sm:inline">Sort</span>
       <span className="sr-only sm:hidden">Sort results</span>
       <div className="relative">
         <select

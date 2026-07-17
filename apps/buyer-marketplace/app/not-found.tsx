@@ -9,7 +9,7 @@ export default function NotFound() {
       <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
         That part isn&apos;t on the shelf
       </h1>
-      <p className="mx-auto mt-3 max-w-md text-slate-500">
+      <p className="mx-auto mt-3 max-w-md text-graphite-600">
         The page or listing may have been sold, removed, or the link is incorrect. Salvage
         inventory moves fast — the search usually finds an equivalent.
       </p>
@@ -25,7 +25,7 @@ export default function NotFound() {
             type="search"
             name="q"
             placeholder="Search by part name or OE number…"
-            className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-24 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
+            className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-24 text-sm placeholder:text-graphite-600 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
           />
           <button
             type="submit"

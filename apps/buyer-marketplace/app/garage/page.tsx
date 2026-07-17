@@ -62,7 +62,7 @@ function VehicleCard({ vehicle }: { vehicle: SavedVehicle }) {
           <span
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
-              isActive ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500",
+              isActive ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-graphite-600",
             )}
           >
             <CarIcon className="h-6 w-6" />
@@ -78,16 +78,16 @@ function VehicleCard({ vehicle }: { vehicle: SavedVehicle }) {
                 </Badge>
               )}
             </div>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 text-sm text-graphite-600">
               {vehicle.makeName} {vehicle.modelName} · {vehicle.generationName}
               {years ? ` (${years})` : ""}
             </p>
             {(vehicle.engine || vehicle.transmission) && (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-graphite-600">
                 {[vehicle.engine, vehicle.transmission, vehicle.trim].filter(Boolean).join(" · ")}
               </p>
             )}
-            {vehicle.vin && <p className="part-number mt-1 text-slate-400">VIN {vehicle.vin}</p>}
+            {vehicle.vin && <p className="part-number mt-1 text-graphite-700">VIN {vehicle.vin}</p>}
           </div>
         </div>
 
@@ -172,11 +172,11 @@ export default function GaragePage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <header className="max-w-2xl">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Garage</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+        <p className="mt-2 text-sm leading-relaxed text-graphite-600 sm:text-base">
           Save the vehicles you maintain. Your active vehicle follows you through search and
           product pages, so every listing tells you whether it fits.
         </p>
-        <p className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+        <p className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-graphite-600">
           <ShieldCheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
           Stored on this device — no account needed.
         </p>

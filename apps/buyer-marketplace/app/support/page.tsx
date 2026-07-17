@@ -113,7 +113,7 @@ function SupportForm() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Get help from a human
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500 sm:text-base">
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-graphite-600 sm:text-base">
               Compatibility checks, order issues, returns — describe it once and we route it to the
               right seller or fulfilment owner.
             </p>
@@ -227,7 +227,7 @@ function SupportForm() {
               <span className="mt-0.5 shrink-0">{item.icon}</span>
               <div>
                 <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-slate-500">{item.desc}</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-graphite-600">{item.desc}</p>
               </div>
             </div>
           ))}

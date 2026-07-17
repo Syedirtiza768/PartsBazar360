@@ -24,7 +24,7 @@ export function Price({
 }) {
   return (
     <span className={cn("inline-flex items-baseline gap-1", className)}>
-      {from && <span className="text-xs font-normal text-slate-500">From</span>}
+      {from && <span className="text-xs font-normal text-graphite-600">From</span>}
       <span className={cn("price", SIZES[size])}>{formatPrice(amount, currency)}</span>
     </span>
   );

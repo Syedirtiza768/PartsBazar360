@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": ["INTERNAL_API_URL", "SITE_URL", "DEV_API_PROXY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
