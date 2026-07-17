@@ -1,13 +1,26 @@
 export interface Offer {
   id: string;
   price: number;
-  currency?: string;
+  currency?: string | null;
   condition: string;
   partSource?: string;
   qualityTier?: string;
   sellerId?: string;
   sellerName?: string;
-  seller?: { id: string; name: string };
+  seller?: {
+    id: string;
+    name: string;
+    profile?: SellerProfileSummary | null;
+  };
+}
+
+export interface SellerProfileSummary {
+  country?: string | null;
+  returnWindowDays?: number | null;
+  acceptsReturns?: boolean | null;
+  warrantyDays?: number | null;
+  fulfillmentSlaHours?: number | null;
+  shippingRegions?: string[];
 }
 
 export interface CompatibleVehicle {
@@ -30,17 +43,38 @@ export interface CompatibilityRow {
   source?: string;
 }
 
+/** Raw fitment relation as returned by the part detail endpoint. */
+export interface PartFitment {
+  id: string;
+  vehicleConfigId: string;
+  evidenceLevel: string;
+  confidence: number;
+  vehicleConfig?: {
+    trim?: string | null;
+    engine?: string | null;
+    transmission?: string | null;
+    generation?: {
+      name: string;
+      startYear?: number | null;
+      endYear?: number | null;
+      model?: { name: string; make?: { name: string } };
+    };
+  };
+}
+
 export interface Part {
   id: string;
   title: string;
   brand?: string | null;
   manufacturer?: string | null;
   category?: string | null;
+  weight?: number | null;
   oeNumbers?: string[];
+  fitmentFlags?: string[];
   imageUrls?: string[];
   listingUrl?: string | null;
   ebayItemId?: string | null;
-  compatibility?: CompatibilityRow[] | any;
+  compatibility?: CompatibilityRow[];
   compatibilityTable?: CompatibilityRow[];
   partSource?: string;
   qualityTier?: string;
@@ -48,7 +82,11 @@ export interface Part {
   fitmentConfidence?: number | null;
   createdAt?: string;
   minPrice?: number | null;
-  fitments?: string[];
+  /**
+   * Search index documents carry verified vehicleConfig ids (string[]);
+   * the part detail endpoint carries full fitment relations (PartFitment[]).
+   */
+  fitments?: Array<string | PartFitment>;
   compatibleVehicles?: CompatibleVehicle[];
   offers: Offer[];
 }

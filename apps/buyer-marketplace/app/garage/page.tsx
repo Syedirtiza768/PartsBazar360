@@ -1,124 +1,211 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { API_BASE_URL } from '@/lib/api';
+import Link from "next/link";
+import { useState, type FormEvent } from "react";
+import { Button, buttonClasses } from "@repo/ui/button";
+import { Badge } from "@repo/ui/badge";
+import { Input } from "@repo/ui/field";
+import { EmptyState } from "@repo/ui/empty-state";
+import { Skeleton } from "@repo/ui/skeleton";
+import {
+  CarIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  SearchIcon,
+} from "@repo/ui/icons";
+import { cn } from "@repo/ui/cn";
+import { VehiclePicker } from "@/components/VehiclePicker";
+import {
+  useGarage,
+  vehicleShortLabel,
+  type SavedVehicle,
+} from "@/lib/garage-context";
+import { useToast } from "@/lib/toast-context";
 
-interface GarageVehicle {
-  id: string;
-  nickname?: string | null;
-  vin?: string | null;
-  vehicleConfigId: string;
-  vehicleConfig: {
-    trim?: string | null;
-    engine?: string | null;
-    transmission?: string | null;
-    generation: {
-      name: string;
-      startYear?: number | null;
-      endYear?: number | null;
-      model: {
-        name: string;
-        make: { name: string };
-      };
-    };
-  };
-}
+function VehicleCard({ vehicle }: { vehicle: SavedVehicle }) {
+  const { activeVehicle, setActive, removeVehicle, updateVehicle } = useGarage();
+  const { push } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [nickname, setNickname] = useState(vehicle.nickname ?? "");
+  const [vin, setVin] = useState(vehicle.vin ?? "");
 
-export default function GaragePage() {
-  const router = useRouter();
-  const [vehicles, setVehicles] = useState<GarageVehicle[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const isActive = activeVehicle?.id === vehicle.id;
+  const years =
+    vehicle.startYear && vehicle.endYear
+      ? `${vehicle.startYear}–${vehicle.endYear}`
+      : vehicle.startYear
+        ? `${vehicle.startYear}–`
+        : null;
 
-  const loadGarage = () => {
-    setLoading(true);
-    fetch(`${API_BASE_URL}/garage`)
-      .then((res) => res.json())
-      .then((data) => {
-        setVehicles(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError('Could not load your garage right now.');
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    loadGarage();
-  }, []);
-
-  const handleRemove = async (id: string) => {
-    try {
-      await fetch(`${API_BASE_URL}/garage/${id}`, { method: 'DELETE' });
-      setVehicles((prev) => prev.filter((v) => v.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
+  const saveDetails = (e: FormEvent) => {
+    e.preventDefault();
+    updateVehicle(vehicle.id, {
+      nickname: nickname.trim() || null,
+      vin: vin.trim() || null,
+    });
+    setEditing(false);
+    push({ title: "Vehicle details updated", tone: "success" });
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex items-baseline justify-between border-b border-slate-200 pb-6 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">My Garage</h1>
-          <p className="text-slate-500 mt-1">Vehicles you've saved for faster, fitment-verified shopping.</p>
+    <article
+      className={cn(
+        "rounded-xl border bg-white p-5 shadow-card transition-colors",
+        isActive ? "border-amber-300 ring-2 ring-amber-200" : "border-slate-200",
+      )}
+      aria-label={vehicleShortLabel(vehicle)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
+              isActive ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500",
+            )}
+          >
+            <CarIcon className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-base font-semibold text-slate-900">
+                {vehicleShortLabel(vehicle)}
+              </h3>
+              {isActive && (
+                <Badge tone="warning" size="sm" icon={<CheckCircleIcon />}>
+                  Active
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {vehicle.makeName} {vehicle.modelName} · {vehicle.generationName}
+              {years ? ` (${years})` : ""}
+            </p>
+            {(vehicle.engine || vehicle.transmission) && (
+              <p className="text-sm text-slate-500">
+                {[vehicle.engine, vehicle.transmission, vehicle.trim].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            {vehicle.vin && <p className="part-number mt-1 text-slate-400">VIN {vehicle.vin}</p>}
+          </div>
         </div>
+
         <button
-          onClick={() => router.push('/')}
-          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+          type="button"
+          onClick={() => setConfirmingRemove(true)}
+          aria-label={`Remove ${vehicleShortLabel(vehicle)} from garage`}
+          className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
         >
-          + Add a Vehicle
+          <TrashIcon className="h-[18px] w-[18px]" />
         </button>
       </div>
 
-      {loading && <p className="text-slate-500">Loading your garage...</p>}
-      {error && <p className="text-red-600">{error}</p>}
-
-      {!loading && !error && vehicles.length === 0 && (
-        <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl">
-          <p className="text-lg text-slate-600">Your garage is empty.</p>
-          <p className="text-slate-500 text-sm mt-2">Select a vehicle from the homepage to add it here.</p>
-          <button onClick={() => router.push('/')} className="mt-4 text-blue-600 font-medium hover:underline">
-            Select your vehicle
-          </button>
+      {confirmingRemove && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-800">Remove this vehicle?</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="danger" onClick={() => removeVehicle(vehicle.id)}>
+              Remove
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingRemove(false)}>
+              Keep
+            </Button>
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {vehicles.map((vehicle) => (
-          <div key={vehicle.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold text-lg text-slate-900">
-                  {vehicle.nickname || `${vehicle.vehicleConfig.generation.model.make.name} ${vehicle.vehicleConfig.generation.model.name}`}
-                </h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  {vehicle.vehicleConfig.generation.model.make.name} {vehicle.vehicleConfig.generation.model.name} · {vehicle.vehicleConfig.generation.name}
-                  {vehicle.vehicleConfig.generation.startYear ? ` (${vehicle.vehicleConfig.generation.startYear}-${vehicle.vehicleConfig.generation.endYear ?? 'present'})` : ''}
-                </p>
-                {vehicle.vehicleConfig.engine && (
-                  <p className="text-sm text-slate-500">{vehicle.vehicleConfig.engine} · {vehicle.vehicleConfig.transmission}</p>
-                )}
-              </div>
-              <button
-                onClick={() => handleRemove(vehicle.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
-                aria-label="Remove vehicle"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <button
-              onClick={() => router.push(`/search?vehicleConfigId=${vehicle.vehicleConfigId}`)}
-              className="mt-4 w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Shop parts for this vehicle
-            </button>
+      {editing ? (
+        <form onSubmit={saveDetails} className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4">
+          <Input
+            label="Nickname"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            placeholder="e.g. Weekend car"
+            maxLength={40}
+          />
+          <Input
+            label="VIN"
+            value={vin}
+            onChange={(e) => setVin(e.target.value.toUpperCase())}
+            placeholder="17-character VIN"
+            maxLength={17}
+            hint="Optional — helps support verify exact fitment faster."
+          />
+          <div className="flex gap-2">
+            <Button size="sm" type="submit">
+              Save details
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
           </div>
-        ))}
+        </form>
+      ) : (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href={`/search?vehicleConfigId=${vehicle.configId}`}
+            onClick={() => setActive(vehicle.id)}
+            className={buttonClasses({ size: "sm" })}
+          >
+            <SearchIcon className="h-4 w-4" />
+            Shop parts
+          </Link>
+          {!isActive && (
+            <Button size="sm" variant="outline" onClick={() => setActive(vehicle.id)}>
+              Set as active
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+            Nickname / VIN
+          </Button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+export default function GaragePage() {
+  const { vehicles, ready } = useGarage();
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <header className="max-w-2xl">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Garage</h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+          Save the vehicles you maintain. Your active vehicle follows you through search and
+          product pages, so every listing tells you whether it fits.
+        </p>
+        <p className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+          <ShieldCheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+          Stored on this device — no account needed.
+        </p>
+      </header>
+
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_420px]">
+        <section aria-label="Saved vehicles" className="space-y-4">
+          {!ready ? (
+            <>
+              <Skeleton className="h-40 w-full rounded-xl" />
+              <Skeleton className="h-40 w-full rounded-xl" />
+            </>
+          ) : vehicles.length === 0 ? (
+            <EmptyState
+              variant="page"
+              icon={<CarIcon />}
+              title="No vehicles saved yet"
+              description="Add your car with the picker — we'll remember it and filter the catalog to parts that actually fit."
+            />
+          ) : (
+            vehicles.map((vehicle) => <VehicleCard key={vehicle.id} vehicle={vehicle} />)
+          )}
+        </section>
+
+        <aside aria-label="Add a vehicle">
+          <div className="lg:sticky lg:top-40">
+            <VehiclePicker />
+          </div>
+        </aside>
       </div>
     </div>
   );

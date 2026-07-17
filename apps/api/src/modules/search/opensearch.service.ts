@@ -48,6 +48,9 @@ export class OpenSearchService implements OnModuleInit {
           offers: (part.offers || []).map((o: any) => ({
             id: o.id,
             price: o.price,
+            // Currency must travel with the price — cards previously assumed
+            // USD for indexed offers while the PDP showed the real currency.
+            currency: o.currency || null,
             condition: o.condition,
             partSource: o.partSource || null,
             qualityTier: o.qualityTier || null,

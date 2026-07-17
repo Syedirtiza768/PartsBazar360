@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "buyer-marketplace",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=buyer-marketplace"],
+      "port": 3000
+    },
+    {
+      "name": "seller-portal",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "apps/seller-portal", "--port", "3100"],
+      "port": 3100
+    }
+  ]
+}

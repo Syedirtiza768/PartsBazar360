@@ -1,30 +1,44 @@
-import Link from 'next/link';
-import { INTERNAL_API_URL } from '@/lib/api';
-import { VehicleSelector } from '@/components/VehicleSelector';
-import { ProductCard } from '@/components/ProductCard';
-import type { BrowseResponse, FacetsResponse } from '@/lib/types';
+import Link from "next/link";
+import { buttonClasses } from "@repo/ui/button";
+import {
+  ShieldCheckIcon,
+  TruckIcon,
+  SearchIcon,
+  CarIcon,
+  CheckCircleIcon,
+  ArrowRightIcon,
+  StoreIcon,
+  TagIcon,
+} from "@repo/ui/icons";
+import { INTERNAL_API_URL } from "@/lib/api";
+import { VehiclePicker } from "@/components/VehiclePicker";
+import { ProductCard } from "@/components/ProductCard";
+import { CategoryIcon } from "@/components/CategoryIcon";
+import { RecentlyViewed } from "@/components/RecentlyViewed";
+import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
 // Rendered dynamically on every request rather than cached at build time —
 // the build-time container has no network route to the API, and ISR would
 // otherwise bake in an empty "featured parts" snapshot until the first
 // revalidation window passes.
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-async function getFeaturedParts(): Promise<BrowseResponse> {
+// null = fetch failed (show error state); empty items = genuinely empty.
+async function getFeaturedParts(): Promise<BrowseResponse | null> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/parts?sort=newest&limit=8`, {
-      cache: 'no-store',
+      cache: "no-store",
     });
-    if (!res.ok) return { items: [], total: 0, page: 1, limit: 8 };
+    if (!res.ok) return null;
     return res.json();
   } catch {
-    return { items: [], total: 0, page: 1, limit: 8 };
+    return null;
   }
 }
 
 async function getFacets(): Promise<FacetsResponse> {
   try {
-    const res = await fetch(`${INTERNAL_API_URL}/search/facets`, { cache: 'no-store' });
+    const res = await fetch(`${INTERNAL_API_URL}/search/facets`, { cache: "no-store" });
     if (!res.ok) return { brands: [], categories: [] };
     return res.json();
   } catch {
@@ -32,96 +46,269 @@ async function getFacets(): Promise<FacetsResponse> {
   }
 }
 
-const VALUE_PROPS = [
-  { title: 'Fitment-verified search', desc: 'Match parts to your exact make, model, generation and trim.', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { title: '11 vetted marketplace sellers', desc: 'Live inventory sourced directly from trusted global salvage & OEM sellers.', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a4 4 0 11-8 0 4 4 0 018 0z' },
-  { title: 'Worldwide shipping', desc: 'Every seller order is calculated with real, weight-based shipping.', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4M4 17h12m0 0l-4-4m4 4l-4 4' },
+const HOW_IT_WORKS = [
+  {
+    icon: <CarIcon className="h-6 w-6" />,
+    title: "Tell us what you drive",
+    desc: "Pick your make, model, generation, and engine once — we remember it in your garage.",
+  },
+  {
+    icon: <SearchIcon className="h-6 w-6" />,
+    title: "See only what fits",
+    desc: "Search results are filtered to your exact configuration, with the fitment evidence shown on every listing.",
+  },
+  {
+    icon: <CheckCircleIcon className="h-6 w-6" />,
+    title: "Order with confidence",
+    desc: "Condition, source, seller, and returns are disclosed up front. Our team verifies fitment questions before you commit.",
+  },
 ];
 
 export default async function Home() {
   const [featured, facets] = await Promise.all([getFeaturedParts(), getFacets()]);
+  const categories = facets.categories;
 
   return (
     <div>
-      {/* Hero */}
-      <div className="relative isolate overflow-hidden bg-white">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(45rem_50rem_at_top,theme(colors.blue.50),white)] opacity-50" />
-        <div className="absolute inset-y-0 right-1/2 -z-10 mr-16 w-[200%] origin-bottom-left skew-x-[-30deg] bg-white shadow-xl shadow-blue-600/10 ring-1 ring-blue-50 sm:mr-28 lg:mr-0 xl:mr-16 xl:origin-center" />
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden bg-graphite-950">
+        {/* Subtle engineering-grid texture */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 opacity-[0.35]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgb(148 163 184 / 0.09) 1px, transparent 1px), linear-gradient(to bottom, rgb(148 163 184 / 0.09) 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -top-40 right-[-10%] -z-10 h-[480px] w-[640px] rounded-full bg-brand-600/20 blur-[140px]"
+        />
 
-        <div className="mx-auto max-w-7xl px-6 pb-16 pt-10 sm:pb-20 lg:flex lg:px-8 lg:py-24 items-center gap-12">
-          <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-xl lg:flex-shrink-0 pt-8">
-            <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-900 sm:text-6xl">
-              Find the exact part.<br />
-              <span className="text-blue-600">Guaranteed to fit.</span>
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-slate-600">
-              Tell us what you drive, and we'll instantly filter thousands of live parts to show you only the ones that match your specific vehicle configuration.
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 pb-14 pt-12 sm:px-6 lg:grid-cols-[1fr_460px] lg:gap-16 lg:px-8 lg:pb-20 lg:pt-16">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-slate-200">
+              <ShieldCheckIcon className="h-4 w-4 text-emerald-400" />
+              Every listing shows its fitment evidence
             </p>
-            <div className="mt-6 flex items-center gap-3">
-              <Link href="/search" className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                Or browse all parts without a vehicle
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <h1 className="mt-5 text-display-sm font-black text-white sm:text-display lg:text-display-lg">
+              The right part for your <span className="text-brand-400">exact vehicle.</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
+              Live inventory from vetted salvage and OEM sellers worldwide — filtered to your
+              make, model, generation, and engine, with condition and compatibility disclosed
+              before you buy.
+            </p>
+
+            <dl className="mt-8 grid max-w-lg grid-cols-3 gap-4">
+              {[
+                { value: featured ? `${featured.total.toLocaleString()}+` : "10,000+", label: "Live parts" },
+                { value: "11", label: "Vetted sellers" },
+                { value: "A–F", label: "Fitment evidence grading" },
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                  <dt className="sr-only">{stat.label}</dt>
+                  <dd className="text-xl font-bold tabular-nums text-white sm:text-2xl">{stat.value}</dd>
+                  <dd className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                    {stat.label}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-8">
+              <Link
+                href="/search"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-300 transition-colors hover:text-white"
+              >
+                Or browse the full catalog without a vehicle
+                <ArrowRightIcon className="h-4 w-4" />
               </Link>
             </div>
           </div>
 
-          <div className="mx-auto mt-10 max-w-xl lg:mt-0 lg:mx-0 lg:flex-shrink-0">
-            <VehicleSelector />
-          </div>
+          <VehiclePicker variant="hero" />
         </div>
-      </div>
+      </section>
 
-      {/* Value props */}
-      <div className="border-y border-slate-100 bg-slate-50/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 sm:grid-cols-3 gap-8">
-          {VALUE_PROPS.map((prop) => (
-            <div key={prop.title} className="flex items-start gap-3">
-              <div className="shrink-0 bg-blue-50 text-blue-600 rounded-lg p-2">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={prop.icon} /></svg>
-              </div>
+      {/* ── Trust strip ──────────────────────────────────────── */}
+      <section aria-label="Why buy here" className="border-b border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 divide-y divide-slate-100 px-4 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-6 lg:px-8">
+          {[
+            {
+              icon: <ShieldCheckIcon className="h-5 w-5" />,
+              title: "Fitment-verified search",
+              desc: "Vehicle search returns only parts with high-confidence compatibility evidence.",
+            },
+            {
+              icon: <TagIcon className="h-5 w-5" />,
+              title: "Condition disclosed",
+              desc: "New, used, refurbished, OEM or aftermarket — labeled on every card.",
+            },
+            {
+              icon: <TruckIcon className="h-5 w-5" />,
+              title: "Worldwide shipping",
+              desc: "Real, weight-based rates calculated per seller at checkout.",
+            },
+          ].map((item) => (
+            <div key={item.title} className="flex items-start gap-3.5 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                {item.icon}
+              </span>
               <div>
-                <p className="font-semibold text-slate-900 text-sm">{prop.title}</p>
-                <p className="text-sm text-slate-500 mt-0.5">{prop.desc}</p>
+                <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                <p className="mt-0.5 text-[13px] leading-relaxed text-slate-500">{item.desc}</p>
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Shop by category */}
-      {facets.categories.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Shop by Category</h2>
-          <div className="flex flex-wrap gap-2">
-            {facets.categories.map((cat) => (
-              <Link
-                key={cat.name}
-                href={`/search?category=${encodeURIComponent(cat.name)}`}
-                className="px-4 py-2 rounded-full text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 transition-colors"
-              >
-                {cat.name} <span className="text-slate-400">({cat.count})</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Featured / newest real listings */}
-      {featured.items.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="flex items-baseline justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Recently Listed Parts</h2>
-            <Link href="/search" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
-              Browse all {featured.total.toLocaleString()} parts &rarr;
+      {/* ── Categories ───────────────────────────────────────── */}
+      {categories.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="categories-heading">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 id="categories-heading" className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                Shop by category
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">Jump straight to the system you&apos;re working on.</p>
+            </div>
+            <Link
+              href="/search"
+              className="hidden shrink-0 items-center gap-1 text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700 sm:inline-flex"
+            >
+              All parts <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-            {featured.items.map((part) => (
-              <ProductCard key={part.id} part={part} />
+
+          <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {categories.slice(0, 12).map((cat) => (
+              <li key={cat.name}>
+                <Link
+                  href={`/search?category=${encodeURIComponent(cat.name)}`}
+                  className="group flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-5 text-center shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card-hover"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-brand-50 group-hover:text-brand-600">
+                    <CategoryIcon category={cat.name} className="h-6 w-6" />
+                  </span>
+                  <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900">
+                    {cat.name}
+                  </span>
+                </Link>
+              </li>
             ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Recently listed ──────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8" aria-labelledby="recent-heading">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h2 id="recent-heading" className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Recently listed parts
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">Fresh inventory from marketplace sellers.</p>
+          </div>
+          {featured && featured.total > 0 && (
+            <Link
+              href="/search"
+              className="shrink-0 text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
+            >
+              Browse all {featured.total.toLocaleString()} parts →
+            </Link>
+          )}
+        </div>
+
+        <div className="mt-6">
+          {featured === null ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
+              <p className="text-sm font-medium text-slate-700">We couldn&apos;t load the latest listings.</p>
+              <p className="mt-1 text-sm text-slate-500">The catalog is still available.</p>
+              <Link href="/search" className={`${buttonClasses({ variant: "outline", size: "sm" })} mt-4`}>
+                Open the catalog
+              </Link>
+            </div>
+          ) : featured.items.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500">
+              New listings will appear here as sellers publish inventory.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              {featured.items.map((part) => (
+                <ProductCard key={part.id} part={part} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Recently viewed (device-local) ───────────────────── */}
+      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        <RecentlyViewed />
+      </div>
+
+      {/* ── How it works ─────────────────────────────────────── */}
+      <section className="border-y border-slate-200 bg-white" aria-labelledby="how-heading">
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="max-w-2xl">
+            <h2 id="how-heading" className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Built around one question: does it fit?
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+              Auto parts are unforgiving — one digit off an OE number and the part doesn&apos;t bolt on.
+              PartsBazar360 structures every listing around compatibility evidence.
+            </p>
+          </div>
+          <ol className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+            {HOW_IT_WORKS.map((step, i) => (
+              <li key={step.title} className="relative rounded-xl border border-slate-200 bg-slate-50/60 p-6">
+                <span className="absolute right-5 top-5 text-4xl font-black tabular-nums text-slate-200" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-600 text-white">
+                  {step.icon}
+                </span>
+                <h3 className="mt-4 text-base font-semibold text-slate-900">{step.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{step.desc}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── Seller trust band ────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="sellers-heading">
+        <div className="flex flex-col items-start justify-between gap-8 rounded-2xl bg-graphite-950 p-8 sm:p-10 lg:flex-row lg:items-center">
+          <div className="max-w-2xl">
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              <StoreIcon className="h-4 w-4" /> Verified inventory
+            </p>
+            <h2 id="sellers-heading" className="mt-3 text-xl font-bold text-white sm:text-2xl">
+              Sourced live from 11 vetted marketplace sellers
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              Every seller passes business verification and agrees to marketplace terms covering
+              fulfilment SLAs, returns, and accurate condition grading. Listings sync directly
+              from their live inventory — no stale stock.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-3">
+            <Link href="/search" className={buttonClasses({ variant: "primary", size: "lg" })}>
+              Start shopping
+            </Link>
+            <Link
+              href="/support"
+              className="inline-flex h-12 items-center justify-center rounded-lg border border-white/20 px-6 text-base font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Ask a question
+            </Link>
           </div>
         </div>
-      )}
+      </section>
     </div>
   );
 }

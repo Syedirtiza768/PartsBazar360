@@ -53,7 +53,9 @@ export class SearchController {
       include: {
         offers: {
           where: { status: 'ACTIVE' },
-          include: { seller: true },
+          // Seller profile carries the buyer-facing policy data (returns
+          // window, warranty, fulfilment SLA, country) shown on the PDP.
+          include: { seller: { include: { profile: true } } },
         },
         fitments: {
           include: {

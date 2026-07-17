@@ -1,106 +1,230 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { API_BASE_URL } from '@/lib/api';
-import { DEMO_SELLER_ID } from '@/lib/config';
-import { PartThumbnail } from '@/components/PartThumbnail';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { buttonClasses, Button } from "@repo/ui/button";
+import { EmptyState } from "@repo/ui/empty-state";
+import { Skeleton } from "@repo/ui/skeleton";
+import { BoxIcon, CheckIcon } from "@repo/ui/icons";
+import { API_BASE_URL } from "@/lib/api";
+import { DEMO_SELLER_ID } from "@/lib/config";
+import { PartThumbnail } from "@/components/PartThumbnail";
+import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
 
-export default function InventoryPage() {
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+interface InventoryItem {
+  id: string;
+  condition: string;
+  price: number;
+  sellerBasePrice?: number | null;
+  marketplaceFee?: number | null;
+  sellerProceeds?: number | null;
+  currency: string;
+  status: string;
+  inventory: { quantity: number }[];
+  canonicalPart?: { title?: string; imageUrls?: string[] };
+}
 
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}`)
-      .then(res => res.json())
-      .then(data => {
-        setInventory(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
+/** Inline price editor with explicit save + feedback (replaces silent onBlur commit). */
+function PriceEditor({
+  item,
+  onSaved,
+}: {
+  item: InventoryItem;
+  onSaved: (updated: InventoryItem) => void;
+}) {
+  const initial = item.sellerBasePrice ?? item.price;
+  const [value, setValue] = useState(String(initial));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(false);
+
+  const dirty = parseFloat(value) !== initial && value.trim() !== "";
+
+  const save = async () => {
+    const price = parseFloat(value);
+    if (Number.isNaN(price) || price <= 0) {
+      setError(true);
+      return;
+    }
+    setSaving(true);
+    setError(false);
+    try {
+      const res = await fetch(`${API_BASE_URL}/merchant/inventory/${item.id}?sellerId=${DEMO_SELLER_ID}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price }),
       });
-  }, []);
-
-  const handlePriceUpdate = async (id: string, newPrice: number) => {
-    const response = await fetch(`${API_BASE_URL}/merchant/inventory/${id}?sellerId=${DEMO_SELLER_ID}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ price: newPrice })
-    });
-    const updated = await response.json();
-    if (response.ok) setInventory(inventory.map(item => item.id === id ? updated : item));
+      const updated = await res.json();
+      if (!res.ok) throw new Error();
+      onSaved(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-emerald-700 uppercase tracking-wide">Catalog Control</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Inventory management</h1>
-          <p className="text-slate-600 mt-1">Manage pricing, stock levels, listing status, and product quality.</p>
-        </div>
-        <Link href="/uploads" className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors">
-          Import CSV
-        </Link>
-      </header>
-
-      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
-            <tr>
-              <th className="px-6 py-4 font-semibold w-16"></th>
-              <th className="px-6 py-4 font-semibold">Part title</th>
-              <th className="px-6 py-4 font-semibold">Condition</th>
-              <th className="px-6 py-4 font-semibold">Submitted price</th>
-              <th className="px-6 py-4 font-semibold">Buyer price</th>
-              <th className="px-6 py-4 font-semibold">Your proceeds</th>
-              <th className="px-6 py-4 font-semibold">Stock</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">Loading inventory...</td></tr>}
-            {!loading && inventory.length === 0 && <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">No inventory found. Upload listings to start selling.</td></tr>}
-            {!loading && inventory.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4">
-                  <PartThumbnail src={item.canonicalPart?.imageUrls?.[0]} alt={item.canonicalPart?.title || 'Part'} />
-                </td>
-                <td className="px-6 py-4 font-medium text-slate-950">{item.canonicalPart?.title || 'Unknown Part'}</td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                    {item.condition}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <input
-                    type="number"
-                    defaultValue={item.sellerBasePrice ?? item.price}
-                    onBlur={(e) => handlePriceUpdate(item.id, parseFloat(e.target.value))}
-                    className="bg-white border border-slate-300 rounded-md px-2 py-1.5 w-24 text-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </td>
-                <td className="px-6 py-4"><p className="font-semibold text-slate-950">{item.currency} {Number(item.price).toFixed(2)}</p><p className="text-xs text-slate-500">Fee {item.currency} {Number(item.marketplaceFee || 0).toFixed(2)}</p></td>
-                <td className="px-6 py-4 font-semibold text-emerald-700">{item.currency} {Number(item.sellerProceeds ?? item.price).toFixed(2)}</td>
-                <td className="px-6 py-4 text-slate-700">{item.inventory[0]?.quantity || 0}</td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                    item.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
-                  }`}>
-                    {item.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <button className="text-emerald-700 hover:text-emerald-600 text-sm font-semibold transition-colors">Edit</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div>
+      <div className="flex items-center gap-1.5">
+        <label className="sr-only" htmlFor={`price-${item.id}`}>
+          Base price for {item.canonicalPart?.title || "part"}
+        </label>
+        <input
+          id={`price-${item.id}`}
+          type="number"
+          min="0"
+          step="0.01"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setError(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && dirty) save();
+          }}
+          aria-invalid={error || undefined}
+          className={`w-24 rounded-lg border px-2.5 py-1.5 text-sm tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+            error ? "border-red-400" : "border-slate-300 hover:border-slate-400"
+          }`}
+        />
+        {dirty && (
+          <Button size="sm" variant="secondary" onClick={save} loading={saving}>
+            Save
+          </Button>
+        )}
+        {saved && !dirty && (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+            <CheckIcon className="h-3.5 w-3.5" /> Saved
+          </span>
+        )}
       </div>
+      {error && (
+        <p className="mt-1 text-xs font-medium text-red-600" role="alert">
+          Enter a valid price
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function InventoryPage() {
+  const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
+  const [error, setError] = useState(false);
+  const loading = inventory === null && !error;
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}`)
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then((data) => setInventory(Array.isArray(data) ? data : []))
+      .catch(() => setError(true));
+  }, []);
+
+  const replaceItem = (updated: InventoryItem) => {
+    setInventory((prev) => (prev ? prev.map((i) => (i.id === updated.id ? updated : i)) : prev));
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
+      <PageHeader
+        eyebrow="Catalog control"
+        title="Inventory management"
+        description="Manage pricing, stock levels, listing status, and product quality. Edit the base price — buyer price and your proceeds update from your pricing policy."
+        actions={
+          <Link href="/uploads" className={buttonClasses()}>
+            Import CSV
+          </Link>
+        }
+      />
+
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" role="alert">
+          Couldn&apos;t load inventory. Refresh to try again.
+        </div>
+      ) : loading ? (
+        <div className="space-y-3" aria-busy="true">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : inventory!.length === 0 ? (
+        <EmptyState
+          variant="page"
+          icon={<BoxIcon />}
+          title="No inventory yet"
+          description="Upload a CSV of listings to start selling — rows that pass validation become live offers."
+        >
+          <Link href="/uploads" className={buttonClasses()}>
+            Upload listings
+          </Link>
+        </EmptyState>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[880px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3.5 sm:px-5" colSpan={2}>
+                    Part
+                  </th>
+                  <th className="px-4 py-3.5">Condition</th>
+                  <th className="px-4 py-3.5">Base price</th>
+                  <th className="px-4 py-3.5">Buyer price</th>
+                  <th className="px-4 py-3.5">Your proceeds</th>
+                  <th className="px-4 py-3.5">Stock</th>
+                  <th className="px-4 py-3.5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {inventory!.map((item) => (
+                  <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
+                    <td className="w-16 py-3 pl-4 sm:pl-5">
+                      <PartThumbnail src={item.canonicalPart?.imageUrls?.[0]} alt="" />
+                    </td>
+                    <td className="max-w-[280px] px-3 py-3">
+                      <p className="line-clamp-2 font-medium leading-snug text-slate-900">
+                        {item.canonicalPart?.title || "Unknown part"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={item.condition} size="sm" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PriceEditor item={item} onSaved={replaceItem} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="price text-sm">
+                        {item.currency} {Number(item.price).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Fee {item.currency} {Number(item.marketplaceFee || 0).toFixed(2)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="price text-sm text-emerald-700">
+                        {item.currency} {Number(item.sellerProceeds ?? item.price).toFixed(2)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">
+                      {item.inventory?.[0]?.quantity ?? 0}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={item.status} size="sm" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

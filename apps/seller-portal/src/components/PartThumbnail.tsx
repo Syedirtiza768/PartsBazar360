@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 
+// Same-origin nginx proxy in production; override for local dev so images
+// load without the docker stack.
+const IMG_PROXY_BASE = process.env.NEXT_PUBLIC_IMG_PROXY_BASE || "/img-proxy/";
+
 function proxyUrl(src: string): string {
   if (src.startsWith('http://') || src.startsWith('https://')) {
-    // Request larger images from eBay CDN
-    let url = src;
     // Replace eBay thumbnail size with larger version
-    url = url.replace(/\/s-l\d+\.jpg$/, '/s-l500.jpg');
-    return `/img-proxy/?url=${url}`;
+    const url = src.replace(/\/s-l\d+\.jpg$/, '/s-l500.jpg');
+    return `${IMG_PROXY_BASE}?url=${url}`;
   }
   return src;
 }
