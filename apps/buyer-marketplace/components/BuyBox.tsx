@@ -356,7 +356,7 @@ export function BuyBox({ part }: { part: Part }) {
         <div className="space-y-3">
           {offers.length > 1 && (
             <p className="text-sm font-semibold text-slate-900">
-              {offers.length} offers from {formatPrice(best.price, best.currency)}
+              {offers.length} offers from {formatPrice(best!.price, best!.currency)}
             </p>
           )}
           {offers.map((offer, i) => (
