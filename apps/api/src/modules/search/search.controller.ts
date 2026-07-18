@@ -19,6 +19,7 @@ export class SearchController {
     @Query('q') q?: string,
     @Query('category') category?: string,
     @Query('brand') brand?: string,
+    @Query('partType') partType?: string,
     @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc',
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -32,6 +33,7 @@ export class SearchController {
       q,
       category,
       brand,
+      partType,
       sort,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 24,
@@ -55,8 +57,16 @@ export class SearchController {
           where: { status: 'ACTIVE' },
           // Seller profile carries the buyer-facing policy data (returns
           // window, warranty, fulfilment SLA, country) shown on the PDP.
-          include: { seller: { include: { profile: true } } },
+          include: {
+            seller: { include: { profile: true } },
+            inventory: { include: { warehouse: true } },
+            prices: true,
+            salvageUnits: { include: { donorVehicle: { include: { make: true } } } },
+          },
         },
+        primaryBrand: true,
+        partNumbers: { include: { brand: true, vehicleMake: true } },
+        media: { orderBy: { sortOrder: 'asc' } },
         fitments: {
           include: {
             vehicleConfig: {
@@ -133,7 +143,8 @@ export class SearchController {
     }
 
     // Upgrade any remaining thumbnail URLs for display
-    const imageUrls = (part.imageUrls || []).map((url: string) =>
+    const sourceImages = part.media.length > 0 ? part.media.map((media) => media.url) : part.imageUrls || [];
+    const imageUrls = sourceImages.map((url: string) =>
       url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1'),
     );
 
@@ -143,6 +154,12 @@ export class SearchController {
       compatibleVehicles,
       compatibility: compatibilityTable,
       compatibilityTable,
+      oemCrossReferences: part.partNumbers.filter((number) => number.numberType === 'OEM_CROSS_REFERENCE').map((number) => ({
+        number: number.displayNumber,
+        normalizedNumber: number.normalizedNumber,
+        make: number.vehicleMake?.displayName || number.vehicleMake?.name || null,
+        verificationStatus: number.verificationStatus,
+      })),
     };
   }
 }

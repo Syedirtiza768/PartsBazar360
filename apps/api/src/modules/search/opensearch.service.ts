@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
+import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 
 @Injectable()
 export class OpenSearchService implements OnModuleInit {
@@ -26,7 +27,11 @@ export class OpenSearchService implements OnModuleInit {
         body: {
           id: part.id,
           title: part.title,
+          partType: part.partType || null,
           brand: part.brand,
+          manufacturerPartNumber: part.manufacturerPartNumber || null,
+          partNumbers: part.partNumbers || [],
+          normalizedPartNumbers: (part.partNumbers || []).map((number: any) => number.normalizedNumber).filter(Boolean),
           category: part.category,
           oeNumbers: part.oeNumbers,
           imageUrls: part.imageUrls || [],
@@ -73,12 +78,10 @@ export class OpenSearchService implements OnModuleInit {
       ];
 
       if (query) {
-        must.push({
-          multi_match: {
-            query,
-            fields: ['title', 'brand', 'category']
-          }
-        });
+        must.push({ bool: { should: [
+          { multi_match: { query, fields: ['title', 'brand', 'category', 'manufacturerPartNumber', 'oeNumbers'] } },
+          { term: { 'normalizedPartNumbers.keyword': normalizePartNumber(query) } },
+        ], minimum_should_match: 1 } });
       }
 
       const response = await this.client.search({
@@ -110,19 +113,24 @@ export class OpenSearchService implements OnModuleInit {
     q?: string;
     category?: string;
     brand?: string;
+    partType?: string;
     sort?: 'newest' | 'price_asc' | 'price_desc';
     page?: number;
     limit?: number;
   }) {
-    const { q, category, brand, sort = 'newest', page = 1, limit = 24 } = opts;
+    const { q, category, brand, partType, sort = 'newest', page = 1, limit = 24 } = opts;
 
     const must: any[] = q
-      ? [{ multi_match: { query: q, fields: ['title^2', 'brand', 'category', 'oeNumbers'] } }]
+      ? [{ bool: { should: [
+          { multi_match: { query: q, fields: ['title^2', 'brand', 'category', 'manufacturerPartNumber^2', 'oeNumbers'] } },
+          { term: { 'normalizedPartNumbers.keyword': normalizePartNumber(q) } },
+        ], minimum_should_match: 1 } }]
       : [{ match_all: {} }];
 
     const filter: any[] = [];
     if (category) filter.push({ term: { 'category.keyword': category } });
     if (brand) filter.push({ term: { 'brand.keyword': brand } });
+    if (partType) filter.push({ term: { 'partType.keyword': partType } });
 
     const sortClause: any[] =
       sort === 'price_asc' ? [{ minPrice: { order: 'asc', missing: '_last' } }] :

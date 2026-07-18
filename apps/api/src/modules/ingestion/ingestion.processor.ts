@@ -40,6 +40,33 @@ export class IngestionProcessor extends WorkerHost {
     }
   }
 
+  async syncStoreComplete(storeId: string, listingLimit?: number) {
+    let page = 1;
+    let discovered = 0;
+    let imported = 0;
+    const errors: Array<{ listingId?: string; message: string }> = [];
+    while (true) {
+      const remaining = listingLimit ? listingLimit - discovered : 200;
+      if (listingLimit && remaining <= 0) break;
+      const result = await this.realTrackService.fetchListings({ page, limit: Math.min(200, remaining), storeId });
+      if (result.items.length === 0) break;
+      discovered += result.items.length;
+      for (const summary of result.items) {
+        try {
+          const detail = await this.realTrackService.fetchListingDetail(storeId, summary.id);
+          await this.processListing({ ...summary, ...detail }, storeId);
+          imported++;
+        } catch (error) {
+          errors.push({ listingId: summary.id, message: error instanceof Error ? error.message : String(error) });
+          this.logger.warn(`Listing ${summary.id} failed without stopping store sync`);
+        }
+      }
+      if (discovered >= result.total || result.items.length < result.limit) break;
+      page++;
+    }
+    return { storeId, listingsDiscovered: discovered, listingsImported: imported, errors };
+  }
+
   private async syncStore(storeId: string, startPage: number) {
     try {
       const result = await this.realTrackService.fetchListings({ page: startPage, limit: 200, storeId });

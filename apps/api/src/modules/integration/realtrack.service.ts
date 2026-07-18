@@ -19,9 +19,9 @@ export interface FetchListingsResult {
 @Injectable()
 export class RealTrackService {
   private readonly logger = new Logger(RealTrackService.name);
-  private readonly baseUrl = 'https://mhn.realtrackapp.com/api';
-  private readonly email = 'api-published-listings@realtrack.local';
-  private readonly password = 'Ebay$321';
+  private readonly baseUrl = (process.env.REALTRACK_API_URL || 'https://mhn.realtrackapp.com/api').replace(/\/$/, '');
+  private readonly email = process.env.REALTRACK_API_EMAIL;
+  private readonly password = process.env.REALTRACK_API_PASSWORD;
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
 
@@ -30,6 +30,9 @@ export class RealTrackService {
       return;
     }
 
+    if (!this.email || !this.password) {
+      throw new Error('REALTRACK_API_EMAIL and REALTRACK_API_PASSWORD are required');
+    }
     this.logger.log('Authenticating with RealTrack API...');
     try {
       const response = await fetch(`${this.baseUrl}/auth/login`, {
@@ -52,6 +55,29 @@ export class RealTrackService {
     }
   }
 
+  private async requestJson(path: string, retry = 0): Promise<any> {
+    await this.authenticate();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+    });
+    if (response.status === 401 && retry < 1) {
+      this.accessToken = null;
+      this.tokenExpiry = null;
+      return this.requestJson(path, retry + 1);
+    }
+    if (response.status === 429 && retry < 5) {
+      const retryAfter = Number(response.headers.get('retry-after')) || 2 ** retry;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30, retryAfter) * 1000));
+      return this.requestJson(path, retry + 1);
+    }
+    if (response.status >= 500 && retry < 4) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(10, 2 ** retry) * 1000));
+      return this.requestJson(path, retry + 1);
+    }
+    if (!response.ok) throw new Error(`RealTrack API ${response.status}: ${response.statusText}`);
+    return response.json();
+  }
+
   async fetchListings(options: FetchListingsOptions = {}): Promise<FetchListingsResult> {
     await this.authenticate();
 
@@ -68,18 +94,7 @@ export class RealTrackService {
       if (status) url.searchParams.append('status', status);
       if (search) url.searchParams.append('search', search);
 
-      const response = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`RealTrack API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await this.requestJson(`${url.pathname}${url.search}`);
       return {
         items: data.items || [],
         total: data.total || 0,
@@ -90,6 +105,10 @@ export class RealTrackService {
       this.logger.error(`Failed to fetch listings: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  async fetchListingDetail(storeId: string, listingId: string): Promise<any> {
+    return this.requestJson(`/stores/${encodeURIComponent(storeId)}/listings/published/${encodeURIComponent(listingId)}`);
   }
 
   async fetchAllListings(options: FetchListingsOptions = {}): Promise<any[]> {
@@ -113,4 +132,3 @@ export class RealTrackService {
     return allItems;
   }
 }
-

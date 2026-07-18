@@ -10,9 +10,10 @@ import { PricingModule } from '../pricing/pricing.module';
 import { SellerOnboardingController } from './onboarding.controller';
 import { SellerOnboardingService } from './onboarding.service';
 import { MerchantPricingController } from './pricing.controller';
+import { CatalogImportModule } from '../catalog-import/catalog-import.module';
 
 @Module({
-  imports: [SearchModule, PricingModule],
+  imports: [SearchModule, PricingModule, CatalogImportModule],
   controllers: [
     InventoryController,
     OrdersController,

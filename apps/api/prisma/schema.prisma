@@ -34,6 +34,8 @@ model Seller {
   uploadJobs           SellerUploadJob[]
   pricingAssignments   SellerPricingAssignment[]
   agreementAcceptances SellerAgreementAcceptance[]
+  sourceAccounts       SellerSourceAccount[]
+  sourceRecords        SourceRecord[]
 }
 
 model SellerProfile {
@@ -127,41 +129,161 @@ model SellerPricingAssignment {
 }
 
 model Warehouse {
-  id        String   @id @default(uuid())
-  sellerId  String
-  name      String
-  location  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  sellerId    String
+  name        String
+  location    String?
+  externalKey String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   seller    Seller      @relation(fields: [sellerId], references: [id])
   inventory Inventory[]
+
+  @@unique([sellerId, externalKey])
+}
+
+model SellerSourceAccount {
+  id                String    @id @default(uuid())
+  sellerId          String
+  sourcePlatform    String
+  externalAccountId String
+  marketplace       String?
+  username          String?
+  storeUrl          String?
+  metadata          Json?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  seller        Seller         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sourceRecords SourceRecord[]
+
+  @@unique([sourcePlatform, externalAccountId])
+}
+
+model BrandMaster {
+  id                    String   @id @default(uuid())
+  canonicalName         String   @unique
+  displayName           String
+  brandTypes            String[] @default([])
+  parentGroup           String?
+  logoUrl               String?
+  country               String?
+  officialWebsite       String?
+  isVehicleManufacturer Boolean  @default(false)
+  isAftermarketBrand    Boolean  @default(false)
+  suppliesGenuineOem    Boolean  @default(false)
+  requiresManualReview  Boolean  @default(false)
+  status                String   @default("ACTIVE")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  aliases     BrandAlias[]
+  products    CanonicalPart[]
+  partNumbers CatalogPartNumber[]
+}
+
+model BrandAlias {
+  id         String   @id @default(uuid())
+  brandId    String
+  alias      String
+  normalized String
+  source     String?
+  createdAt  DateTime @default(now())
+
+  brand BrandMaster @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, normalized])
+  @@index([normalized])
 }
 
 model CanonicalPart {
-  id                String   @id @default(uuid())
-  title             String
-  brand             String?
-  manufacturer      String?
-  category          String?
-  weight            Float? // Weight in kg for shipping calculations
-  oeNumbers         String[]
-  fitmentFlags      String[]
-  imageUrls         String[] @default([])
-  listingUrl        String?
-  ebayItemId        String?
-  compatibility     Json?
-  partSource        String   @default("OEM") // OEM, AFTERMARKET
-  qualityTier       String   @default("USED") // NEW, USED, REFURBISHED, REMANUFACTURED, FOR_PARTS
-  fitmentStatus     String   @default("NEEDS_REVIEW")
-  fitmentConfidence Float?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  title                    String
+  brand                    String?
+  manufacturer             String?
+  category                 String?
+  weight                   Float? // Weight in kg for shipping calculations
+  oeNumbers                String[]
+  fitmentFlags             String[]
+  imageUrls                String[] @default([])
+  listingUrl               String?
+  ebayItemId               String?
+  compatibility            Json?
+  partSource               String   @default("OEM") // OEM, AFTERMARKET
+  qualityTier              String   @default("USED") // NEW, USED, REFURBISHED, REMANUFACTURED, FOR_PARTS
+  fitmentStatus            String   @default("NEEDS_REVIEW")
+  fitmentConfidence        Float?
+  normalizedTitle          String?
+  description              String?
+  partType                 String   @default("UNCLASSIFIED")
+  primaryBrandId           String?
+  manufacturerPartNumber   String?
+  genuineOemPartNumber     String?
+  dimensions               Json?
+  position                 String?
+  vehicleSystem            String?
+  classificationStatus     String   @default("REVIEW_REQUIRED")
+  classificationConfidence Float?
+  classificationReason     String?
+  completenessScore        Float?
+  verificationStatus       String   @default("UNVERIFIED")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   offers         SellerOffer[]
   fitments       Fitment[]
   supportTickets SupportTicket[]
   uploadRows     SellerUploadRow[]
+  primaryBrand   BrandMaster?        @relation(fields: [primaryBrandId], references: [id])
+  partNumbers    CatalogPartNumber[]
+  media          ProductMedia[]
+  sourceRecords  SourceRecord[]
+  salvageUnits   SalvageUnit[]
+}
+
+model CatalogPartNumber {
+  id                 String   @id @default(uuid())
+  canonicalPartId    String
+  displayNumber      String
+  normalizedNumber   String
+  numberType         String
+  brandId            String?
+  vehicleMakeId      String?
+  source             String
+  verificationStatus String   @default("UNVERIFIED")
+  confidence         Float    @default(0)
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  canonicalPart CanonicalPart @relation(fields: [canonicalPartId], references: [id], onDelete: Cascade)
+  brand         BrandMaster?  @relation(fields: [brandId], references: [id])
+  vehicleMake   VehicleMake?  @relation(fields: [vehicleMakeId], references: [id])
+
+  @@unique([canonicalPartId, numberType, normalizedNumber, brandId, vehicleMakeId])
+  @@index([normalizedNumber])
+  @@index([vehicleMakeId, normalizedNumber])
+}
+
+model ProductMedia {
+  id              String   @id @default(uuid())
+  canonicalPartId String
+  url             String
+  normalizedUrl   String
+  sourceUrl       String?
+  sortOrder       Int      @default(0)
+  isPrimary       Boolean  @default(false)
+  isActualItem    Boolean  @default(false)
+  mediaType       String   @default("IMAGE")
+  importStatus    String   @default("IMPORTED")
+  altText         String?
+  createdAt       DateTime @default(now())
+
+  canonicalPart CanonicalPart @relation(fields: [canonicalPartId], references: [id], onDelete: Cascade)
+
+  @@unique([canonicalPartId, normalizedUrl])
 }
 
 model SellerOffer {
@@ -181,6 +303,16 @@ model SellerOffer {
   qualityTier          String    @default("NEW")
   externalOfferId      String?
   status               String    @default("ACTIVE")
+  sourceKey            String?   @unique
+  sellerSku            String?
+  sellerTitle          String?
+  partType             String    @default("UNCLASSIFIED")
+  moq                  Int       @default(1)
+  leadTimeDays         Int?
+  deliveryMethod       String?
+  warranty             String?
+  returnPolicy         String?
+  sellerNotes          String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -192,6 +324,26 @@ model SellerOffer {
   orderItems     OrderItem[]
   supportTickets SupportTicket[]
   uploadRows     SellerUploadRow[]
+  prices         OfferPrice[]
+  sourceRecords  SourceRecord[]
+  salvageUnits   SalvageUnit[]
+}
+
+model OfferPrice {
+  id           String    @id @default(uuid())
+  offerId      String
+  currency     String
+  amount       Decimal   @db.Decimal(18, 4)
+  isPrimary    Boolean   @default(false)
+  exchangeRate Decimal?  @db.Decimal(18, 8)
+  rateSource   String?
+  quotedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  offer SellerOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, currency])
 }
 
 model Inventory {
@@ -204,6 +356,8 @@ model Inventory {
 
   warehouse Warehouse   @relation(fields: [warehouseId], references: [id])
   offer     SellerOffer @relation(fields: [offerId], references: [id])
+
+  @@unique([warehouseId, offerId])
 }
 
 model RawStagingListing {
@@ -231,9 +385,29 @@ model RawStagingListing {
 }
 
 model VehicleMake {
-  id     String         @id @default(uuid())
-  name   String         @unique
-  models VehicleModel[]
+  id                String              @id @default(uuid())
+  name              String              @unique
+  canonicalName     String?
+  displayName       String?
+  manufacturerGroup String?
+  regionalNames     Json?
+  externalIds       Json?
+  models            VehicleModel[]
+  aliases           VehicleMakeAlias[]
+  partNumbers       CatalogPartNumber[]
+  donorVehicles     DonorVehicle[]
+}
+
+model VehicleMakeAlias {
+  id            String   @id @default(uuid())
+  vehicleMakeId String
+  alias         String
+  normalized    String   @unique
+  region        String?
+  source        String?
+  createdAt     DateTime @default(now())
+
+  vehicleMake VehicleMake @relation(fields: [vehicleMakeId], references: [id], onDelete: Cascade)
 }
 
 model VehicleModel {
@@ -272,19 +446,95 @@ model VehicleConfiguration {
 }
 
 model Fitment {
-  id              String   @id @default(uuid())
-  canonicalPartId String
-  vehicleConfigId String
-  evidenceLevel   String // A, B, C, D, E, F
-  confidence      Float    @default(0.0)
-  reviewer        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  canonicalPartId    String
+  vehicleConfigId    String
+  evidenceLevel      String // A, B, C, D, E, F
+  confidence         Float    @default(0.0)
+  reviewer           String?
+  source             String?
+  verificationStatus String   @default("UNVERIFIED")
+  reason             String?
+  fitmentNotes       String?
+  originalData       Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   canonicalPart CanonicalPart        @relation(fields: [canonicalPartId], references: [id])
   vehicleConfig VehicleConfiguration @relation(fields: [vehicleConfigId], references: [id])
 
   @@unique([canonicalPartId, vehicleConfigId])
+}
+
+model DonorVehicle {
+  id               String   @id @default(uuid())
+  makeId           String?
+  model            String?
+  modelYear        Int?
+  trim             String?
+  engine           String?
+  engineCode       String?
+  transmission     String?
+  vinMasked        String?
+  vinHash          String?
+  mileage          Int?
+  mileageUnit      String?
+  donorStockNumber String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  make         VehicleMake?  @relation(fields: [makeId], references: [id])
+  salvageUnits SalvageUnit[]
+}
+
+model SalvageUnit {
+  id                  String   @id @default(uuid())
+  canonicalPartId     String
+  sellerOfferId       String
+  donorVehicleId      String?
+  originalOemNumber   String?
+  conditionGrade      String?
+  testedStatus        String?
+  damageNotes         String?
+  missingComponents   String[] @default([])
+  warranty            String?
+  dismantlingLocation String?
+  shelfBin            String?
+  identityMethod      String   @default("MANUAL")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  canonicalPart CanonicalPart @relation(fields: [canonicalPartId], references: [id])
+  sellerOffer   SellerOffer   @relation(fields: [sellerOfferId], references: [id])
+  donorVehicle  DonorVehicle? @relation(fields: [donorVehicleId], references: [id])
+
+  @@unique([sellerOfferId])
+}
+
+model SourceRecord {
+  id                       String    @id @default(uuid())
+  sourceType               String
+  sourcePlatform           String?
+  sellerId                 String?
+  sellerSourceAccountId    String?
+  canonicalPartId          String?
+  sellerOfferId            String?
+  externalId               String?
+  sourceFileName           String?
+  sourceSheet              String?
+  sourceRowNumber          Int?
+  sourceKey                String    @unique
+  rawPayload               Json
+  transformations          Json?
+  matchConfidence          Float?
+  classificationConfidence Float?
+  importedAt               DateTime  @default(now())
+  lastSyncedAt             DateTime?
+
+  seller              Seller?              @relation(fields: [sellerId], references: [id])
+  sellerSourceAccount SellerSourceAccount? @relation(fields: [sellerSourceAccountId], references: [id])
+  canonicalPart       CanonicalPart?       @relation(fields: [canonicalPartId], references: [id])
+  sellerOffer         SellerOffer?         @relation(fields: [sellerOfferId], references: [id])
 }
 
 model User {
@@ -402,51 +652,67 @@ model PaymentIntent {
 }
 
 model SellerUploadJob {
-  id                 String    @id @default(uuid())
-  sellerId           String
-  fileName           String
-  status             String    @default("PROCESSING")
-  totalRows          Int       @default(0)
-  processedRows      Int       @default(0)
-  insertedRows       Int       @default(0)
-  reviewRows         Int       @default(0)
-  invalidRows        Int       @default(0)
-  defaultPartSource  String    @default("OEM")
-  defaultQualityTier String    @default("USED")
-  warnings           Json?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  completedAt        DateTime?
+  id                   String    @id @default(uuid())
+  sellerId             String
+  fileName             String
+  status               String    @default("PROCESSING")
+  totalRows            Int       @default(0)
+  processedRows        Int       @default(0)
+  insertedRows         Int       @default(0)
+  reviewRows           Int       @default(0)
+  invalidRows          Int       @default(0)
+  defaultPartSource    String    @default("OEM")
+  defaultQualityTier   String    @default("USED")
+  warnings             Json?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  completedAt          DateTime?
+  fileChecksum         String?
+  mimeType             String?
+  sourceSheet          String?
+  mapping              Json?
+  defaultBrand         String?
+  defaultCurrency      String?
+  defaultDimensionUnit String?
+  defaultWeightUnit    String?
+  report               Json?
 
   seller Seller            @relation(fields: [sellerId], references: [id])
   rows   SellerUploadRow[]
+
+  @@unique([sellerId, fileChecksum])
 }
 
 model SellerUploadRow {
-  id              String   @id @default(uuid())
-  uploadJobId     String
-  rowNumber       Int
-  status          String   @default("IMPORTED")
-  sku             String?
-  title           String?
-  brand           String?
-  category        String?
-  oemPartNumber   String?
-  partSource      String   @default("OEM")
-  qualityTier     String   @default("USED")
-  condition       String   @default("USED")
-  price           Float?
-  quantity        Int      @default(1)
-  currency        String   @default("AED")
-  imageUrls       String[] @default([])
-  fitmentSummary  Json?
-  reviewReasons   Json?
-  message         String?
-  rawData         Json
-  canonicalPartId String?
-  sellerOfferId   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  uploadJobId              String
+  rowNumber                Int
+  status                   String   @default("IMPORTED")
+  sku                      String?
+  title                    String?
+  brand                    String?
+  category                 String?
+  oemPartNumber            String?
+  partSource               String   @default("OEM")
+  qualityTier              String   @default("USED")
+  condition                String   @default("USED")
+  price                    Float?
+  quantity                 Int      @default(1)
+  currency                 String   @default("AED")
+  imageUrls                String[] @default([])
+  fitmentSummary           Json?
+  reviewReasons            Json?
+  message                  String?
+  rawData                  Json
+  canonicalPartId          String?
+  sellerOfferId            String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  sourceKey                String?
+  normalizedData           Json?
+  classificationConfidence Float?
+  classificationReason     String?
+  matchConfidence          Float?
 
   uploadJob     SellerUploadJob @relation(fields: [uploadJobId], references: [id], onDelete: Cascade)
   canonicalPart CanonicalPart?  @relation(fields: [canonicalPartId], references: [id])
