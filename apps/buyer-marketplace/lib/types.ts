@@ -112,6 +112,13 @@ export interface Part {
   fitments?: Array<string | PartFitment>;
   compatibleVehicles?: CompatibleVehicle[];
   offers: Offer[];
+  /**
+   * Set by search when this result was found through an interchange /
+   * analogue number rather than the part's own primary number. `matchedNumber`
+   * echoes what the buyer searched, so the card can name it.
+   */
+  matchedVia?: "interchange";
+  matchedNumber?: string;
 }
 
 export interface BrowseResponse {

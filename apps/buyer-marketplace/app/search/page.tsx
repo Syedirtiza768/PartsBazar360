@@ -28,6 +28,7 @@ interface SearchPageProps {
     partType?: string;
     sort?: "newest" | "price_asc" | "price_desc";
     page?: string;
+    includeInterchange?: string;
   }>;
 }
 
@@ -43,6 +44,8 @@ async function getResults(
   if (params.partType) qs.set("partType", params.partType);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
+  // Only send when the buyer opted out — the API defaults interchange on.
+  if (params.includeInterchange === "false") qs.set("includeInterchange", "false");
   qs.set("limit", String(PAGE_SIZE));
 
   try {
@@ -125,10 +128,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     brand: params.brand,
     partType: params.partType,
     sort: params.sort,
+    includeInterchange: params.includeInterchange,
   };
 
   const activeFilterCount = [params.category, params.brand, params.partType].filter(Boolean).length;
   const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0);
+  const interchangeOff = params.includeInterchange === "false";
 
   const heading = isFitmentMode
     ? "Parts that fit your vehicle"
@@ -206,9 +211,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               description={
                 isFitmentMode
                   ? "Inventory changes daily. Try browsing the full catalog and checking listings' compatibility tables, or ask support to source the part."
-                  : params.q
-                    ? "Check the spelling, try fewer words, or search by the OE part number for exact matches."
-                    : "Try removing a filter or searching by part name or OE number."
+                  : interchangeOff && params.q
+                    ? "Interchange matching is off, so only this part's own number was searched. A superseded or cross-reference number won't match — try turning interchange on."
+                    : params.q
+                      ? "That number or term didn't match a listing. If it's a superseded or cross-reference number, we can still source it for you."
+                      : "Try removing a filter or searching by part name or OE number."
               }
             >
               {isFitmentMode ? (
@@ -221,9 +228,27 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   </Link>
                 </>
               ) : (
-                <Link href="/search" className={buttonClasses({ variant: "outline" })}>
-                  Clear search &amp; filters
-                </Link>
+                <>
+                  {interchangeOff && params.q && (
+                    <Link
+                      href={buildHref(paramsShape, { includeInterchange: undefined })}
+                      className={buttonClasses()}
+                    >
+                      Include interchange numbers
+                    </Link>
+                  )}
+                  {params.q && (
+                    <Link
+                      href={`/support?category=GENERAL&subject=${encodeURIComponent(`Source request: ${params.q}`)}`}
+                      className={buttonClasses({ variant: interchangeOff ? "outline" : "primary" })}
+                    >
+                      Ask us to source “{params.q}”
+                    </Link>
+                  )}
+                  <Link href="/search" className={buttonClasses({ variant: "outline" })}>
+                    Clear search &amp; filters
+                  </Link>
+                </>
               )}
             </EmptyState>
           ) : (

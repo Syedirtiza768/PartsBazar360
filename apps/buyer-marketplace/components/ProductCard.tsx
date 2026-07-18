@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Skeleton } from "@repo/ui/skeleton";
-import { UserIcon, TagIcon } from "@repo/ui/icons";
+import { UserIcon, TagIcon, RefreshIcon } from "@repo/ui/icons";
 import { PartImage } from "./PartImage";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
@@ -98,6 +98,21 @@ export function ProductCard({
           <ConditionBadge qualityTier={qualityTier} size="sm" />
           <SourceBadge partSource={partSource} size="sm" />
         </div>
+
+        {/* Found via a cross-reference number, not this part's own — say so,
+            so the buyer trusts why a "different" number surfaced this part. */}
+        {part.matchedVia === "interchange" && (
+          <p className="mb-1.5 flex items-start gap-1 text-[11px] font-medium leading-tight text-sky-800">
+            <RefreshIcon className="mt-0.5 h-3 w-3 shrink-0 text-sky-600" />
+            <span>
+              Interchange match{part.matchedNumber ? (
+                <>
+                  {" "}for <span className="part-number">{part.matchedNumber}</span>
+                </>
+              ) : null}
+            </span>
+          </p>
+        )}
 
         <h3 className="min-h-10 text-sm font-semibold leading-snug text-slate-800 group-hover:text-brand-800">
           <Link href={`/part/${part.id}`} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>

@@ -23,6 +23,9 @@ export class SearchController {
     @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc',
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    // Interchange search is on unless explicitly disabled (?includeInterchange=false),
+    // so a superseded part number resolves by default.
+    @Query('includeInterchange') includeInterchange?: string,
   ) {
     if (vehicleConfigId) {
       const items = await this.searchService.searchCompatibleParts(vehicleConfigId, q);
@@ -37,6 +40,7 @@ export class SearchController {
       sort,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 24,
+      includeInterchange: includeInterchange !== 'false',
     });
   }
 

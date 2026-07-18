@@ -133,9 +133,44 @@ export function FilterSections({
 }) {
   const categories = facets.categories ?? [];
   const brands = facets.brands ?? [];
+  // Interchange matching is on unless the buyer turned it off.
+  const interchangeOn = params.includeInterchange !== "false";
 
   return (
     <div className="space-y-4">
+      {/* Only relevant to a keyword / part-number search. */}
+      {params.q && (
+        <FilterGroup title="Part number matching">
+          <Link
+            href={buildHref(params, { includeInterchange: interchangeOn ? "false" : undefined })}
+            rel="nofollow"
+            aria-pressed={interchangeOn}
+            className={cn(
+              "group flex items-start gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+              interchangeOn ? "font-semibold text-brand-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                interchangeOn
+                  ? "border-brand-600 bg-brand-600 text-white"
+                  : "border-slate-300 bg-white group-hover:border-slate-400",
+              )}
+            >
+              {interchangeOn && <CheckIcon className="h-3 w-3" strokeWidth={3} />}
+            </span>
+            <span className="min-w-0">
+              Include interchange numbers
+              <span className="mt-0.5 block text-xs font-normal text-graphite-600">
+                Also match cross-reference and superseded part numbers.
+              </span>
+            </span>
+          </Link>
+        </FilterGroup>
+      )}
+
       <FilterGroup title="Part type">
         {([
           ["GENUINE_OEM", "Genuine OEM"],
