@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -38,6 +39,8 @@ export class UploadsController {
     @Body('defaultCurrency') defaultCurrency?: string,
     @Body('defaultWeightUnit') defaultWeightUnit?: string,
     @Body('defaultDimensionUnit') defaultDimensionUnit?: string,
+    @Body('commitMode') commitMode?: 'IMMEDIATE' | 'STAGED',
+    @Body('catalogType') catalogType?: string,
   ) {
     if (!file) throw new BadRequestException('file is required');
     const name = file.originalname.toLowerCase();
@@ -51,7 +54,63 @@ export class UploadsController {
       defaultCurrency,
       defaultWeightUnit,
       defaultDimensionUnit,
+      commitMode,
+      catalogType,
     });
+  }
+
+  @Put(':jobId/mapping')
+  async updateMapping(
+    @Param('jobId') jobId: string,
+    @Body() body: {
+      mapping?: unknown;
+      defaultBrand?: string;
+      defaultCurrency?: string;
+      defaultWeightUnit?: string;
+      defaultDimensionUnit?: string;
+      catalogType?: string;
+    },
+  ) {
+    return this.uploads.updateMapping(jobId, body.mapping ?? {}, body);
+  }
+
+  @Post(':jobId/commit')
+  async commit(@Param('jobId') jobId: string) {
+    return this.uploads.commitJob(jobId);
+  }
+
+  @Get(':jobId/preview')
+  async preview(@Param('jobId') jobId: string) {
+    const job = await this.uploads.getJob(jobId);
+    return {
+      id: job.id,
+      status: job.status,
+      commitMode: job.commitMode,
+      detection: job.detection,
+      mapping: job.mapping,
+      preview: job.preview,
+      report: job.report,
+      totals: {
+        totalRows: job.totalRows,
+        processedRows: job.processedRows,
+        insertedRows: job.insertedRows,
+        reviewRows: job.reviewRows,
+        invalidRows: job.invalidRows,
+      },
+      sampleRows: job.rows.slice(0, 25).map((row) => ({
+        id: row.id,
+        rowNumber: row.rowNumber,
+        status: row.status,
+        title: row.title,
+        brand: row.brand,
+        suggestedPartType: row.suggestedPartType,
+        classificationConfidence: row.classificationConfidence,
+        matchConfidence: row.matchConfidence,
+        matchCandidateId: row.matchCandidateId,
+        reviewReasons: row.reviewReasons,
+        message: row.message,
+      })),
+    };
   }
 
   @Patch('rows/:rowId/review')

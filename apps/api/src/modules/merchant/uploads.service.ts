@@ -13,6 +13,10 @@ import { SpreadsheetParserService } from '../catalog-import/spreadsheet-parser.s
 import { classifyPart } from '../catalog-import/classification.util';
 import { parseCompoundOemReferences } from '../catalog-import/oem-reference.parser';
 import { deterministicSourceKey, normalizeMasterName, normalizePartNumber } from '../catalog-import/part-normalization.util';
+import { CatalogMatchService } from '../catalog-import/catalog-match.service';
+import { ReviewTaskService } from '../catalog-import/review-task.service';
+import { CatalogAuditService } from '../catalog-import/catalog-audit.service';
+import { partTypeFromLegacy } from '@repo/catalog-contracts';
 
 interface ParsedUploadRow {
   rowNumber: number;
@@ -139,6 +143,9 @@ export class MerchantUploadsService {
     private readonly search: OpenSearchService,
     private readonly pricing: PricingService,
     private readonly spreadsheetParser: SpreadsheetParserService,
+    private readonly catalogMatch: CatalogMatchService,
+    private readonly reviewTasks: ReviewTaskService,
+    private readonly audit: CatalogAuditService,
   ) {}
 
   async listJobs(sellerId: string) {
@@ -176,6 +183,9 @@ export class MerchantUploadsService {
       defaultCurrency?: string;
       defaultWeightUnit?: string;
       defaultDimensionUnit?: string;
+      /** IMMEDIATE (default/seed) commits live; STAGED waits for preview/commit. */
+      commitMode?: 'IMMEDIATE' | 'STAGED';
+      catalogType?: string;
     },
   ) {
     if (!sellerId) throw new BadRequestException('sellerId is required');
@@ -201,18 +211,32 @@ export class MerchantUploadsService {
 
     const defaultPartSource = normalizePartSource(opts.defaultPartSource);
     const defaultQualityTier = normalizeQualityTier(opts.defaultQualityTier);
+    const commitMode = opts.commitMode === 'STAGED' ? 'STAGED' : 'IMMEDIATE';
     const fileChecksum = createHash('sha256').update(buffer).digest('hex');
     const existingJob = await this.prisma.sellerUploadJob.findFirst({
       where: { sellerId, fileChecksum },
       include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
-    if (existingJob?.status === 'COMPLETED' || existingJob?.status === 'NEEDS_REVIEW') return existingJob;
+    if (existingJob?.status === 'COMPLETED' || existingJob?.status === 'NEEDS_REVIEW' || existingJob?.status === 'PREVIEW_READY') {
+      return existingJob;
+    }
+
+    const detection = {
+      sheets: parsedSheets.map((sheet) => ({
+        sheet: sheet.sheetName,
+        template: sheet.template,
+        headers: sheet.headers,
+        rowCount: sheet.rows.length,
+        suggestedDefaults: sheet.suggestedDefaults,
+      })),
+      fileChecksum,
+    };
 
     const job = await this.prisma.sellerUploadJob.create({
       data: {
         sellerId,
         fileName,
-        status: 'PROCESSING',
+        status: commitMode === 'STAGED' ? 'STAGING' : 'PROCESSING',
         totalRows: parsedRows.length,
         defaultPartSource,
         defaultQualityTier,
@@ -223,6 +247,9 @@ export class MerchantUploadsService {
         defaultCurrency: opts.defaultCurrency || null,
         defaultWeightUnit: opts.defaultWeightUnit || null,
         defaultDimensionUnit: opts.defaultDimensionUnit || null,
+        commitMode,
+        catalogType: opts.catalogType || (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' ? 'AFTERMARKET' : parsedSheets[0]?.template === 'DXB_EXW' ? 'MIXED' : null),
+        detection,
         mapping: parsedSheets.map((sheet) => ({ sheet: sheet.sheetName, template: sheet.template, headers: sheet.headers })),
       },
     });
@@ -235,6 +262,14 @@ export class MerchantUploadsService {
     let reviewRows = 0;
     let invalidRows = 0;
     const warnings: string[] = [];
+    const preview = {
+      productsCreate: 0,
+      productsMatch: 0,
+      offersUpsert: 0,
+      oemReferences: 0,
+      unrecognizedMakes: [] as string[],
+      ambiguousClassifications: 0,
+    };
 
     for (const row of parsedRows) {
       const result = await this.processRow(job.id, sellerId, seller.name, seller.onboardingStatus, warehouse.id, row, {
@@ -246,36 +281,161 @@ export class MerchantUploadsService {
         defaultDimensionUnit: opts.defaultDimensionUnit,
         fileName,
         fileChecksum,
+        commitMode,
+        preview,
       });
       if (result.status === 'INVALID') invalidRows++;
-      else if (result.status === 'NEEDS_REVIEW') reviewRows++;
-      else insertedRows++;
+      else if (result.status === 'NEEDS_REVIEW' || result.status === 'STAGED') {
+        if (result.status === 'NEEDS_REVIEW') reviewRows++;
+        else if (commitMode === 'STAGED' && result.needsReview) reviewRows++;
+        else insertedRows++;
+      } else insertedRows++;
       if (result.message) warnings.push(`Row ${row.rowNumber}: ${result.message}`);
     }
+
+    const finalStatus = invalidRows === parsedRows.length
+      ? 'FAILED'
+      : commitMode === 'STAGED'
+        ? 'PREVIEW_READY'
+        : reviewRows > 0
+          ? 'NEEDS_REVIEW'
+          : 'COMPLETED';
 
     return this.prisma.sellerUploadJob.update({
       where: { id: job.id },
       data: {
-        status: invalidRows === parsedRows.length ? 'FAILED' : reviewRows > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
+        status: finalStatus,
         processedRows: parsedRows.length,
         insertedRows,
         reviewRows,
         invalidRows,
         warnings,
+        preview,
         report: {
           filesProcessed: 1,
           sheetsProcessed: parsedSheets.length,
           rowsRead: parsedRows.length,
-          rowsImported: insertedRows,
+          rowsImported: commitMode === 'IMMEDIATE' ? insertedRows : 0,
+          rowsStaged: commitMode === 'STAGED' ? parsedRows.length - invalidRows : 0,
           rowsReview: reviewRows,
           rowsRejected: invalidRows,
+          preview,
+          commitMode,
         },
-        completedAt: new Date(),
+        completedAt: commitMode === 'IMMEDIATE' ? new Date() : null,
       },
       include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
   }
 
+  async updateMapping(jobId: string, mapping: unknown, defaults?: {
+    defaultBrand?: string;
+    defaultCurrency?: string;
+    defaultWeightUnit?: string;
+    defaultDimensionUnit?: string;
+    catalogType?: string;
+  }) {
+    const job = await this.prisma.sellerUploadJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Upload job not found');
+    return this.prisma.sellerUploadJob.update({
+      where: { id: jobId },
+      data: {
+        mapping: mapping as any,
+        defaultBrand: defaults?.defaultBrand ?? job.defaultBrand,
+        defaultCurrency: defaults?.defaultCurrency ?? job.defaultCurrency,
+        defaultWeightUnit: defaults?.defaultWeightUnit ?? job.defaultWeightUnit,
+        defaultDimensionUnit: defaults?.defaultDimensionUnit ?? job.defaultDimensionUnit,
+        catalogType: defaults?.catalogType ?? job.catalogType,
+        status: job.commitMode === 'STAGED' ? 'MAPPING' : job.status,
+      },
+    });
+  }
+
+  async commitJob(jobId: string) {
+    const job = await this.getJob(jobId);
+    if (job.commitMode !== 'STAGED') {
+      throw new BadRequestException('Only STAGED import jobs can be committed explicitly');
+    }
+    if (!['PREVIEW_READY', 'NEEDS_REVIEW', 'MAPPING', 'STAGING'].includes(job.status)) {
+      throw new BadRequestException(`Job status ${job.status} is not committable`);
+    }
+
+    await this.prisma.sellerUploadJob.update({ where: { id: jobId }, data: { status: 'COMMITTING' } });
+
+    const seller = await this.prisma.seller.findUnique({
+      where: { id: job.sellerId },
+      include: { warehouses: true },
+    });
+    if (!seller) throw new NotFoundException('Seller not found');
+    const warehouse = seller.warehouses[0];
+    if (!warehouse) throw new BadRequestException('Seller has no warehouse');
+
+    let insertedRows = 0;
+    let reviewRows = 0;
+    let invalidRows = 0;
+
+    for (const row of job.rows) {
+      if (row.status === 'INVALID' || row.status === 'REJECTED') {
+        invalidRows++;
+        continue;
+      }
+      if (row.status === 'IMPORTED' && row.canonicalPartId) {
+        insertedRows++;
+        continue;
+      }
+      const staged = (row.stagedPayload || row.normalizedData || {}) as Record<string, any>;
+      const raw = (row.rawData || {}) as Record<string, string>;
+      const result = await this.processRow(job.id, seller.id, seller.name, seller.onboardingStatus, warehouse.id, {
+        rowNumber: row.rowNumber,
+        sheetName: job.sourceSheet || undefined,
+        raw: { ...raw, ...(staged.rawOverrides || {}) },
+        original: raw,
+      }, {
+        defaultPartSource: job.defaultPartSource,
+        defaultQualityTier: job.defaultQualityTier,
+        defaultBrand: job.defaultBrand || undefined,
+        defaultCurrency: job.defaultCurrency || undefined,
+        defaultWeightUnit: job.defaultWeightUnit || undefined,
+        defaultDimensionUnit: job.defaultDimensionUnit || undefined,
+        fileName: job.fileName,
+        fileChecksum: job.fileChecksum || job.id,
+        commitMode: 'IMMEDIATE',
+        existingRowId: row.id,
+      });
+      if (result.status === 'INVALID') invalidRows++;
+      else if (result.status === 'NEEDS_REVIEW') reviewRows++;
+      else insertedRows++;
+    }
+
+    await this.audit.record({
+      action: 'IMPORT_COMMIT',
+      entityType: 'SellerUploadJob',
+      entityId: jobId,
+      actorType: 'SELLER',
+      actorId: seller.id,
+      metadata: { insertedRows, reviewRows, invalidRows },
+    });
+
+    return this.prisma.sellerUploadJob.update({
+      where: { id: jobId },
+      data: {
+        status: invalidRows === job.rows.length ? 'FAILED' : reviewRows > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
+        insertedRows,
+        reviewRows,
+        invalidRows,
+        processedRows: job.rows.length,
+        completedAt: new Date(),
+        report: {
+          ...(typeof job.report === 'object' && job.report ? job.report as object : {}),
+          rowsImported: insertedRows,
+          rowsReview: reviewRows,
+          rowsRejected: invalidRows,
+          committedAt: new Date().toISOString(),
+        },
+      },
+      include: { rows: { orderBy: { rowNumber: 'asc' } } },
+    });
+  }
   private async processRow(
     uploadJobId: string,
     sellerId: string,
@@ -292,6 +452,16 @@ export class MerchantUploadsService {
       defaultDimensionUnit?: string;
       fileName: string;
       fileChecksum: string;
+      commitMode?: 'IMMEDIATE' | 'STAGED';
+      preview?: {
+        productsCreate: number;
+        productsMatch: number;
+        offersUpsert: number;
+        oemReferences: number;
+        unrecognizedMakes: string[];
+        ambiguousClassifications: number;
+      };
+      existingRowId?: string;
     },
   ) {
     const raw = row.raw;
@@ -303,8 +473,8 @@ export class MerchantUploadsService {
       || (brand && manufacturerPartNumber ? `${brand} Part – ${manufacturerPartNumber}` : undefined);
     if (!title || !manufacturerPartNumber) {
       const missing = [!title ? 'Missing title/description and identity fallback' : '', !manufacturerPartNumber ? 'Missing manufacturer/OEM part number' : ''].filter(Boolean);
-      await this.createUploadRow(uploadJobId, row, 'INVALID', missing);
-      return { status: 'INVALID', message: missing.join('; ') };
+      await this.createUploadRow(uploadJobId, row, 'INVALID', missing, {}, defaults.existingRowId);
+      return { status: 'INVALID', message: missing.join('; '), needsReview: false };
     }
 
     const primaryCurrency = raw.priceAed ? 'AED' : raw.priceUsd ? 'USD' : raw.currency?.trim() || defaults.defaultCurrency || '';
@@ -350,8 +520,17 @@ export class MerchantUploadsService {
     if (raw.__template === 'FEBEST_AVAILABILITY' && !defaults.defaultWeightUnit) reviewReasons.push('Weight unit requires confirmation');
     if (raw.__template === 'FEBEST_AVAILABILITY' && !defaults.defaultDimensionUnit) reviewReasons.push('Dimension unit requires confirmation');
     if (classification.status !== 'READY') reviewReasons.push(...classification.reasons);
-    for (const reference of parsedOemReferences) if (reference.reviewReason) reviewReasons.push(`${reference.raw}: ${reference.reviewReason}`);
-    const status = reviewReasons.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED';
+    for (const reference of parsedOemReferences) {
+      if (reference.reviewReason) reviewReasons.push(`${reference.raw}: ${reference.reviewReason}`);
+      if (reference.namespaceType === 'UNKNOWN' && defaults.preview) {
+        const hint = reference.matchedAlias || reference.raw.split(/\s+/)[0] || reference.raw;
+        if (hint && !defaults.preview.unrecognizedMakes.includes(hint)) {
+          defaults.preview.unrecognizedMakes.push(hint);
+        }
+      }
+    }
+    if (classification.status !== 'READY' && defaults.preview) defaults.preview.ambiguousClassifications += 1;
+    if (defaults.preview) defaults.preview.oemReferences += parsedOemReferences.length;
 
     const normalizedMpn = normalizePartNumber(manufacturerPartNumber);
     const brandMaster = brand ? await this.prisma.brandMaster.upsert({
@@ -365,10 +544,116 @@ export class MerchantUploadsService {
         requiresManualReview: classification.status !== 'READY',
       },
     }) : null;
-    const existingNumber = await this.prisma.catalogPartNumber.findFirst({
-      where: { normalizedNumber: normalizedMpn, numberType: 'BRAND_MPN', brandId: brandMaster?.id ?? null },
-      include: { canonicalPart: true },
+
+    const matchCandidates = await this.catalogMatch.findCandidates({
+      brandId: brandMaster?.id,
+      brandName: brand,
+      manufacturerPartNumber,
+      oemNumbers: parsedOemReferences.map((r) => r.normalizedNumber),
     });
+    const autoMatch = this.catalogMatch.pickAutoMatch(matchCandidates);
+    if (defaults.preview) {
+      if (autoMatch) defaults.preview.productsMatch += 1;
+      else defaults.preview.productsCreate += 1;
+      defaults.preview.offersUpsert += 1;
+    }
+
+    const stagedPayload = {
+      title,
+      brand,
+      manufacturerPartNumber,
+      normalizedMpn,
+      description,
+      category,
+      classification,
+      partSource,
+      qualityTier,
+      primaryCurrency,
+      price,
+      quantity,
+      stockSharjah,
+      stockJebelAli,
+      imageUrls,
+      parsedOemReferences,
+      parsedVehicle,
+      matchCandidates,
+      autoMatchPartId: autoMatch?.canonicalPartId || null,
+    };
+
+    if (defaults.commitMode === 'STAGED') {
+      const status = reviewReasons.length > 0 ? 'NEEDS_REVIEW' : 'STAGED';
+      await this.createUploadRow(uploadJobId, row, status, reviewReasons, {
+        title,
+        brand: brand || null,
+        category,
+        oemPartNumber: oeNumbers[0],
+        partSource,
+        qualityTier,
+        condition: qualityTier,
+        price: Number.isFinite(price) ? price : undefined,
+        quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
+        currency: primaryCurrency || 'AED',
+        imageUrls,
+        fitmentSummary: parsedVehicle,
+        sourceKey: deterministicSourceKey('SPREADSHEET_ROW', sellerId, defaults.fileChecksum, row.sheetName, row.rowNumber),
+        normalizedData: { normalizedMpn, parsedOemReferences, classification },
+        stagedPayload,
+        suggestedPartType: classification.partType,
+        classificationConfidence: classification.confidence,
+        classificationReason: classification.reasons.join('; '),
+        matchConfidence: autoMatch?.score ?? matchCandidates[0]?.score ?? 0,
+        matchCandidateId: autoMatch?.canonicalPartId || matchCandidates[0]?.canonicalPartId,
+        matchExplanation: { candidates: matchCandidates },
+      }, defaults.existingRowId);
+
+      if (classification.status === 'ACTION_REQUIRED' || classification.status === 'REVIEW_RECOMMENDED') {
+        await this.reviewTasks.enqueue({
+          queueType: 'CLASSIFICATION',
+          title: `Classify ${manufacturerPartNumber}`,
+          description: classification.reasons.join('; '),
+          severity: classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
+          sellerId,
+          uploadJobId,
+          entityType: 'SellerUploadRow',
+          confidence: classification.confidence,
+          payload: { brand, manufacturerPartNumber, classification },
+        });
+      }
+      for (const reference of parsedOemReferences.filter((r) => r.reviewReason)) {
+        await this.reviewTasks.enqueue({
+          queueType: 'OEM_PARSE',
+          title: `Unrecognized OEM token on ${manufacturerPartNumber}`,
+          description: reference.reviewReason || reference.raw,
+          severity: 'MEDIUM',
+          sellerId,
+          uploadJobId,
+          entityType: 'SellerUploadRow',
+          payload: { reference },
+        });
+      }
+      await this.audit.record({
+        action: 'IMPORT_STAGE',
+        entityType: 'SellerUploadJob',
+        entityId: uploadJobId,
+        actorType: 'SYSTEM',
+        reason: status,
+        confidence: classification.confidence,
+        originalValue: row.original || raw,
+        normalizedValue: stagedPayload,
+      });
+      return { status, message: reviewReasons.join('; '), needsReview: reviewReasons.length > 0 };
+    }
+
+    const status = reviewReasons.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED';
+    const existingNumber = autoMatch
+      ? await this.prisma.catalogPartNumber.findFirst({
+          where: { canonicalPartId: autoMatch.canonicalPartId, numberType: 'BRAND_MPN', normalizedNumber: normalizedMpn },
+          include: { canonicalPart: true },
+        })
+      : await this.prisma.catalogPartNumber.findFirst({
+          where: { normalizedNumber: normalizedMpn, numberType: 'BRAND_MPN', brandId: brandMaster?.id ?? null },
+          include: { canonicalPart: true },
+        });
     const canonicalPart = existingNumber?.canonicalPart ?? await this.prisma.canonicalPart.create({
       data: {
         title,
@@ -384,7 +669,7 @@ export class MerchantUploadsService {
         imageUrls,
         compatibility: parsedVehicle ? ({ source: 'title_parse', vehicle: parsedVehicle } as any) : undefined,
         partSource,
-        partType: classification.partType,
+        partType: partTypeFromLegacy(partSource, classification.partType),
         classificationStatus: classification.status,
         classificationConfidence: classification.confidence,
         classificationReason: classification.reasons.join('; '),
@@ -392,6 +677,20 @@ export class MerchantUploadsService {
         fitmentStatus: parsedVehicle ? (status === 'IMPORTED' ? 'AUTO_MATCHED' : 'NEEDS_REVIEW') : 'NEEDS_REVIEW',
         fitmentConfidence: parsedVehicle ? 0.5 : 0,
       },
+    });
+
+    await this.audit.record({
+      action: existingNumber ? 'MATCH' : 'CLASSIFY',
+      entityType: 'CanonicalPart',
+      entityId: canonicalPart.id,
+      actorType: 'SYSTEM',
+      source: 'SELLER_SPREADSHEET',
+      reason: classification.reasons.join('; '),
+      confidence: classification.confidence,
+      originalValue: { brand, manufacturerPartNumber },
+      normalizedValue: { partType: classification.partType, normalizedMpn },
+      canonicalPartId: canonicalPart.id,
+      metadata: { matchCandidates, autoMatch },
     });
 
     const existingMpn = await this.prisma.catalogPartNumber.findFirst({ where: {
@@ -491,8 +790,9 @@ export class MerchantUploadsService {
         canonicalPartId: canonicalPart.id,
         sellerOfferId: offer.id,
         rawPayload: row.original || raw,
-        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification } as any,
+        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification, matchCandidates } as any,
         classificationConfidence: classification.confidence,
+        matchConfidence: autoMatch?.score ?? 0,
         lastSyncedAt: new Date(),
       },
       create: {
@@ -500,8 +800,9 @@ export class MerchantUploadsService {
         canonicalPartId: canonicalPart.id, sellerOfferId: offer.id,
         sourceFileName: defaults.fileName, sourceSheet: row.sheetName, sourceRowNumber: row.rowNumber,
         sourceKey, rawPayload: row.original || raw,
-        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification } as any,
+        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification, matchCandidates } as any,
         classificationConfidence: classification.confidence,
+        matchConfidence: autoMatch?.score ?? 0,
       },
     });
 
@@ -525,18 +826,42 @@ export class MerchantUploadsService {
       : [];
 
     if (parsedVehicle && fitments[0]) {
-      await this.prisma.fitment.upsert({
+      const fitment = await this.prisma.fitment.upsert({
         where: { canonicalPartId_vehicleConfigId: { canonicalPartId: canonicalPart.id, vehicleConfigId: fitments[0].vehicleConfigId } },
-        update: {},
+        update: { source: 'TITLE_PARSE', reason: 'Inferred from listing/product title' },
         create: {
           canonicalPartId: canonicalPart.id,
           vehicleConfigId: fitments[0].vehicleConfigId,
           evidenceLevel: 'D',
           confidence: 0.5,
           reviewer: 'Seller upload auto-match',
+          source: 'TITLE_PARSE',
+          verificationStatus: 'UNVERIFIED',
+          reason: 'Inferred from listing/product title',
         },
       });
+      await this.prisma.fitmentEvidence.create({
+        data: {
+          fitmentId: fitment.id,
+          evidenceType: 'TITLE_PARSE',
+          evidenceLevel: 'D',
+          confidence: 0.5,
+          source: 'SELLER_SPREADSHEET',
+          reason: 'Title-parsed vehicle attributes are not verified fitment',
+          originalValue: parsedVehicle as any,
+        },
+      }).catch(() => undefined);
     }
+
+    await this.prisma.searchOutbox.create({
+      data: {
+        entityType: 'CanonicalPart',
+        entityId: canonicalPart.id,
+        operation: 'UPSERT',
+        payload: { source: 'SELLER_UPLOAD', offerId: offer.id },
+        status: 'PENDING',
+      },
+    });
 
     await this.search.indexPart({
       id: canonicalPart.id,
@@ -569,6 +894,27 @@ export class MerchantUploadsService {
       }],
     });
 
+    await this.prisma.searchOutbox.updateMany({
+      where: { entityId: canonicalPart.id, status: 'PENDING' },
+      data: { status: 'DONE', processedAt: new Date() },
+    });
+
+    if (classification.status !== 'READY') {
+      await this.reviewTasks.enqueue({
+        queueType: classification.partType === 'GENUINE_OEM' ? 'OEM_AUTHENTICITY' : 'CLASSIFICATION',
+        title: `Review classification for ${canonicalPart.title}`,
+        description: classification.reasons.join('; '),
+        severity: classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
+        sellerId,
+        uploadJobId,
+        canonicalPartId: canonicalPart.id,
+        entityType: 'CanonicalPart',
+        entityId: canonicalPart.id,
+        confidence: classification.confidence,
+        payload: { classification, brand, manufacturerPartNumber },
+      });
+    }
+
     await this.createUploadRow(uploadJobId, row, status, reviewReasons, {
       canonicalPartId: canonicalPart.id,
       sellerOfferId: offer.id,
@@ -586,14 +932,17 @@ export class MerchantUploadsService {
       fitmentSummary: parsedVehicle,
       sourceKey,
       normalizedData: { normalizedMpn, parsedOemReferences },
+      stagedPayload,
+      suggestedPartType: classification.partType,
       classificationConfidence: classification.confidence,
       classificationReason: classification.reasons.join('; '),
-      matchConfidence: existingNumber ? 1 : 0,
-    });
+      matchConfidence: autoMatch?.score ?? (existingNumber ? 1 : 0),
+      matchCandidateId: canonicalPart.id,
+      matchExplanation: { candidates: matchCandidates },
+    }, defaults.existingRowId);
 
-    return { status, message: reviewReasons.join('; ') };
+    return { status, message: reviewReasons.join('; '), needsReview: reviewReasons.length > 0 };
   }
-
   private buildReviewReasons(input: {
     title: string;
     price: number;
@@ -636,41 +985,61 @@ export class MerchantUploadsService {
       fitmentSummary: unknown;
       sourceKey: string;
       normalizedData: unknown;
+      stagedPayload: unknown;
+      suggestedPartType: string;
       classificationConfidence: number;
       classificationReason: string;
       matchConfidence: number;
+      matchCandidateId: string;
+      matchExplanation: unknown;
     }> = {},
+    existingRowId?: string,
   ) {
-    return this.prisma.sellerUploadRow.create({
-      data: {
-        uploadJobId,
-        rowNumber: row.rowNumber,
-        status,
-        sku: row.raw.sku || null,
-        title: extra.title || row.raw.title || null,
-        brand: extra.brand || row.raw.brand || null,
-        category: extra.category || row.raw.category || null,
-        oemPartNumber: extra.oemPartNumber || row.raw.oemPartNumber || row.raw.mpn || null,
-        partSource: extra.partSource || 'OEM',
-        qualityTier: extra.qualityTier || 'USED',
-        condition: extra.condition || 'USED',
-        price: extra.price,
-        quantity: extra.quantity ?? 1,
-        currency: extra.currency || row.raw.currency || 'AED',
-        imageUrls: extra.imageUrls || [],
-        fitmentSummary: extra.fitmentSummary === undefined ? undefined : (extra.fitmentSummary as any),
-        reviewReasons,
-        message: reviewReasons.join('; ') || null,
-        rawData: row.original || row.raw,
-        sourceKey: extra.sourceKey,
-        normalizedData: extra.normalizedData === undefined ? undefined : (extra.normalizedData as any),
-        classificationConfidence: extra.classificationConfidence,
-        classificationReason: extra.classificationReason,
-        matchConfidence: extra.matchConfidence,
-        canonicalPartId: extra.canonicalPartId,
-        sellerOfferId: extra.sellerOfferId,
-      },
+    const data = {
+      uploadJobId,
+      rowNumber: row.rowNumber,
+      status,
+      sku: row.raw.sku || null,
+      title: extra.title || row.raw.title || null,
+      brand: extra.brand || row.raw.brand || null,
+      category: extra.category || row.raw.category || null,
+      oemPartNumber: extra.oemPartNumber || row.raw.oemPartNumber || row.raw.mpn || null,
+      partSource: extra.partSource || 'OEM',
+      qualityTier: extra.qualityTier || 'USED',
+      condition: extra.condition || 'USED',
+      price: extra.price,
+      quantity: extra.quantity ?? 1,
+      currency: extra.currency || row.raw.currency || 'AED',
+      imageUrls: extra.imageUrls || [],
+      fitmentSummary: extra.fitmentSummary === undefined ? undefined : (extra.fitmentSummary as any),
+      reviewReasons,
+      message: reviewReasons.join('; ') || null,
+      rawData: row.original || row.raw,
+      sourceKey: extra.sourceKey,
+      normalizedData: extra.normalizedData === undefined ? undefined : (extra.normalizedData as any),
+      stagedPayload: extra.stagedPayload === undefined ? undefined : (extra.stagedPayload as any),
+      suggestedPartType: extra.suggestedPartType,
+      classificationConfidence: extra.classificationConfidence,
+      classificationReason: extra.classificationReason,
+      matchConfidence: extra.matchConfidence,
+      matchCandidateId: extra.matchCandidateId,
+      matchExplanation: extra.matchExplanation === undefined ? undefined : (extra.matchExplanation as any),
+      canonicalPartId: extra.canonicalPartId,
+      sellerOfferId: extra.sellerOfferId,
+    };
+
+    if (existingRowId) {
+      return this.prisma.sellerUploadRow.update({ where: { id: existingRowId }, data });
+    }
+
+    const existing = await this.prisma.sellerUploadRow.findUnique({
+      where: { uploadJobId_rowNumber: { uploadJobId, rowNumber: row.rowNumber } },
     });
+    if (existing) {
+      return this.prisma.sellerUploadRow.update({ where: { id: existing.id }, data });
+    }
+
+    return this.prisma.sellerUploadRow.create({ data });
   }
 
   async reviewRow(rowId: string, body: { status: string; offerStatus?: string; notes?: string }) {

@@ -119,6 +119,31 @@ export interface Part {
    */
   matchedVia?: "interchange";
   matchedNumber?: string;
+  salvageUnits?: SalvageUnit[];
+}
+
+export interface SalvageUnit {
+  id: string;
+  originalOemNumber?: string | null;
+  conditionGrade?: string | null;
+  testedStatus?: string | null;
+  damageNotes?: string | null;
+  missingComponents?: string[];
+  warranty?: string | null;
+  dismantlingLocation?: string | null;
+  shelfBin?: string | null;
+  identityMethod?: string;
+  donorVehicle?: {
+    make?: string | null;
+    model?: string | null;
+    modelYear?: number | null;
+    trim?: string | null;
+    engine?: string | null;
+    vinMasked?: string | null;
+    mileage?: number | null;
+    mileageUnit?: string | null;
+    donorStockNumber?: string | null;
+  } | null;
 }
 
 export interface BrowseResponse {

@@ -23,5 +23,6 @@ import { CatalogImportModule } from '../catalog-import/catalog-import.module';
     MerchantPricingController,
   ],
   providers: [PrismaService, MerchantUploadsService, SellerOnboardingService],
+  exports: [MerchantUploadsService],
 })
 export class MerchantModule {}

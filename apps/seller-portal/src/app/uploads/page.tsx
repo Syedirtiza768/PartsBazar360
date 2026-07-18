@@ -37,6 +37,8 @@ interface UploadJob {
   invalidRows: number;
   defaultPartSource: string;
   defaultQualityTier: string;
+  commitMode?: string;
+  preview?: Record<string, unknown> | null;
   createdAt: string;
   completedAt?: string | null;
   rows?: UploadRow[];
@@ -49,7 +51,9 @@ export default function UploadsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [defaultPartSource, setDefaultPartSource] = useState("OEM");
   const [defaultQualityTier, setDefaultQualityTier] = useState("USED");
+  const [commitMode, setCommitMode] = useState<"IMMEDIATE" | "STAGED">("STAGED");
   const [submitting, setSubmitting] = useState(false);
+  const [committing, setCommitting] = useState(false);
   const [approvingRow, setApprovingRow] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -112,7 +116,7 @@ export default function UploadsPage() {
   const handleUpload = async (event: FormEvent) => {
     event.preventDefault();
     if (!file) {
-      setError("Choose a CSV file first.");
+      setError("Choose a CSV or Excel file first.");
       return;
     }
 
@@ -120,6 +124,8 @@ export default function UploadsPage() {
     body.append("sellerId", DEMO_SELLER_ID);
     body.append("defaultPartSource", defaultPartSource);
     body.append("defaultQualityTier", defaultQualityTier);
+    body.append("commitMode", commitMode);
+    body.append("catalogType", defaultPartSource === "AFTERMARKET" ? "AFTERMARKET" : "MIXED");
     body.append("file", file);
 
     setSubmitting(true);
@@ -160,6 +166,23 @@ export default function UploadsPage() {
     }
   };
 
+  const handleCommit = async () => {
+    if (!selectedJob) return;
+    setCommitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/merchant/uploads/${selectedJob.id}/commit`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Commit failed.");
+      setSelectedJob(data);
+      await loadJobs();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Commit failed.");
+    } finally {
+      setCommitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
       <PageHeader
@@ -185,21 +208,21 @@ export default function UploadsPage() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">New upload</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Supported columns: title, sku, price, quantity, brand, OEM part number, condition, part
-            type, currency, image URLs.
+            Supported: CSV and Excel (.xlsx). DXB-EXW and FEBEST templates are auto-detected.
+            Staged mode previews classification and matches before live catalog writes.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">CSV file</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-700">Inventory file</span>
             <label
               className={cn(
                 "flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors",
                 file ? "border-emerald-300 bg-emerald-50" : "border-slate-300 bg-slate-50 hover:border-brand-400 hover:bg-brand-50/50",
               )}
             >
-              <input type="file" accept=".csv,text/csv" onChange={handleFileChange} className="sr-only" />
+              <input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleFileChange} className="sr-only" />
               {file ? (
                 <>
                   <FileTextIcon className="h-5 w-5 shrink-0 text-emerald-600" />
@@ -212,7 +235,7 @@ export default function UploadsPage() {
                 <>
                   <UploadIcon className="h-5 w-5 shrink-0 text-slate-400" />
                   <span className="text-sm text-slate-600">
-                    <span className="font-semibold text-brand-600">Choose a CSV file</span> to upload
+                    <span className="font-semibold text-brand-600">Choose a CSV or XLSX file</span> to upload
                   </span>
                 </>
               )}
@@ -222,6 +245,7 @@ export default function UploadsPage() {
           <Select label="Default source" value={defaultPartSource} onChange={(e) => setDefaultPartSource(e.target.value)}>
             <option value="OEM">Genuine OEM</option>
             <option value="AFTERMARKET">Aftermarket</option>
+            <option value="MIXED">Mixed catalog</option>
           </Select>
 
           <Select label="Default quality" value={defaultQualityTier} onChange={(e) => setDefaultQualityTier(e.target.value)}>
@@ -230,6 +254,11 @@ export default function UploadsPage() {
             <option value="REFURBISHED">Refurbished</option>
             <option value="REMANUFACTURED">Remanufactured</option>
             <option value="FOR_PARTS">For parts</option>
+          </Select>
+
+          <Select label="Commit mode" value={commitMode} onChange={(e) => setCommitMode(e.target.value as "IMMEDIATE" | "STAGED")}>
+            <option value="STAGED">Stage then preview</option>
+            <option value="IMMEDIATE">Import immediately</option>
           </Select>
         </div>
 
@@ -293,11 +322,18 @@ export default function UploadsPage() {
         </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card xl:col-span-2" aria-label="Rows needing attention">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5">
             <h2 className="text-sm font-semibold text-slate-900">Rows needing attention</h2>
-            {selectedJob && (
-              <span className="part-number max-w-[200px] truncate text-slate-400">{selectedJob.fileName}</span>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedJob && (
+                <span className="part-number max-w-[200px] truncate text-slate-400">{selectedJob.fileName}</span>
+              )}
+              {selectedJob?.status === "PREVIEW_READY" && (
+                <Button size="sm" onClick={handleCommit} loading={committing}>
+                  Commit import
+                </Button>
+              )}
+            </div>
           </div>
 
           {!selectedJob ? (

@@ -246,11 +246,24 @@ function OfferRow({
             {/* condition is the field sellers actually set per offer;
                 qualityTier has a schema default that can contradict it. */}
             <ConditionBadge qualityTier={offer.condition || offer.qualityTier} size="sm" />
-            <SourceBadge partSource={offer.partSource} size="sm" />
+            <SourceBadge partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
           </div>
         </div>
         <p className="price shrink-0 text-xl">{formatPrice(offer.price, offer.currency)}</p>
       </div>
+
+      {offer.inventory && offer.inventory.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-graphite-600">
+          {offer.inventory.map((row, index) => (
+            <li key={`${offer.id}-inv-${index}`} className="flex items-center justify-between gap-2">
+              <span>{row.warehouse?.name || row.warehouse?.location || "Warehouse"}</span>
+              <span className="font-semibold text-slate-800">
+                {row.quantity > 0 ? `${row.quantity} in stock` : "Out of stock"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {profile && (
         <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-graphite-600">

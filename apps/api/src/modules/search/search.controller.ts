@@ -71,6 +71,7 @@ export class SearchController {
         primaryBrand: true,
         partNumbers: { include: { brand: true, vehicleMake: true } },
         media: { orderBy: { sortOrder: 'asc' } },
+        salvageUnits: { include: { donorVehicle: { include: { make: true } } } },
         fitments: {
           include: {
             vehicleConfig: {
@@ -163,6 +164,34 @@ export class SearchController {
         normalizedNumber: number.normalizedNumber,
         make: number.vehicleMake?.displayName || number.vehicleMake?.name || null,
         verificationStatus: number.verificationStatus,
+      })),
+      salvageUnits: (part.salvageUnits?.length
+        ? part.salvageUnits
+        : part.offers.flatMap((offer) => offer.salvageUnits || [])
+      ).map((unit) => ({
+        id: unit.id,
+        originalOemNumber: unit.originalOemNumber,
+        conditionGrade: unit.conditionGrade,
+        testedStatus: unit.testedStatus,
+        damageNotes: unit.damageNotes,
+        missingComponents: unit.missingComponents,
+        warranty: unit.warranty,
+        dismantlingLocation: unit.dismantlingLocation,
+        shelfBin: unit.shelfBin,
+        identityMethod: unit.identityMethod,
+        donorVehicle: unit.donorVehicle
+          ? {
+              make: unit.donorVehicle.make?.displayName || unit.donorVehicle.make?.name || null,
+              model: unit.donorVehicle.model,
+              modelYear: unit.donorVehicle.modelYear,
+              trim: unit.donorVehicle.trim,
+              engine: unit.donorVehicle.engine,
+              vinMasked: unit.donorVehicle.vinMasked,
+              mileage: unit.donorVehicle.mileage,
+              mileageUnit: unit.donorVehicle.mileageUnit,
+              donorStockNumber: unit.donorVehicle.donorStockNumber,
+            }
+          : null,
       })),
     };
   }

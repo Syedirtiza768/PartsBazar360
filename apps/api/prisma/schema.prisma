@@ -36,6 +36,7 @@ model Seller {
   agreementAcceptances SellerAgreementAcceptance[]
   sourceAccounts       SellerSourceAccount[]
   sourceRecords        SourceRecord[]
+  reviewTasks          ReviewTask[]
 }
 
 model SellerProfile {
@@ -241,6 +242,10 @@ model CanonicalPart {
   media          ProductMedia[]
   sourceRecords  SourceRecord[]
   salvageUnits   SalvageUnit[]
+  redirectsFrom  CanonicalPartRedirect[] @relation("RedirectFrom")
+  redirectsTo    CanonicalPartRedirect[] @relation("RedirectTo")
+  reviewTasks    ReviewTask[]
+  auditEvents    AuditEvent[]
 }
 
 model CatalogPartNumber {
@@ -449,7 +454,7 @@ model Fitment {
   id                 String   @id @default(uuid())
   canonicalPartId    String
   vehicleConfigId    String
-  evidenceLevel      String // A, B, C, D, E, F
+  evidenceLevel      String // A, B, C, D, E, F — derived from strongest evidence
   confidence         Float    @default(0.0)
   reviewer           String?
   source             String?
@@ -462,8 +467,29 @@ model Fitment {
 
   canonicalPart CanonicalPart        @relation(fields: [canonicalPartId], references: [id])
   vehicleConfig VehicleConfiguration @relation(fields: [vehicleConfigId], references: [id])
+  evidence      FitmentEvidence[]
 
   @@unique([canonicalPartId, vehicleConfigId])
+}
+
+model FitmentEvidence {
+  id              String   @id @default(uuid())
+  fitmentId       String
+  evidenceType    String // MANUAL, EBAY_COMPATIBILITY, SELLER_DECLARED, OEM_CROSS_REFERENCE, VIN, TITLE_PARSE
+  evidenceLevel   String // A-F
+  confidence      Float    @default(0)
+  source          String?
+  sourceRecordId  String?
+  originalValue   Json?
+  normalizedValue Json?
+  reason          String?
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  fitment Fitment @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
+
+  @@index([fitmentId, evidenceType])
 }
 
 model DonorVehicle {
@@ -676,9 +702,15 @@ model SellerUploadJob {
   defaultDimensionUnit String?
   defaultWeightUnit    String?
   report               Json?
+  /// IMMEDIATE = stage+commit in one pass (seed / legacy). STAGED = preview before commit.
+  commitMode           String    @default("IMMEDIATE")
+  catalogType          String? // GENUINE_OEM | AFTERMARKET | SALVAGE_OEM | MIXED | UNSURE
+  preview              Json?
+  detection            Json?
 
-  seller Seller            @relation(fields: [sellerId], references: [id])
-  rows   SellerUploadRow[]
+  seller      Seller            @relation(fields: [sellerId], references: [id])
+  rows        SellerUploadRow[]
+  reviewTasks ReviewTask[]
 
   @@unique([sellerId, fileChecksum])
 }
@@ -713,12 +745,103 @@ model SellerUploadRow {
   classificationConfidence Float?
   classificationReason     String?
   matchConfidence          Float?
+  matchCandidateId         String?
+  matchExplanation         Json?
+  suggestedPartType        String?
+  stagedPayload            Json?
 
   uploadJob     SellerUploadJob @relation(fields: [uploadJobId], references: [id], onDelete: Cascade)
   canonicalPart CanonicalPart?  @relation(fields: [canonicalPartId], references: [id])
   sellerOffer   SellerOffer?    @relation(fields: [sellerOfferId], references: [id])
 
   @@unique([uploadJobId, rowNumber])
+  @@index([status])
+}
+
+model CanonicalPartRedirect {
+  id              String   @id @default(uuid())
+  fromPartId      String
+  toPartId        String
+  reason          String?
+  mergedBy        String?
+  createdAt       DateTime @default(now())
+
+  fromPart CanonicalPart @relation("RedirectFrom", fields: [fromPartId], references: [id])
+  toPart   CanonicalPart @relation("RedirectTo", fields: [toPartId], references: [id])
+
+  @@unique([fromPartId])
+  @@index([toPartId])
+}
+
+model ReviewTask {
+  id              String    @id @default(uuid())
+  queueType       String
+  status          String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, DISMISSED
+  severity        String    @default("MEDIUM") // LOW, MEDIUM, HIGH, BLOCKING
+  title           String
+  description     String?
+  entityType      String?
+  entityId        String?
+  sellerId        String?
+  uploadJobId     String?
+  canonicalPartId String?
+  payload         Json?
+  confidence      Float?
+  assignedTo      String?
+  resolvedBy      String?
+  resolution      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  seller        Seller?          @relation(fields: [sellerId], references: [id])
+  uploadJob     SellerUploadJob? @relation(fields: [uploadJobId], references: [id])
+  canonicalPart CanonicalPart?   @relation(fields: [canonicalPartId], references: [id])
+
+  @@index([queueType, status])
+  @@index([sellerId, status])
+  @@index([uploadJobId])
+}
+
+model AuditEvent {
+  id              String   @id @default(uuid())
+  action          String
+  entityType      String
+  entityId        String
+  actorType       String   @default("SYSTEM") // SYSTEM, SELLER, ADMIN, SEED
+  actorId         String?
+  source          String?
+  reason          String?
+  confidence      Float?
+  originalValue   Json?
+  normalizedValue Json?
+  metadata        Json?
+  canonicalPartId String?
+  createdAt       DateTime @default(now())
+
+  canonicalPart CanonicalPart? @relation(fields: [canonicalPartId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@index([canonicalPartId])
+}
+
+model SearchOutbox {
+  id          String    @id @default(uuid())
+  entityType  String    @default("CanonicalPart")
+  entityId    String
+  operation   String    @default("UPSERT") // UPSERT, DELETE
+  payload     Json?
+  status      String    @default("PENDING") // PENDING, PROCESSING, DONE, FAILED
+  attempts    Int       @default(0)
+  lastError   String?
+  availableAt DateTime  @default(now())
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, availableAt])
+  @@index([entityId])
 }
 
 model SupportTicket {

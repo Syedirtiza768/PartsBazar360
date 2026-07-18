@@ -1,5 +1,18 @@
 # Marketplace seeding and seller imports
 
+## Import modes
+
+Seller uploads support two commit modes:
+
+- `IMMEDIATE` (seed default): stage + write catalog/offers/inventory in one pass.
+- `STAGED` (seller portal default): normalize, classify, and match into preview rows; call `POST /merchant/uploads/:jobId/commit` after review.
+
+Preview payload is available at `GET /merchant/uploads/:jobId/preview`. Mapping defaults can be updated with `PUT /merchant/uploads/:jobId/mapping`.
+
+Shared vocabulary for part types, fitment statuses, and review queues lives in `@repo/catalog-contracts` so API, buyer, seller, and admin stay aligned.
+
+See `docs/IMPLEMENTATION_PLAN.md` for the full linked rollout.
+
 ## What is implemented
 
 `npm run seed:marketplace --workspace api` is the single repeatable entry point for RealTrack/eBay stores and seller workbooks. It creates a seller per source account, keeps seller identity separate from product brand, fetches every configured listing unless a development limit is set, requests the store-scoped listing detail, and reuses the production spreadsheet upload service for `.xlsx` and `.csv` files.

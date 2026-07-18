@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/' },
+  { label: 'Catalog queues', href: '/catalog' },
   { label: 'Marketplace Health', href: '/' },
   { label: 'Portal Access', href: '/' },
 ];

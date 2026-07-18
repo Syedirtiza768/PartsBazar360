@@ -8,6 +8,7 @@ import { CompatibilitySection } from "@/components/CompatibilitySection";
 import { BuyBox, StickyMobileBar } from "@/components/BuyBox";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
+import { SalvagePanel } from "@/components/SalvagePanel";
 import { lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
 import type { Part } from "@/lib/types";
 
@@ -132,6 +133,10 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
         </aside>
 
         <div className="min-w-0 space-y-10">
+          {(part.salvageUnits?.length || part.partType === "SALVAGE_OEM") && (
+            <SalvagePanel units={part.salvageUnits || []} />
+          )}
+
           <CompatibilitySection rows={compatibilityRows} compatibleVehicles={compatibleVehicles} />
 
           {crossReferences.length > 0 && (

@@ -96,7 +96,7 @@ export function ProductCard({
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           <ConditionBadge qualityTier={qualityTier} size="sm" />
-          <SourceBadge partSource={partSource} size="sm" />
+          <SourceBadge partSource={partSource} partType={partType} size="sm" />
         </div>
 
         {/* Found via a cross-reference number, not this part's own — say so,

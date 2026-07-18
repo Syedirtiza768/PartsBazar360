@@ -21,6 +21,11 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   INVALID: "danger",
   APPROVED: "success",
   REJECTED: "danger",
+  PREVIEW_READY: "info",
+  STAGED: "info",
+  STAGING: "warning",
+  COMMITTING: "warning",
+  MAPPING: "info",
   // onboarding
   DRAFT: "neutral",
   SUBMITTED: "info",

@@ -41,8 +41,8 @@ export default function Home() {
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Marketplace control center</h1>
           <p className="text-slate-600 mt-1">Govern portals, catalogue quality, seller readiness, and operational health.</p>
         </div>
-        <a href="/operations/" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors">
-          Open operations
+        <a href="/catalog" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors">
+          Open catalog queues
         </a>
       </header>
 
@@ -89,7 +89,7 @@ export default function Home() {
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Admin checklist</h2>
           <div className="mt-5 space-y-4">
-            <ChecklistItem title="Catalogue governance" detail="Maintain OEM, used, refurbished, and aftermarket part policies." />
+            <ChecklistItem title="Catalogue governance" detail="Open Catalog queues to clear classification, OEM parse, and authenticity reviews." />
             <ChecklistItem title="Seller readiness" detail="Use upload review counts to identify sellers needing support." />
             <ChecklistItem title="Customer support" detail="Watch fitment and order tickets for escalation patterns." />
             <ChecklistItem title="Fulfillment health" detail="Keep pending seller orders visible to operations." />

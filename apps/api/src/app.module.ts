@@ -12,6 +12,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { OrderModule } from './modules/order/order.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
+import { CatalogImportModule } from './modules/catalog-import/catalog-import.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -32,6 +33,7 @@ import { PrismaService } from './prisma.service';
     OrderModule,
     CheckoutModule,
     MerchantModule,
+    CatalogImportModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
