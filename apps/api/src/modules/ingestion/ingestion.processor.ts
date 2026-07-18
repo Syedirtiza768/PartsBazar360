@@ -5,6 +5,7 @@ import { RealTrackService } from '../integration/realtrack.service';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
 import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
+import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 import { buildCompatibility, extractListingImages } from './listing-enrichment.util';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
@@ -375,6 +376,17 @@ export class IngestionProcessor extends WorkerHost {
       brand: canonicalPart.brand,
       category: canonicalPart.category,
       oeNumbers: canonicalPart.oeNumbers,
+      // Index the OE numbers as primary part numbers too, so a normalized
+      // exact match (the `normalizedPartNumbers.keyword` term clause) resolves
+      // ingested parts — not just the fuzzy multi_match on `oeNumbers`. The
+      // RealTrack/eBay feed carries no interchange (OEM_CROSS_REFERENCE)
+      // numbers, so there are none to index here; interchange search for
+      // ingested parts needs a cross-reference source first.
+      partNumbers: (canonicalPart.oeNumbers || []).map((oe) => ({
+        displayNumber: oe,
+        normalizedNumber: normalizePartNumber(oe),
+        numberType: 'OEM',
+      })),
       imageUrls: canonicalPart.imageUrls,
       listingUrl: canonicalPart.listingUrl,
       ebayItemId: canonicalPart.ebayItemId,

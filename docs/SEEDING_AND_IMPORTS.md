@@ -83,6 +83,8 @@ GET /api/search/parts?q=<a-known-interchange-number>
 
 The part should appear, and its result item should carry `matchedVia: "interchange"` and `matchedNumber: "<the-number>"`. Repeating with `&includeInterchange=false` should drop that hit. The buyer UI renders the `matchedVia` result as an "Interchange match" badge, and a part-number search that returns nothing routes to the sourcing flow.
 
-### Known gap: ingestion path does not index part numbers
+### Ingestion path: primary numbers indexed; interchange still needs a source
 
-`ingestion.processor.ts` calls `indexPart` without a `partNumbers` array (it passes `oeNumbers` only). Parts ingested through RealTrack are therefore indexed with neither primary `normalizedPartNumbers` nor `interchangePartNumbers`, so interchange search cannot match them even after a reindex driven by that path. Closing this requires that call to load the part's `CatalogPartNumber` rows and pass them as `partNumbers`, the same shape `uploads.service.ts` already uses.
+`ingestion.processor.ts` now builds a `partNumbers` array for `indexPart` from the part's OE numbers (`canonicalPart.oeNumbers`), each entry typed `OEM` with `normalizedNumber = normalizePartNumber(oe)` — the same normalization the query uses. Ingested parts are therefore exact-matchable by a normalized OE number (the `normalizedPartNumbers.keyword` term clause), not only through the fuzzy `oeNumbers` multi_match, so formatting variants like `4g0-867-409` resolve the part. This takes effect on the next reindex/re-ingest (dynamic mapping; no mapping change).
+
+Interchange (`OEM_CROSS_REFERENCE`) search for ingested parts remains inactive for a data reason, not a code one: the RealTrack/eBay feed carries no cross-reference numbers, and ingestion creates no `CatalogPartNumber` rows. Populating them needs a cross-reference source (a supplier interchange table, or an enrichment step that writes `OEM_CROSS_REFERENCE` rows for ingested parts); once those exist and are passed through `partNumbers`, `indexPart` already routes them into `interchangePartNumbers`. Seller-uploaded parts, whose workbooks carry OEM-reference columns, already populate both sides.
