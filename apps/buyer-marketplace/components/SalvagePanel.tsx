@@ -1,8 +1,8 @@
 import type { SalvageUnit } from "@/lib/types";
 
 export function SalvagePanel({ units }: { units: SalvageUnit[] }) {
-  if (!units.length) return null;
   const unit = units[0];
+  if (!unit) return null;
   const donor = unit.donorVehicle;
 
   return (
