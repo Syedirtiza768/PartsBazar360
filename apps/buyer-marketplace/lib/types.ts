@@ -7,11 +7,30 @@ export interface Offer {
   qualityTier?: string;
   sellerId?: string;
   sellerName?: string;
+  partType?: string;
+  sellerSku?: string | null;
+  moq?: number;
+  inventory?: Array<{ quantity: number; status: string; warehouse?: { name: string; location?: string | null } }>;
   seller?: {
     id: string;
     name: string;
     profile?: SellerProfileSummary | null;
   };
+}
+
+export interface PartNumberRecord {
+  displayNumber: string;
+  normalizedNumber: string;
+  numberType: string;
+  make?: string | null;
+  brand?: string | null;
+}
+
+export interface OemCrossReference {
+  number: string;
+  normalizedNumber: string;
+  make?: string | null;
+  verificationStatus?: string;
 }
 
 export interface SellerProfileSummary {
@@ -67,6 +86,10 @@ export interface Part {
   title: string;
   brand?: string | null;
   manufacturer?: string | null;
+  manufacturerPartNumber?: string | null;
+  partType?: string;
+  partNumbers?: PartNumberRecord[];
+  oemCrossReferences?: OemCrossReference[];
   category?: string | null;
   weight?: number | null;
   oeNumbers?: string[];

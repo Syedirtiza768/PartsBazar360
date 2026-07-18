@@ -96,6 +96,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
   if (params.q) chips.push({ key: "q", label: `“${params.q}”` });
   if (params.category) chips.push({ key: "category", label: params.category });
   if (params.brand) chips.push({ key: "brand", label: params.brand });
+  if (params.partType) chips.push({ key: "partType", label: params.partType.replaceAll("_", " ") });
   if (chips.length === 0) return null;
 
   return (
@@ -135,6 +136,22 @@ export function FilterSections({
 
   return (
     <div className="space-y-4">
+      <FilterGroup title="Part type">
+        {([
+          ["GENUINE_OEM", "Genuine OEM"],
+          ["AFTERMARKET", "Aftermarket"],
+          ["SALVAGE_OEM", "Used original / salvage"],
+          ["REMANUFACTURED", "Remanufactured"],
+          ["REFURBISHED", "Refurbished"],
+        ] as const).map(([value, label]) => (
+          <FilterOption
+            key={value}
+            href={buildHref(params, { partType: params.partType === value ? undefined : value })}
+            active={params.partType === value}
+            label={label}
+          />
+        ))}
+      </FilterGroup>
       {categories.length > 0 && (
         <FilterGroup title="Category">
           {params.category && (

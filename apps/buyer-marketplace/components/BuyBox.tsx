@@ -307,6 +307,8 @@ function OfferRow({
 export function BuyBox({ part }: { part: Part }) {
   const offers = useMemo(() => [...(part.offers || [])].sort((a, b) => a.price - b.price), [part.offers]);
   const best = offers[0];
+  const partType = part.partType || best?.partType || (part.partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
+  const identityLabel = partType === "AFTERMARKET" ? "Aftermarket brand" : partType === "SALVAGE_OEM" ? "Original make" : "Genuine vehicle make";
 
   // Record this visit for the recently-viewed rail.
   useEffect(() => {
@@ -334,7 +336,7 @@ export function BuyBox({ part }: { part: Part }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-graphite-600">
           {part.brand && (
             <span>
-              Brand: <span className="font-medium text-slate-700">{part.brand}</span>
+              {identityLabel}: <span className="font-medium text-slate-700">{part.brand}</span>
             </span>
           )}
           {part.manufacturer && part.manufacturer !== part.brand && (
@@ -346,13 +348,13 @@ export function BuyBox({ part }: { part: Part }) {
       </div>
 
       {/* OE numbers */}
-      {part.oeNumbers && part.oeNumbers.length > 0 && (
+      {(part.manufacturerPartNumber || (part.oeNumbers && part.oeNumbers.length > 0)) && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-graphite-600">
-            OE / part number{part.oeNumbers.length > 1 ? "s" : ""}
+            {partType === "AFTERMARKET" ? "Brand part number" : "OEM part number"}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {part.oeNumbers.map((num) => (
+            {(part.manufacturerPartNumber ? [part.manufacturerPartNumber] : part.oeNumbers || []).map((num) => (
               <PartNumberChip key={num} value={num} />
             ))}
           </div>

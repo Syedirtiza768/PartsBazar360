@@ -25,6 +25,7 @@ interface SearchPageProps {
     q?: string;
     category?: string;
     brand?: string;
+    partType?: string;
     sort?: "newest" | "price_asc" | "price_desc";
     page?: string;
   }>;
@@ -39,6 +40,7 @@ async function getResults(
   if (params.q) qs.set("q", params.q);
   if (params.category) qs.set("category", params.category);
   if (params.brand) qs.set("brand", params.brand);
+  if (params.partType) qs.set("partType", params.partType);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
   qs.set("limit", String(PAGE_SIZE));
@@ -121,10 +123,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     q: params.q,
     category: params.category,
     brand: params.brand,
+    partType: params.partType,
     sort: params.sort,
   };
 
-  const activeFilterCount = [params.category, params.brand].filter(Boolean).length;
+  const activeFilterCount = [params.category, params.brand, params.partType].filter(Boolean).length;
   const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0);
 
   const heading = isFitmentMode

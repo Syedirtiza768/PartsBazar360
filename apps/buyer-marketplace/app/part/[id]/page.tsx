@@ -74,6 +74,12 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
   const images = part.imageUrls || [];
   const compatibleVehicles = part.compatibleVehicles || [];
   const compatibilityRows = part.compatibilityTable || part.compatibility || [];
+  const crossReferences = part.oemCrossReferences || [];
+  const crossReferencesByMake = crossReferences.reduce<Record<string, typeof crossReferences>>((groups, reference) => {
+    const key = reference.make || "Unresolved issuer";
+    (groups[key] ||= []).push(reference);
+    return groups;
+  }, {});
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -127,6 +133,29 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
 
         <div className="min-w-0 space-y-10">
           <CompatibilitySection rows={compatibilityRows} compatibleVehicles={compatibleVehicles} />
+
+          {crossReferences.length > 0 && (
+            <section aria-labelledby="cross-reference-heading">
+              <h2 id="cross-reference-heading" className="text-lg font-bold tracking-tight text-slate-900">
+                Replaces or cross-references these OEM numbers
+              </h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {Object.entries(crossReferencesByMake).map(([make, references]) => (
+                  <div key={make} className="border border-stone-200 bg-white p-4">
+                    <h3 className="text-sm font-bold text-slate-900">{make}</h3>
+                    <ul className="mt-2 space-y-1.5">
+                      {references.map((reference) => (
+                        <li key={`${make}-${reference.normalizedNumber}`} className="part-number text-sm text-slate-700">{reference.number}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-graphite-600">
+                An OEM-number cross-reference does not by itself confirm fitment for every vehicle configuration. Select your vehicle or ask the seller before ordering.
+              </p>
+            </section>
+          )}
 
           {/* Specifications */}
           <section aria-labelledby="specs-heading">

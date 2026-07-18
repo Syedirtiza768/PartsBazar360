@@ -46,6 +46,11 @@ export function ProductCard({
   const qualityTier =
     part.qualityTier || part.offers?.[0]?.condition || part.offers?.[0]?.qualityTier;
   const partSource = part.partSource || part.offers?.[0]?.partSource;
+  const partType = part.partType || part.offers?.[0]?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
+  const isAftermarket = partType === "AFTERMARKET";
+  const isSalvage = partType === "SALVAGE_OEM";
+  const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];
+  const identityNumber = part.manufacturerPartNumber || oeNumber;
 
   const vehicleName = activeVehicle ? vehicleShortLabel(activeVehicle) : null;
   const fitment =
@@ -99,11 +104,20 @@ export function ProductCard({
         </h3>
 
         <div className="mt-1.5 flex-1 space-y-1">
-          {oeNumber && (
+          {part.brand && (
+            <p className="text-xs text-graphite-600">
+              {isAftermarket ? "Brand" : isSalvage ? "Original make" : "Genuine make"}: <span className="font-semibold text-slate-700">{part.brand}</span>
+            </p>
+          )}
+          {identityNumber && (
             <p className="flex items-center gap-1 text-xs text-graphite-600">
               <TagIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="part-number truncate">{oeNumber}</span>
+              <span className="shrink-0">{isAftermarket ? "Brand part no." : "OEM no."}</span>
+              <span className="part-number truncate">{identityNumber}</span>
             </p>
+          )}
+          {isAftermarket && referenceMakes.length > 0 && (
+            <p className="truncate text-xs text-graphite-600">Replaces OEM numbers for: {referenceMakes.join(", ")}</p>
           )}
           {sellerName && (
             <p className="flex items-center gap-1 text-xs text-graphite-600">
