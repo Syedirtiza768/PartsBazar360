@@ -42,3 +42,47 @@ The supplied contract documents no separate compatibility endpoint. The detail p
 - OEM link: product + type + normalized number + issuer make/group.
 
 Zero stock remains zero. OEM cross-references remain searchable evidence and never create verified vehicle fitment by themselves.
+
+## Interchange (cross-reference) search: data and reindex
+
+Search matches interchange / analogue numbers by default so a superseded or cross-reference part number resolves to the part without the buyer knowing the term "interchange". A `?includeInterchange=false` query, or the buyer-facing toggle, restricts matching to the part's own primary identity numbers.
+
+This behaviour is **live in code but dormant until the search index carries the data.** Two conditions must both hold, and neither is done by deploying the code alone.
+
+### 1. Cross-reference data must exist in `CatalogPartNumber`
+
+Interchange numbers are `CatalogPartNumber` rows with `numberType = 'OEM_CROSS_REFERENCE'`. They are created only by the seller-upload / seed path (`uploads.service.ts`), from the OEM-reference columns of a workbook. Running `npm run seed:marketplace --workspace api` against sources that carry those columns populates them.
+
+Parts brought in through the RealTrack/eBay ingestion path (`ingestion.processor.ts`) do **not** currently receive cross-reference rows, and — see the known gap below — are not indexed with them either. A deployed index built only from ingestion therefore has no interchange data, which is the expected empty state, not a fault.
+
+### 2. The search index must be re-populated with the interchange field
+
+The index (`canonical_parts`) uses OpenSearch **dynamic mapping** — there is no explicit mapping or index template to migrate. The `interchangePartNumbers` field, and its `.keyword` sub-field, are created automatically the first time a document carrying the field is indexed. No mapping change or index recreation is required; only re-indexing documents that now carry the field.
+
+`indexPart` (in `opensearch.service.ts`) writes the field, splitting each part's `partNumbers` by role:
+
+- `normalizedPartNumbers` — primary identity only (everything except `OEM_CROSS_REFERENCE`); a match here is an exact-part match.
+- `interchangePartNumbers` — `OEM_CROSS_REFERENCE` only; a match here alone is reported as `matchedVia: "interchange"`.
+
+For the split to be non-empty, the object passed to `indexPart` must include a `partNumbers` array containing the `OEM_CROSS_REFERENCE` rows. The seller-upload path already does this; the ingestion path does not (see the gap below).
+
+There is **no standalone reindex command in the repo.** Two ways to re-populate:
+
+1. **Re-run the seed/upload.** `npm run seed:marketplace --workspace api` re-imports through `uploads.service.ts`, which re-indexes each affected part with its `partNumbers`. Sufficient when the affected parts come from seed/upload sources.
+2. **A one-off reindex over existing parts.** For parts already in the catalog that will not be re-imported, iterate `CanonicalPart` with its `partNumbers` relation and call `searchService.indexPart` per part, mapping each `CatalogPartNumber` into the `partNumbers` array (`displayNumber`, `normalizedNumber`, `numberType`). No such script exists yet; it must be written. It reuses the existing `indexPart` — no new index or mapping work.
+
+### Verifying it worked
+
+Interchange matching is not observable until both steps above are complete; against an unpopulated index the query is a no-op (matching an absent field yields no extra hits), which is why the code is safe to ship ahead of the data.
+
+Once populated, confirm end to end by searching a known `OEM_CROSS_REFERENCE` number that is **not** the part's own primary number:
+
+```
+GET /api/search/parts?q=<a-known-interchange-number>
+```
+
+The part should appear, and its result item should carry `matchedVia: "interchange"` and `matchedNumber: "<the-number>"`. Repeating with `&includeInterchange=false` should drop that hit. The buyer UI renders the `matchedVia` result as an "Interchange match" badge, and a part-number search that returns nothing routes to the sourcing flow.
+
+### Known gap: ingestion path does not index part numbers
+
+`ingestion.processor.ts` calls `indexPart` without a `partNumbers` array (it passes `oeNumbers` only). Parts ingested through RealTrack are therefore indexed with neither primary `normalizedPartNumbers` nor `interchangePartNumbers`, so interchange search cannot match them even after a reindex driven by that path. Closing this requires that call to load the part's `CatalogPartNumber` rows and pass them as `partNumbers`, the same shape `uploads.service.ts` already uses.
