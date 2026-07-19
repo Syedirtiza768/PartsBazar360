@@ -31,10 +31,11 @@ export class SearchController {
   ) {
     if (vehicleConfigId) {
       const items = await this.searchService.searchCompatibleParts(vehicleConfigId, q);
-      return { items, total: items.length, page: 1, limit: items.length || 1 };
+      const enriched = await this.febestWebsite.attachImagesToSearchItems(items);
+      return { items: enriched, total: enriched.length, page: 1, limit: enriched.length || 1 };
     }
 
-    return this.searchService.browseParts({
+    const result = await this.searchService.browseParts({
       q,
       category,
       brand,
@@ -44,6 +45,8 @@ export class SearchController {
       limit: limit ? Math.min(parseInt(limit, 10), 200) : 24,
       includeInterchange: includeInterchange !== 'false',
     });
+    result.items = await this.febestWebsite.attachImagesToSearchItems(result.items || []);
+    return result;
   }
 
   // Brand/category facets with counts, to power the browse-page filter sidebar.

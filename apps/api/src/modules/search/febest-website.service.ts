@@ -29,6 +29,16 @@ const USER_AGENT =
 @Injectable()
 export class FebestWebsiteService {
   private readonly logger = new Logger(FebestWebsiteService.name);
+  /** In-memory only — not Postgres. Speeds up search cards across requests. */
+  private readonly cache = new Map<
+    string,
+    { expiresAt: number; value: FebestLiveEnrichment | null }
+  >();
+  private readonly cacheTtlMs = Number(process.env.FEBEST_LIVE_CACHE_TTL_MS || 30 * 60 * 1000);
+  private readonly searchConcurrency = Math.max(
+    1,
+    Number(process.env.FEBEST_SEARCH_CONCURRENCY || 6),
+  );
 
   /** True when this catalog part should resolve media/fitment from febest.de live. */
   isFebestPart(part: {
@@ -63,35 +73,96 @@ export class FebestWebsiteService {
     return false;
   }
 
+  hasFebestImage(part: { imageUrls?: string[] | null }): boolean {
+    return (part.imageUrls || []).some((u) => String(u).includes('static.febest.de'));
+  }
+
   /**
-   * Live lookup only — never persists. Fetches catalog + details from febest.de
-   * for the given MPN and returns hotlinked images + compatibility rows.
+   * Attach live febest.de image URLs onto search/browse card payloads.
+   * Does not persist; uses a short in-memory cache so page flips stay fast.
+   * Skips compatibility expansion (PDP fetches that live separately).
    */
-  async fetchLiveByMpn(mpn: string): Promise<FebestLiveEnrichment | null> {
+  async attachImagesToSearchItems<T extends Record<string, any>>(items: T[]): Promise<T[]> {
+    if (!items?.length) return items;
+
+    const targets = items.filter(
+      (item) =>
+        this.isFebestPart(item) &&
+        item.manufacturerPartNumber &&
+        !this.hasFebestImage(item),
+    );
+    if (targets.length === 0) return items;
+
+    const byMpn = new Map<string, T[]>();
+    for (const item of targets) {
+      const mpn = String(item.manufacturerPartNumber).trim().toUpperCase();
+      const list = byMpn.get(mpn) || [];
+      list.push(item);
+      byMpn.set(mpn, list);
+    }
+
+    const mpns = [...byMpn.keys()];
+    await this.mapPool(mpns, this.searchConcurrency, async (mpn) => {
+      const live = await this.fetchLiveByMpn(mpn, { includeCompatibility: false });
+      if (!live?.imageUrls?.length) return;
+      for (const item of byMpn.get(mpn) || []) {
+        item.imageUrls = live.imageUrls;
+        item.listingUrl = live.detailsUrl;
+        item.enrichmentSource = 'febest.de';
+      }
+    });
+
+    return items;
+  }
+
+  /**
+   * Live lookup only — never persists to Postgres. Fetches catalog + details
+   * from febest.de for the given MPN and returns hotlinked images (+ optional compatibility).
+   */
+  async fetchLiveByMpn(
+    mpn: string,
+    options?: { includeCompatibility?: boolean },
+  ): Promise<FebestLiveEnrichment | null> {
     const code = String(mpn || '').trim();
     if (!code) return null;
+
+    const includeCompatibility = options?.includeCompatibility !== false;
+    const cacheKey = `${code.toUpperCase()}:${includeCompatibility ? 'full' : 'images'}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
 
     try {
       const catalogUrl = `${BASE}/en/catalog?code=${encodeURIComponent(code)}`;
       const catalogHtml = await this.fetchText(catalogUrl);
-      if (!catalogHtml) return null;
+      if (!catalogHtml) {
+        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
+        return null;
+      }
 
       const detailsPath = this.findDetailsPath(catalogHtml, code);
       if (!detailsPath) {
         this.logger.warn(`FEBEST details not found for ${code}`);
+        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
         return null;
       }
 
       const detailsUrl = `${BASE}${detailsPath}`;
       const detailsHtml = await this.fetchText(detailsUrl);
-      if (!detailsHtml) return null;
+      if (!detailsHtml) {
+        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
+        return null;
+      }
 
       const imageUrls = this.parseImages(detailsHtml);
-      const oemNumbers = this.parseOemOptions(detailsHtml);
-      const models = this.parseModelOptions(detailsHtml);
-      const compatibility = this.buildCompatibilityRows(models);
+      const oemNumbers = includeCompatibility ? this.parseOemOptions(detailsHtml) : [];
+      const models = includeCompatibility ? this.parseModelOptions(detailsHtml) : [];
+      const compatibility = includeCompatibility
+        ? this.buildCompatibilityRows(models)
+        : [];
 
-      return {
+      const value: FebestLiveEnrichment = {
         code,
         detailsUrl,
         imageUrls,
@@ -101,15 +172,35 @@ export class FebestWebsiteService {
         source: 'febest.de',
         fetchedAt: new Date().toISOString(),
       };
+      this.cache.set(cacheKey, {
+        expiresAt: Date.now() + this.cacheTtlMs,
+        value,
+      });
+      return value;
     } catch (err: any) {
       this.logger.warn(`FEBEST live fetch failed for ${code}: ${err?.message || err}`);
       return null;
     }
   }
 
+  private async mapPool<T>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T) => Promise<void>,
+  ) {
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        await worker(items[idx]);
+      }
+    });
+    await Promise.all(runners);
+  }
+
   private async fetchText(url: string): Promise<string | null> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    const timer = setTimeout(() => controller.abort(), 8_000);
     try {
       const res = await fetch(url, {
         headers: {

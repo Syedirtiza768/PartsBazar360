@@ -102,13 +102,11 @@ The part should appear, and its result item should carry `matchedVia: "interchan
 
 Interchange (`OEM_CROSS_REFERENCE`) search for ingested parts remains inactive for a data reason, not a code one: the RealTrack/eBay feed carries no cross-reference numbers, and ingestion creates no `CatalogPartNumber` rows. Populating them needs a cross-reference source (a supplier interchange table, or an enrichment step that writes `OEM_CROSS_REFERENCE` rows for ingested parts); once those exist and are passed through `partNumbers`, `indexPart` already routes them into `interchangePartNumbers`. Seller-uploaded parts, whose workbooks carry OEM-reference columns, already populate both sides.
 
-## FEBEST website enrichment (live PDP only)
+## FEBEST website enrichment (live only)
 
-FEBEST product images and compatibility are resolved **in real time** when a buyer opens a part detail page (`GET /api/search/parts/:id`):
+FEBEST product images and compatibility are resolved **live from febest.de** (not written to Postgres):
 
-1. Detect FEBEST parts (brand / FEBEST supplier offer + MPN)
-2. Live lookup: `https://febest.de/en/catalog?code={MPN}` → details page
-3. Return hotlinked `static.febest.de` image URLs + compatibility rows with `source: febest.de`
-4. **Nothing is written** to Postgres for this path (`enrichmentLive: true` on the response)
+1. **Search / browse cards** — `GET /api/search/parts` attaches hotlinked `static.febest.de` image URLs for FEBEST hits on the current page (parallel lookup, short in-memory cache). Compatibility is not fetched for cards.
+2. **Product detail** — `GET /api/search/parts/:id` fetches images + compatibility for that one part (`enrichmentLive: true`, `source: febest.de`).
 
-Search result cards do not pre-fetch febest media. The optional offline script `apps/api/scripts/enrich-febest-from-website.mjs` is retained for one-off backfills only and should not be used as the default path.
+Detection: brand FEBEST and/or FEBEST supplier offer + MPN. The offline script `apps/api/scripts/enrich-febest-from-website.mjs` is optional backfill only.
