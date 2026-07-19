@@ -33,11 +33,23 @@ export class FebestWebsiteService {
   /** True when this catalog part should resolve media/fitment from febest.de live. */
   isFebestPart(part: {
     brand?: string | null;
-    primaryBrand?: { name?: string | null } | null;
+    primaryBrand?: {
+      name?: string | null;
+      displayName?: string | null;
+      canonicalName?: string | null;
+    } | null;
     manufacturerPartNumber?: string | null;
     offers?: Array<{ sellerId?: string | null; seller?: { name?: string | null } | null }>;
   }): boolean {
-    const brand = (part.brand || part.primaryBrand?.name || '').trim().toUpperCase();
+    const brand = (
+      part.brand ||
+      part.primaryBrand?.name ||
+      part.primaryBrand?.displayName ||
+      part.primaryBrand?.canonicalName ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
     if (brand === 'FEBEST') return Boolean(part.manufacturerPartNumber);
     if (
       (part.offers || []).some(

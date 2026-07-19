@@ -170,7 +170,23 @@ export class SearchController {
 
     // FEBEST: resolve images + compatibility live from febest.de for this PDP
     // load only. Hotlink static.febest.de URLs; do not write to Postgres.
-    if (this.febestWebsite.isFebestPart(part) && part.manufacturerPartNumber) {
+    if (
+      this.febestWebsite.isFebestPart({
+        brand: part.brand,
+        primaryBrand: part.primaryBrand
+          ? {
+              displayName: part.primaryBrand.displayName,
+              canonicalName: part.primaryBrand.canonicalName,
+            }
+          : null,
+        manufacturerPartNumber: part.manufacturerPartNumber,
+        offers: part.offers.map((o) => ({
+          sellerId: o.sellerId,
+          seller: o.seller ? { name: o.seller.name } : null,
+        })),
+      }) &&
+      part.manufacturerPartNumber
+    ) {
       const live = await this.febestWebsite.fetchLiveByMpn(part.manufacturerPartNumber);
       if (live) {
         enrichmentSource = 'febest.de';
