@@ -20,11 +20,15 @@ ENV NODE_ENV=production
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/catalog-contracts ./packages/catalog-contracts
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/prisma.config.ts ./
 COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/docker-entrypoint.sh ./
-RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh \
+  && mkdir -p node_modules/@repo \
+  && rm -rf node_modules/@repo/catalog-contracts \
+  && ln -s /app/packages/catalog-contracts node_modules/@repo/catalog-contracts
 EXPOSE 3001
 CMD ["./docker-entrypoint.sh"]
