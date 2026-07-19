@@ -18,6 +18,7 @@ ARG APP_NAME
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build --workspace=@repo/catalog-contracts
 RUN npm run build --workspace=${APP_NAME}
 
 FROM base AS runner
