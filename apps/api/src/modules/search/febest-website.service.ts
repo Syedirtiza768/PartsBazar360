@@ -93,7 +93,7 @@ export class FebestWebsiteService {
     );
     if (targets.length === 0) return items;
 
-    const byMpn = new Map<string, T[]>();
+    const byMpn = new Map<string, Array<Record<string, any>>>();
     for (const item of targets) {
       const mpn = String(item.manufacturerPartNumber).trim().toUpperCase();
       const list = byMpn.get(mpn) || [];
