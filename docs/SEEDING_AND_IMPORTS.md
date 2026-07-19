@@ -102,20 +102,13 @@ The part should appear, and its result item should carry `matchedVia: "interchan
 
 Interchange (`OEM_CROSS_REFERENCE`) search for ingested parts remains inactive for a data reason, not a code one: the RealTrack/eBay feed carries no cross-reference numbers, and ingestion creates no `CatalogPartNumber` rows. Populating them needs a cross-reference source (a supplier interchange table, or an enrichment step that writes `OEM_CROSS_REFERENCE` rows for ingested parts); once those exist and are passed through `partNumbers`, `indexPart` already routes them into `interchangePartNumbers`. Seller-uploaded parts, whose workbooks carry OEM-reference columns, already populate both sides.
 
-## FEBEST website enrichment
+## FEBEST website enrichment (live PDP only)
 
-`apps/api/scripts/enrich-febest-from-website.mjs` scrapes [febest.de](https://febest.de) for each FEBEST MPN:
+FEBEST product images and compatibility are resolved **in real time** when a buyer opens a part detail page (`GET /api/search/parts/:id`):
 
-1. `GET /en/catalog?code={MPN}` → details URL
-2. Details page → images (`static.febest.de`), OEM refs, compatible models
-3. Writes `CanonicalPart.imageUrls` / `listingUrl` / `compatibility`, `ProductMedia`, `OEM_CROSS_REFERENCE` numbers, then reindexes OpenSearch
+1. Detect FEBEST parts (brand / FEBEST supplier offer + MPN)
+2. Live lookup: `https://febest.de/en/catalog?code={MPN}` → details page
+3. Return hotlinked `static.febest.de` image URLs + compatibility rows with `source: febest.de`
+4. **Nothing is written** to Postgres for this path (`enrichmentLive: true` on the response)
 
-Compatibility is **catalog-declared** (`fitmentStatus = NOT_VERIFIED`, flag `FEBEST_WEBSITE_DECLARED`) — not verified A/B fitment.
-
-```bash
-# inside API container
-node /app/scripts/enrich-febest-from-website.mjs
-FEBEST_LIMIT=10 FEBEST_CONCURRENCY=2 node /app/scripts/enrich-febest-from-website.mjs
-```
-
-Resume is driven by existing febest images + expanded year rows. Server progress log: `/home/ubuntu/febest-enrich.log`.
+Search result cards do not pre-fetch febest media. The optional offline script `apps/api/scripts/enrich-febest-from-website.mjs` is retained for one-off backfills only and should not be used as the default path.

@@ -1,12 +1,14 @@
 import { Controller, Get, Param, Query, NotFoundException } from '@nestjs/common';
 import { OpenSearchService } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
+import { FebestWebsiteService } from './febest-website.service';
 
 @Controller('search')
 export class SearchController {
   constructor(
     private readonly searchService: OpenSearchService,
     private readonly prisma: PrismaService,
+    private readonly febestWebsite: FebestWebsiteService,
   ) {}
 
   // Fitment-first search when a vehicleConfigId is provided; otherwise falls
@@ -111,6 +113,7 @@ export class SearchController {
 
     // eBay-style per-year compatibility rows for the product page table.
     // Prefer stored compatibility JSON; fall back to expanding fitment year ranges.
+    // FEBEST parts override this with a live febest.de lookup (not persisted).
     let compatibilityTable: Array<{
       year: number | string;
       make: string;
@@ -149,22 +152,72 @@ export class SearchController {
 
     // Upgrade any remaining thumbnail URLs for display
     const sourceImages = part.media.length > 0 ? part.media.map((media) => media.url) : part.imageUrls || [];
-    const imageUrls = sourceImages.map((url: string) =>
+    let imageUrls = sourceImages.map((url: string) =>
       url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1'),
     );
 
-    return {
-      ...part,
-      imageUrls,
-      compatibleVehicles,
-      compatibility: compatibilityTable,
-      compatibilityTable,
-      oemCrossReferences: part.partNumbers.filter((number) => number.numberType === 'OEM_CROSS_REFERENCE').map((number) => ({
+    let listingUrl = part.listingUrl;
+    let oemCrossReferences = part.partNumbers
+      .filter((number) => number.numberType === 'OEM_CROSS_REFERENCE')
+      .map((number) => ({
         number: number.displayNumber,
         normalizedNumber: number.normalizedNumber,
         make: number.vehicleMake?.displayName || number.vehicleMake?.name || null,
         verificationStatus: number.verificationStatus,
-      })),
+      }));
+    let enrichmentSource: string | null = null;
+    let enrichmentLive = false;
+
+    // FEBEST: resolve images + compatibility live from febest.de for this PDP
+    // load only. Hotlink static.febest.de URLs; do not write to Postgres.
+    if (this.febestWebsite.isFebestPart(part) && part.manufacturerPartNumber) {
+      const live = await this.febestWebsite.fetchLiveByMpn(part.manufacturerPartNumber);
+      if (live) {
+        enrichmentSource = 'febest.de';
+        enrichmentLive = true;
+        listingUrl = live.detailsUrl;
+        if (live.imageUrls.length > 0) {
+          imageUrls = live.imageUrls;
+        }
+        if (live.compatibility.length > 0) {
+          compatibilityTable = live.compatibility.map((row) => ({
+            year: row.year,
+            make: row.make,
+            model: row.model,
+            trim: row.trim,
+            engine: row.engine,
+            source: row.source,
+          }));
+        }
+        if (live.oemNumbers.length > 0) {
+          const existing = new Set(oemCrossReferences.map((r) => r.normalizedNumber));
+          for (const oem of live.oemNumbers) {
+            const normalizedNumber = oem.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!normalizedNumber || existing.has(normalizedNumber)) continue;
+            existing.add(normalizedNumber);
+            oemCrossReferences.push({
+              number: oem,
+              normalizedNumber,
+              make: null,
+              verificationStatus: 'CATALOG_DECLARED',
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      ...part,
+      // Strip stored compatibility from the FEBEST live path so the client
+      // never treats DB cache as authoritative for these parts.
+      compatibility: compatibilityTable,
+      imageUrls,
+      listingUrl,
+      compatibleVehicles,
+      compatibilityTable,
+      oemCrossReferences,
+      enrichmentSource,
+      enrichmentLive,
       salvageUnits: (part.salvageUnits?.length
         ? part.salvageUnits
         : part.offers.flatMap((offer) => offer.salvageUnits || [])
