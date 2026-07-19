@@ -26,6 +26,7 @@ COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/prisma.config.ts ./
 COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/apps/api/scripts ./scripts
 COPY --from=builder /app/apps/api/docker-entrypoint.sh ./
 RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh \
   && mkdir -p node_modules/@repo \

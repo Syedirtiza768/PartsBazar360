@@ -101,3 +101,21 @@ The part should appear, and its result item should carry `matchedVia: "interchan
 `ingestion.processor.ts` now builds a `partNumbers` array for `indexPart` from the part's OE numbers (`canonicalPart.oeNumbers`), each entry typed `OEM` with `normalizedNumber = normalizePartNumber(oe)` — the same normalization the query uses. Ingested parts are therefore exact-matchable by a normalized OE number (the `normalizedPartNumbers.keyword` term clause), not only through the fuzzy `oeNumbers` multi_match, so formatting variants like `4g0-867-409` resolve the part. This takes effect on the next reindex/re-ingest (dynamic mapping; no mapping change).
 
 Interchange (`OEM_CROSS_REFERENCE`) search for ingested parts remains inactive for a data reason, not a code one: the RealTrack/eBay feed carries no cross-reference numbers, and ingestion creates no `CatalogPartNumber` rows. Populating them needs a cross-reference source (a supplier interchange table, or an enrichment step that writes `OEM_CROSS_REFERENCE` rows for ingested parts); once those exist and are passed through `partNumbers`, `indexPart` already routes them into `interchangePartNumbers`. Seller-uploaded parts, whose workbooks carry OEM-reference columns, already populate both sides.
+
+## FEBEST website enrichment
+
+`apps/api/scripts/enrich-febest-from-website.mjs` scrapes [febest.de](https://febest.de) for each FEBEST MPN:
+
+1. `GET /en/catalog?code={MPN}` → details URL
+2. Details page → images (`static.febest.de`), OEM refs, compatible models
+3. Writes `CanonicalPart.imageUrls` / `listingUrl` / `compatibility`, `ProductMedia`, `OEM_CROSS_REFERENCE` numbers, then reindexes OpenSearch
+
+Compatibility is **catalog-declared** (`fitmentStatus = NOT_VERIFIED`, flag `FEBEST_WEBSITE_DECLARED`) — not verified A/B fitment.
+
+```bash
+# inside API container
+node /app/scripts/enrich-febest-from-website.mjs
+FEBEST_LIMIT=10 FEBEST_CONCURRENCY=2 node /app/scripts/enrich-febest-from-website.mjs
+```
+
+Resume is driven by existing febest images + expanded year rows. Server progress log: `/home/ubuntu/febest-enrich.log`.

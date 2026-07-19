@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed:marketplace": "ts-node seed-marketplace.ts"
+    "seed:marketplace": "ts-node seed-marketplace.ts",
+    "enrich:febest": "node scripts/enrich-febest-from-website.mjs"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
