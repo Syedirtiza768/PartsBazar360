@@ -120,27 +120,28 @@ async function main() {
     const ebayItemId = payload?.ebayItemId;
     const listingUrl = payload?.listingUrl;
 
-    let canonicalPart = null;
+    let canonicalPartId: string | null = null;
     if (ebayItemId) {
-      canonicalPart = await prisma.canonicalPart.findFirst({
+      const found = await prisma.canonicalPart.findFirst({
         where: { ebayItemId },
         select: { id: true },
       });
+      if (found) canonicalPartId = found.id;
     }
-    if (!canonicalPart && listingUrl) {
-      canonicalPart = await prisma.canonicalPart.findFirst({
+    if (!canonicalPartId && listingUrl) {
+      const found = await prisma.canonicalPart.findFirst({
         where: { listingUrl },
         select: { id: true },
       });
+      if (found) canonicalPartId = found.id;
     }
-    if (!canonicalPart) {
-      // Try matching by title + seller offer
+    if (!canonicalPartId) {
       skipped++;
       continue;
     }
 
     await prisma.canonicalPart.update({
-      where: { id: canonicalPart.id },
+      where: { id: canonicalPartId },
       data: { compatibility: compat as any },
     });
     updated++;
