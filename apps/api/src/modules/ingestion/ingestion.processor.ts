@@ -340,6 +340,12 @@ export class IngestionProcessor extends WorkerHost {
     }
 
     let fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
+    // eBay catalog compatibility (compatibleProducts) is more reliable than title-only.
+    const hasCatalogCompat = compatibility.some((r) => r.source === 'ebay');
+    const evidenceLevel = hasCatalogCompat ? 'B' : 'D';
+    const confidence = hasCatalogCompat ? 0.9 : 0.4;
+    const reviewer = hasCatalogCompat ? 'Auto (eBay catalog)' : 'Auto (title-inferred)';
+
     if (parsedVehicle) {
       const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
       const fitment = await this.prisma.fitment.upsert({
@@ -349,16 +355,58 @@ export class IngestionProcessor extends WorkerHost {
             vehicleConfigId: vehicleConfig.id,
           },
         },
-        update: {},
+        update: { evidenceLevel, confidence, reviewer },
         create: {
           canonicalPartId: canonicalPart.id,
           vehicleConfigId: vehicleConfig.id,
-          evidenceLevel: 'D',
-          confidence: 0.4,
-          reviewer: 'Auto (title-inferred)',
+          evidenceLevel,
+          confidence,
+          reviewer,
         },
       });
-      fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel: 'D', confidence: 0.4 }];
+      fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence }];
+    } else if (hasCatalogCompat) {
+      // No title-parsed vehicle, but we have eBay catalog compatibility.
+      // Create fitments from the unique make/model/year ranges in compatibility rows.
+      const uniqueVehicles = new Map<string, { make: string; model: string; startYear: number; endYear: number }>();
+      for (const row of compatibility) {
+        if (row.source !== 'ebay' || !row.make || row.make === '-' || !row.model || row.model === '-') continue;
+        const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+        if (isNaN(year)) continue;
+        const key = `${row.make}|${row.model}`.toLowerCase();
+        const existing = uniqueVehicles.get(key);
+        if (existing) {
+          existing.startYear = Math.min(existing.startYear, year);
+          existing.endYear = Math.max(existing.endYear, year);
+        } else {
+          uniqueVehicles.set(key, { make: row.make, model: row.model, startYear: year, endYear: year });
+        }
+      }
+      for (const vehicle of uniqueVehicles.values()) {
+        const vehicleConfig = await this.findOrCreateVehicleConfig({
+          make: vehicle.make,
+          model: vehicle.model,
+          startYear: vehicle.startYear,
+          endYear: vehicle.endYear,
+        } as any);
+        const fitment = await this.prisma.fitment.upsert({
+          where: {
+            canonicalPartId_vehicleConfigId: {
+              canonicalPartId: canonicalPart.id,
+              vehicleConfigId: vehicleConfig.id,
+            },
+          },
+          update: { evidenceLevel, confidence, reviewer },
+          create: {
+            canonicalPartId: canonicalPart.id,
+            vehicleConfigId: vehicleConfig.id,
+            evidenceLevel,
+            confidence,
+            reviewer,
+          },
+        });
+        fitments.push({ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence });
+      }
     }
 
     await this.searchService.indexPart({
