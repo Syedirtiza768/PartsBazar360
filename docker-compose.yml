@@ -60,6 +60,9 @@ services:
       OPENSEARCH_URL: http://opensearch:9200
       PORT: 3001
       CORS_ORIGIN: https://partsbazar360.realtrackapp.com
+      REALTRACK_API_URL: https://mhn.realtrackapp.com/api
+      REALTRACK_API_EMAIL: api-published-listings@realtrack.local
+      REALTRACK_API_PASSWORD: Ebay$321
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
       interval: 10s
