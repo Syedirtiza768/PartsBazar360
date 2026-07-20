@@ -87,16 +87,16 @@ export class RealTrackService {
     this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit}, storeSlug: ${storeSlug || storeId || 'all'}, marketplaceId: ${marketplaceId || 'all'})`);
 
     try {
-      const url = new URL(`${this.baseUrl}/published-listings`);
-      url.searchParams.append('page', page.toString());
-      url.searchParams.append('limit', limit.toString());
-      if (storeSlug) url.searchParams.append('storeSlug', storeSlug);
-      else if (storeId) url.searchParams.append('storeId', storeId);
-      if (marketplaceId) url.searchParams.append('marketplaceId', marketplaceId);
-      if (status) url.searchParams.append('status', status);
-      if (search) url.searchParams.append('search', search);
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+      if (storeSlug) params.append('storeSlug', storeSlug);
+      else if (storeId) params.append('storeId', storeId);
+      if (marketplaceId) params.append('marketplaceId', marketplaceId);
+      if (status) params.append('status', status);
+      if (search) params.append('search', search);
 
-      const data = await this.requestJson(`${url.pathname}${url.search}`);
+      const data = await this.requestJson(`/published-listings?${params.toString()}`);
       return {
         items: data.items || [],
         total: data.total || 0,
