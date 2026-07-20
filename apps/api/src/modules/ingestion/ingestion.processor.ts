@@ -72,8 +72,7 @@ export class IngestionProcessor extends WorkerHost {
         page,
         limit: Math.min(200, remaining),
         storeId: canonicalStoreId,
-        storeSlug: target.storeSlug || undefined,
-        status: 'ACTIVE',
+        // Do not pass storeSlug when storeId is known — SalvageA slug can return empty.
       });
       if (result.items.length === 0) break;
       discovered += result.items.length;
@@ -112,7 +111,6 @@ export class IngestionProcessor extends WorkerHost {
         page: startPage,
         limit: 200,
         storeId: canonicalStoreId,
-        storeSlug: target.storeSlug || undefined,
       });
 
       if (result.items.length === 0) {

@@ -36,7 +36,8 @@ export const MARKETPLACE_SELLERS: Record<MarketplaceSellerKey, MarketplaceSeller
     id: 'seller-salvage-auto-parts',
     name: 'Salvage Auto Parts',
     storeId: SALVAGE_STORE_ID,
-    storeSlug: 'salvagea',
+    // storeSlug 'salvagea' currently returns empty from RealTrack; use storeId only.
+    storeSlug: null,
     sourcePlatform: 'EBAY_REALTRACK',
     externalAccountId: SALVAGE_STORE_ID,
   },

@@ -10,13 +10,13 @@ describe('marketplace store isolation', () => {
   it('maps Salvage and Blackline to distinct RealTrack store IDs', () => {
     expect(MARKETPLACE_SELLERS.salvage.storeId).toBe(SALVAGE_STORE_ID);
     expect(MARKETPLACE_SELLERS.blackline.storeId).toBe(BLACKLINE_STORE_ID);
-    expect(MARKETPLACE_SELLERS.salvage.storeSlug).toBe('salvagea');
+    expect(MARKETPLACE_SELLERS.salvage.storeSlug).toBeNull();
     expect(MARKETPLACE_SELLERS.blackline.storeSlug).toBe('blacklineusedautoparts');
     expect(SALVAGE_STORE_ID).not.toBe(BLACKLINE_STORE_ID);
   });
 
   it('resolves sync targets without cross-assigning stores', () => {
-    const salvage = resolveRealTrackSyncTarget({ storeSlug: 'salvagea' });
+    const salvage = resolveRealTrackSyncTarget({ storeId: SALVAGE_STORE_ID });
     const blackline = resolveRealTrackSyncTarget({ storeSlug: 'blacklineusedautoparts' });
     expect(salvage.name).toBe('Salvage Auto Parts');
     expect(blackline.name).toBe('Blackline Auto Parts');

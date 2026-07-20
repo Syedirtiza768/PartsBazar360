@@ -21,6 +21,7 @@
     "seed:marketplace": "node dist/src/seed-marketplace.cli.js",
     "seed:marketplace:dev": "ts-node seed-marketplace.ts",
     "seed:cleanup-auth": "node dist/src/seed-cleanup-auth.cli.js",
+    "seed:realtrack-dynatrade": "node dist/src/seed-realtrack-dynatrade.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs"
   },
   "dependencies": {

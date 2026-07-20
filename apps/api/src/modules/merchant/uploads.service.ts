@@ -221,11 +221,14 @@ export class MerchantUploadsService {
       return existingJob;
     }
 
+    const sanitizeHeaders = (headers: string[]) =>
+      headers.map((header, index) => (header && header.trim() ? header : `column_${index + 1}`));
+
     const detection = {
       sheets: parsedSheets.map((sheet) => ({
         sheet: sheet.sheetName,
         template: sheet.template,
-        headers: sheet.headers,
+        headers: sanitizeHeaders(sheet.headers),
         rowCount: sheet.rows.length,
         suggestedDefaults: sheet.suggestedDefaults,
       })),
@@ -250,7 +253,11 @@ export class MerchantUploadsService {
         commitMode,
         catalogType: opts.catalogType || (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' || parsedSheets[0]?.template === 'DYNATRADE_STOCK' ? 'AFTERMARKET' : parsedSheets[0]?.template === 'DXB_EXW' ? 'MIXED' : null),
         detection,
-        mapping: parsedSheets.map((sheet) => ({ sheet: sheet.sheetName, template: sheet.template, headers: sheet.headers })),
+        mapping: parsedSheets.map((sheet) => ({
+          sheet: sheet.sheetName,
+          template: sheet.template,
+          headers: sanitizeHeaders(sheet.headers),
+        })),
       },
     });
 

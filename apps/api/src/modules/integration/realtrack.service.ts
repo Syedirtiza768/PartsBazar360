@@ -84,17 +84,20 @@ export class RealTrackService {
 
     const { page = 1, limit = 200, storeId, storeSlug, marketplaceId, status, search } = options;
 
-    this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit}, storeSlug: ${storeSlug || storeId || 'all'}, marketplaceId: ${marketplaceId || 'all'})`);
-
     try {
       const params = new URLSearchParams();
       params.append('page', page.toString());
       params.append('limit', limit.toString());
-      if (storeSlug) params.append('storeSlug', storeSlug);
-      else if (storeId) params.append('storeId', storeId);
+      // Prefer storeId: SalvageA's storeSlug can return empty while storeId works.
+      if (storeId) params.append('storeId', storeId);
+      else if (storeSlug) params.append('storeSlug', storeSlug);
       if (marketplaceId) params.append('marketplaceId', marketplaceId);
       if (status) params.append('status', status);
       if (search) params.append('search', search);
+
+      this.logger.log(
+        `Fetching RealTrack listings page ${page} (limit: ${limit}, filter: ${storeId ? `storeId=${storeId}` : storeSlug ? `storeSlug=${storeSlug}` : 'all'}, marketplaceId: ${marketplaceId || 'all'})`,
+      );
 
       const data = await this.requestJson(`/published-listings?${params.toString()}`);
       return {

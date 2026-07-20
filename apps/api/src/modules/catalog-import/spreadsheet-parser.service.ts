@@ -113,7 +113,10 @@ export class SpreadsheetParserService {
         if (score > bestScore) { bestScore = score; headerRowNumber = rowNumber; }
       }
 
-      const headers = (sheet.getRow(headerRowNumber).values as CellValue[]).slice(1).map(cellText);
+      const headerCells = (sheet.getRow(headerRowNumber).values as CellValue[]).slice(1);
+      // Densify sparse ExcelJS rows so empty columns become '' (not holes/undefined).
+      const colCount = Math.max(headerCells.length, sheet.actualColumnCount || 0, 1);
+      const headers = Array.from({ length: colCount }, (_, i) => cellText(headerCells[i] ?? null));
       const template = detectTemplate(headers);
       const rows: ParsedWorkbookRow[] = [];
       for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.actualRowCount; rowNumber++) {
