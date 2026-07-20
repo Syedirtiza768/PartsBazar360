@@ -2,17 +2,18 @@ import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './src/app.module';
-import { PrismaService } from './src/prisma.service';
-import { MerchantUploadsService } from './src/modules/merchant/uploads.service';
-import { IngestionProcessor } from './src/modules/ingestion/ingestion.processor';
-import { AuthService } from './src/modules/auth/auth.service';
-import { enabled, listingLimit, storeManifest } from './src/modules/seed/seed.config';
+import { AppModule } from './app.module';
+import { PrismaService } from './prisma.service';
+import { MerchantUploadsService } from './modules/merchant/uploads.service';
+import { IngestionProcessor } from './modules/ingestion/ingestion.processor';
+import { AuthService } from './modules/auth/auth.service';
+import { enabled, listingLimit, storeManifest } from './modules/seed/seed.config';
 import {
   MARKETPLACE_ORG,
   MARKETPLACE_SELLERS,
   REALTRACK_MARKETPLACE_SELLERS,
-} from './src/modules/seed/marketplace-sellers.config';
+} from './modules/seed/marketplace-sellers.config';
+import { deactivateLegacySellers } from './modules/seed/deactivate-legacy-sellers';
 
 async function ensureSeller(
   prisma: PrismaService,
@@ -111,7 +112,7 @@ async function main() {
       },
     });
 
-    // ── Three marketplace sellers ──────────────────────────────────────
+    const sellerByKey: Record<string, { id: string; name: string; storeId: string | null }> = {};
     for (const cfg of Object.values(MARKETPLACE_SELLERS)) {
       const seller = await ensureSeller(prisma, org.id, {
         id: cfg.id,
@@ -120,6 +121,7 @@ async function main() {
         sourcePlatform: cfg.sourcePlatform,
         externalId: cfg.externalAccountId,
       });
+      sellerByKey[cfg.key] = { id: seller.id, name: seller.name, storeId: seller.storeId };
       report.sellers.push({
         id: seller.id,
         name: seller.name,
@@ -128,10 +130,15 @@ async function main() {
       });
     }
 
-    // ── RealTrack: Salvage ← Salvage store only; Blackline ← Blackline only ──
+    // Suspend every seller outside Salvage / Blackline / Superior
+    if (enabled('SEED_DEACTIVATE_LEGACY_SELLERS', true)) {
+      report.deactivated = await deactivateLegacySellers(prisma);
+    }
+
+    // RealTrack: Salvage ← salvagea only; Blackline ← blacklineusedautoparts only
     if (enabled('SEED_EBAY_STORES', true)) {
       for (const store of storeManifest()) {
-        const allowed = REALTRACK_MARKETPLACE_SELLERS.some((s) => s.storeId === store.storeId);
+        const allowed = REALTRACK_MARKETPLACE_SELLERS.find((s) => s.storeId === store.storeId);
         if (!allowed) {
           report.errors.push({
             source: store.name,
@@ -141,7 +148,11 @@ async function main() {
         }
         try {
           report.ebaySources.push(
-            await ingestion.syncStoreComplete(store.storeId, listingLimit()),
+            await ingestion.syncStoreComplete(
+              store.storeId,
+              listingLimit(),
+              allowed.storeSlug || undefined,
+            ),
           );
         } catch (error) {
           report.errors.push({
@@ -152,9 +163,9 @@ async function main() {
       }
     }
 
-    // ── Superior Auto Parts: spreadsheet catalogs ──────────────────────
+    // Superior Auto Parts: spreadsheet catalogs
     if (enabled('SEED_SPREADSHEET_SELLERS', true)) {
-      const superior = MARKETPLACE_SELLERS.superior;
+      const superior = sellerByKey.superior;
       const spreadsheetFiles = [
         {
           env: 'SEED_FEBEST_FILE',
@@ -166,14 +177,14 @@ async function main() {
         {
           env: 'SEED_DXB_FILE',
           label: 'DXB-EXW',
-          brand: undefined,
+          brand: undefined as string | undefined,
           currency: 'AED',
           partSource: 'MIXED',
         },
         {
           env: 'SEED_DYNATRADE_FILE',
           label: 'Dynatrade Stock List',
-          brand: undefined,
+          brand: undefined as string | undefined,
           currency: process.env.SEED_DYNATRADE_CURRENCY || 'AED',
           partSource: 'AFTERMARKET',
         },
@@ -214,7 +225,6 @@ async function main() {
       }
     }
 
-    // ── Auth: 3 logins per seller + 1 admin ────────────────────────────
     if (enabled('SEED_AUTH_USERS', true)) {
       report.authUsers = await auth.seedMarketplaceUsers();
     }

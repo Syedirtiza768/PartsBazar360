@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Workbook, type CellValue } from 'exceljs';
 
-export type ImportTemplate = 'DXB_EXW' | 'FEBEST_AVAILABILITY' | 'GENERIC';
+export type ImportTemplate = 'DXB_EXW' | 'FEBEST_AVAILABILITY' | 'DYNATRADE_STOCK' | 'GENERIC';
 
 export interface ParsedWorkbookRow {
   rowNumber: number;
@@ -19,13 +19,17 @@ export interface ParsedWorkbook {
 }
 
 const FIELD_ALIASES: Record<string, string> = {
-  title: 'title', name: 'title', description: 'description',
+  title: 'title', name: 'title', description: 'description', partdescription: 'description',
   code: 'sourceCode', sku: 'sku', customlabel: 'sku', customlabelsku: 'sku',
-  brand: 'brand', reference: 'manufacturerPartNumber', partnumber: 'manufacturerPartNumber',
+  brand: 'brand', brandcode: 'brand',
+  reference: 'manufacturerPartNumber', partnumber: 'manufacturerPartNumber',
   manufacturerpartnumber: 'manufacturerPartNumber', mpn: 'manufacturerPartNumber',
+  manufacturerno: 'manufacturerPartNumber', manufacturernumber: 'manufacturerPartNumber',
   oem: 'oemReferences', oempartnumber: 'oemReferences', oeoempartnumber: 'oemReferences',
-  quantity: 'quantity', qty: 'quantity', moq: 'moq',
+  originalpartno: 'oemReferences', originalpartnumber: 'oemReferences',
+  quantity: 'quantity', qty: 'quantity', stock: 'quantity', moq: 'moq',
   price: 'price', priceusd: 'priceUsd', priceaed: 'priceAed', currency: 'currency',
+  unitprice: 'price',
   stocksharjah: 'stockSharjah', stockjebelali: 'stockJebelAli',
   netweight: 'netWeight', grossweight: 'grossWeight',
   height: 'height', length: 'length', width: 'width',
@@ -41,22 +45,48 @@ function cellText(value: CellValue): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'object') {
-    if ('text' in value && typeof value.text === 'string') return value.text.trim();
-    if ('result' in value && value.result !== undefined) return String(value.result).trim();
-    if ('richText' in value && Array.isArray(value.richText)) return value.richText.map((part) => part.text).join('').trim();
+    if ('result' in value && value.result !== undefined && value.result !== null) {
+      const result = String(value.result).trim();
+      if (result && !result.startsWith('#')) return result;
+    }
+    if ('text' in value && typeof value.text === 'string') {
+      const text = value.text.trim();
+      if (text && !text.startsWith('#')) return text;
+    }
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join('').trim();
+    }
   }
   return String(value).trim();
 }
 
 function detectTemplate(headers: string[]): ImportTemplate {
-  const keys = new Set(headers.map(headerKey));
+  const keys = new Set(headers.map(headerKey).filter(Boolean));
   if (keys.has('reference') && keys.has('stocksharjah') && keys.has('stockjebelali') && keys.has('oem')) {
     return 'FEBEST_AVAILABILITY';
   }
   if (keys.has('code') && keys.has('brand') && keys.has('partnumber') && keys.has('priceusd') && keys.has('priceaed')) {
     return 'DXB_EXW';
   }
+  // Dynatrade: Original Part No. + Manufacturer No. + Part Description + STOCK + UNIT PRICE
+  // Brand text often lives in an unlabeled column beside a broken BRAND VLOOKUP.
+  if (
+    (keys.has('originalpartno') || keys.has('originalpartnumber'))
+    && (keys.has('manufacturerno') || keys.has('manufacturernumber'))
+    && keys.has('partdescription')
+    && keys.has('stock')
+    && keys.has('unitprice')
+  ) {
+    return 'DYNATRADE_STOCK';
+  }
   return 'GENERIC';
+}
+
+function suggestedDefaultsFor(template: ImportTemplate): Record<string, string> {
+  if (template === 'FEBEST_AVAILABILITY') return { partType: 'AFTERMARKET', brand: 'FEBEST' };
+  if (template === 'DXB_EXW') return { partType: 'MIXED' };
+  if (template === 'DYNATRADE_STOCK') return { partType: 'AFTERMARKET', currency: 'AED' };
+  return {};
 }
 
 @Injectable()
@@ -92,11 +122,22 @@ export class SpreadsheetParserService {
         const raw: Record<string, string> = {};
         const original: Record<string, string> = {};
         headers.forEach((header, index) => {
-          if (!header) return;
           const value = values[index] ?? '';
-          original[header] = value;
+          const originalKey = header || `column_${index + 1}`;
+          original[originalKey] = value;
           const mapped = FIELD_ALIASES[headerKey(header)];
-          if (mapped) raw[mapped] = value;
+          if (mapped) {
+            // Dynatrade BRAND column is often a broken VLOOKUP (#ERROR!) — prefer brand code column.
+            if (mapped === 'brand' && template === 'DYNATRADE_STOCK' && (!value || value.startsWith('#'))) {
+              return;
+            }
+            raw[mapped] = value;
+            return;
+          }
+          // Unlabeled column immediately after BRAND holds Dynatrade brand codes (ANC, AE, BHR, …).
+          if (template === 'DYNATRADE_STOCK' && !header && index > 0 && headerKey(headers[index - 1] || '') === 'brand') {
+            if (value) raw.brand = value;
+          }
         });
         rows.push({ rowNumber, sheetName: sheet.name, raw, original });
       }
@@ -106,11 +147,7 @@ export class SpreadsheetParserService {
         sheetName: sheet.name,
         headers,
         rows,
-        suggestedDefaults: template === 'FEBEST_AVAILABILITY'
-          ? { partType: 'AFTERMARKET', brand: 'FEBEST' }
-          : template === 'DXB_EXW'
-            ? { partType: 'MIXED' }
-            : {},
+        suggestedDefaults: suggestedDefaultsFor(template),
       });
     }
     if (parsed.length === 0) throw new BadRequestException('Workbook contains no non-empty data sheets');

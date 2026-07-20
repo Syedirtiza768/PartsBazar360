@@ -6,9 +6,13 @@ import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
 import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
-import { buildCompatibility, extractListingImages } from './listing-enrichment.util';
+import { buildCompatibility, extractListingImages, prioritizeEbayImages } from './listing-enrichment.util';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
+import {
+  REALTRACK_MARKETPLACE_SELLERS,
+  resolveRealTrackSyncTarget,
+} from '../seed/marketplace-sellers.config';
 
 @Processor('ingestion', {
   concurrency: 2,
@@ -29,12 +33,18 @@ export class IngestionProcessor extends WorkerHost {
     this.logger.log(`Processing job ${job.id} of type ${job.name}`);
 
     switch (job.name) {
-      case 'sync-store':
-        return this.syncStore(job.data.storeId, job.data.page || 1, job.data.storeSlug);
+      case 'sync-store': {
+        const target = resolveRealTrackSyncTarget({
+          storeId: job.data.storeId,
+          storeSlug: job.data.storeSlug,
+        });
+        return this.syncStore(target.storeId!, job.data.page || 1, target.storeSlug || undefined);
+      }
       case 'sync-marketplace':
         return this.syncMarketplace(job.data.marketplaceId, job.data.page || 1);
       case 'sync-all-us':
-        return this.syncAllUSStores();
+      case 'sync-marketplace-realtrack':
+        return this.syncMarketplaceRealTrackStores();
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         return;
@@ -42,21 +52,30 @@ export class IngestionProcessor extends WorkerHost {
   }
 
   async syncStoreComplete(storeId: string, listingLimit?: number, storeSlug?: string) {
+    const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
+    const canonicalStoreId = target.storeId!;
     let page = 1;
     let discovered = 0;
     let imported = 0;
+    let skippedWrongStore = 0;
     const errors: Array<{ listingId?: string; message: string }> = [];
     while (true) {
       const remaining = listingLimit ? listingLimit - discovered : 200;
       if (listingLimit && remaining <= 0) break;
-      const result = await this.realTrackService.fetchListings({ page, limit: Math.min(200, remaining), storeId, storeSlug });
+      const result = await this.realTrackService.fetchListings({
+        page,
+        limit: Math.min(200, remaining),
+        storeId: canonicalStoreId,
+        storeSlug: target.storeSlug || undefined,
+      });
       if (result.items.length === 0) break;
       discovered += result.items.length;
       for (const summary of result.items) {
         try {
-          const detail = await this.realTrackService.fetchListingDetail(storeId, summary.id);
-          await this.processListing({ ...summary, ...detail }, storeId);
-          imported++;
+          const detail = await this.realTrackService.fetchListingDetail(canonicalStoreId, summary.id);
+          const outcome = await this.processListing({ ...summary, ...detail }, canonicalStoreId);
+          if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+          else imported++;
         } catch (error) {
           errors.push({ listingId: summary.id, message: error instanceof Error ? error.message : String(error) });
           this.logger.warn(`Listing ${summary.id} failed without stopping store sync`);
@@ -65,32 +84,61 @@ export class IngestionProcessor extends WorkerHost {
       if (discovered >= result.total || result.items.length < result.limit) break;
       page++;
     }
-    return { storeId, listingsDiscovered: discovered, listingsImported: imported, errors };
+    return {
+      storeId: canonicalStoreId,
+      seller: target.name,
+      listingsDiscovered: discovered,
+      listingsImported: imported,
+      skippedWrongStore,
+      errors,
+    };
   }
 
   private async syncStore(storeId: string, startPage: number, storeSlug?: string) {
+    const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
+    const canonicalStoreId = target.storeId!;
     try {
-      const result = await this.realTrackService.fetchListings({ page: startPage, limit: 200, storeId, storeSlug });
+      const result = await this.realTrackService.fetchListings({
+        page: startPage,
+        limit: 200,
+        storeId: canonicalStoreId,
+        storeSlug: target.storeSlug || undefined,
+      });
 
       if (result.items.length === 0) {
-        this.logger.log(`No more listings for store ${storeId} at page ${startPage}`);
-        return { status: 'completed', storeId, pagesProcessed: startPage };
+        this.logger.log(`No more listings for ${target.name} (${canonicalStoreId}) at page ${startPage}`);
+        return { status: 'completed', storeId: canonicalStoreId, seller: target.name, pagesProcessed: startPage };
       }
 
+      let imported = 0;
+      let skippedWrongStore = 0;
       for (const listing of result.items) {
-        await this.processListing(listing, storeId);
+        const outcome = await this.processListing(listing, canonicalStoreId);
+        if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+        else imported++;
       }
 
-      this.logger.log(`Successfully processed ${result.items.length} listings for store ${storeId} (page ${startPage})`);
-      return { status: 'page_processed', storeId, page: startPage, count: result.items.length, total: result.total };
+      this.logger.log(
+        `Processed ${imported} listings for ${target.name} (page ${startPage}, skippedWrongStore=${skippedWrongStore})`,
+      );
+      return {
+        status: 'page_processed',
+        storeId: canonicalStoreId,
+        seller: target.name,
+        page: startPage,
+        count: imported,
+        skippedWrongStore,
+        total: result.total,
+      };
     } catch (error) {
-      this.logger.error(`Error syncing store ${storeId}: ${error.message}`);
+      this.logger.error(`Error syncing store ${canonicalStoreId}: ${error.message}`);
       throw error;
     }
   }
 
   private async syncMarketplace(marketplaceId: string, startPage: number) {
     try {
+      const allowedStoreIds = new Set(REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!));
       const result = await this.realTrackService.fetchListings({
         page: startPage,
         limit: 200,
@@ -102,69 +150,62 @@ export class IngestionProcessor extends WorkerHost {
         return { status: 'completed', marketplaceId, pagesProcessed: startPage };
       }
 
+      let imported = 0;
+      let skipped = 0;
       for (const listing of result.items) {
-        await this.processListing(listing, listing.storeId);
+        const storeId = listing.storeId;
+        if (!storeId || !allowedStoreIds.has(storeId)) {
+          skipped++;
+          continue;
+        }
+        await this.processListing(listing, storeId);
+        imported++;
       }
 
-      this.logger.log(`Successfully processed ${result.items.length} listings for marketplace ${marketplaceId} (page ${startPage})`);
-      return { status: 'page_processed', marketplaceId, page: startPage, count: result.items.length, total: result.total };
+      this.logger.log(
+        `Marketplace ${marketplaceId} page ${startPage}: imported ${imported}, skipped other stores ${skipped}`,
+      );
+      return {
+        status: 'page_processed',
+        marketplaceId,
+        page: startPage,
+        count: imported,
+        skippedOtherStores: skipped,
+        total: result.total,
+      };
     } catch (error) {
       this.logger.error(`Error syncing marketplace ${marketplaceId}: ${error.message}`);
       throw error;
     }
   }
 
-  private async syncAllUSStores() {
-    this.logger.log('Starting full US marketplace sync...');
-
-    const stores = [
-      { slug: 'salvagea', id: '3b84b063-3811-481f-a61d-f7846a03558f', name: 'SalvageA' },
-      { slug: 'blackline', id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'Blackline' },
-    ];
-
-    let totalProcessed = 0;
-
-    for (const store of stores) {
-      this.logger.log(`Syncing store: ${store.name} (${store.slug})`);
-      let page = 1;
-      let hasMore = true;
-
-      while (hasMore) {
-        try {
-          const result = await this.realTrackService.fetchListings({
-            page,
-            limit: 200,
-            storeSlug: store.slug,
-          });
-
-          if (result.items.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          for (const listing of result.items) {
-            await this.processListing(listing, listing.storeId || store.id);
-          }
-
-          totalProcessed += result.items.length;
-          this.logger.log(`Progress: ${totalProcessed} total listings processed (current store: ${store.name}, page: ${page})`);
-
-          if (result.items.length < 200) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        } catch (error) {
-          this.logger.error(`Error syncing store ${store.name}: ${error.message}`);
-          hasMore = false;
-        }
-      }
+  /** Sync only the two RealTrack marketplace sellers, each to its own storeId. */
+  private async syncMarketplaceRealTrackStores() {
+    this.logger.log('Starting marketplace RealTrack sync (Salvage + Blackline only)...');
+    const results: Array<Awaited<ReturnType<IngestionProcessor['syncStoreComplete']>>> = [];
+    for (const store of REALTRACK_MARKETPLACE_SELLERS) {
+      this.logger.log(`Syncing ${store.name} ← storeId ${store.storeId}`);
+      results.push(await this.syncStoreComplete(store.storeId!, undefined, store.storeSlug || undefined));
     }
-
-    return { status: 'completed', totalProcessed };
+    return { status: 'completed', results };
   }
 
-  private async processListing(listing: any, storeId: string) {
+  /**
+   * Import one listing into the seller that owns `expectedStoreId`.
+   * Listings whose RealTrack storeId does not match are skipped (never cross-assigned).
+   */
+  private async processListing(
+    listing: any,
+    expectedStoreId: string,
+  ): Promise<'imported' | 'skipped_wrong_store' | 'skipped_no_seller'> {
+    const listingStoreId = listing.storeId || expectedStoreId;
+    if (listing.storeId && listing.storeId !== expectedStoreId) {
+      this.logger.warn(
+        `Skipping listing ${listing.id}: belongs to store ${listingStoreId}, expected ${expectedStoreId}`,
+      );
+      return 'skipped_wrong_store';
+    }
+
     const imageUrls = extractListingImages(listing);
     const title: string = listing.title || 'Unknown Part';
     const parsedVehicle = parseVehicleFromTitle(title);
@@ -192,7 +233,7 @@ export class IngestionProcessor extends WorkerHost {
       },
       create: {
         sourceListingId: listing.id,
-        storeId,
+        storeId: expectedStoreId,
         marketplaceId: listing.marketplaceId,
         ebayItemId: listing.ebayItemId,
         ebayAccountId: listing.ebayAccountId,
@@ -212,29 +253,25 @@ export class IngestionProcessor extends WorkerHost {
     });
 
     const seller = await this.prisma.seller.findFirst({
-      where: { storeId },
+      where: { storeId: expectedStoreId },
       include: { warehouses: true },
     });
 
     if (!seller) {
-      this.logger.warn(`Seller for store ${storeId} not found, skipping normalization.`);
-      return;
+      this.logger.warn(`Seller for store ${expectedStoreId} not found, skipping normalization.`);
+      return 'skipped_no_seller';
     }
 
+    // Merge sibling images only within the same RealTrack store (never cross-seller).
     let mergedImages = imageUrls;
     if (listing.sku) {
       const siblings = await this.prisma.rawStagingListing.findMany({
-        where: { sku: listing.sku },
+        where: { sku: listing.sku, storeId: expectedStoreId },
         select: { imageUrls: true },
         take: 20,
       });
       const all = siblings.flatMap((s) => s.imageUrls || []);
-      mergedImages = [
-        ...new Set([
-          ...imageUrls,
-          ...all.map((u) => String(u).replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')),
-        ]),
-      ];
+      mergedImages = prioritizeEbayImages([...imageUrls, ...all]);
     }
 
     let canonicalPart = listing.ebayItemId
@@ -242,7 +279,7 @@ export class IngestionProcessor extends WorkerHost {
       : null;
 
     if (canonicalPart) {
-      const combinedImages = [...new Set([...(canonicalPart.imageUrls || []), ...mergedImages])];
+      const combinedImages = prioritizeEbayImages([...(canonicalPart.imageUrls || []), ...mergedImages]);
       canonicalPart = await this.prisma.canonicalPart.update({
         where: { id: canonicalPart.id },
         data: {
@@ -445,6 +482,8 @@ export class IngestionProcessor extends WorkerHost {
       where: { sourceListingId: listing.id },
       data: { processed: true },
     });
+
+    return 'imported';
   }
 
   private async findOrCreateVehicleConfig(vehicle: ParsedVehicle) {

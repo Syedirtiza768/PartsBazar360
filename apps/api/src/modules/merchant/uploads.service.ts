@@ -248,7 +248,7 @@ export class MerchantUploadsService {
         defaultWeightUnit: opts.defaultWeightUnit || null,
         defaultDimensionUnit: opts.defaultDimensionUnit || null,
         commitMode,
-        catalogType: opts.catalogType || (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' ? 'AFTERMARKET' : parsedSheets[0]?.template === 'DXB_EXW' ? 'MIXED' : null),
+        catalogType: opts.catalogType || (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' || parsedSheets[0]?.template === 'DYNATRADE_STOCK' ? 'AFTERMARKET' : parsedSheets[0]?.template === 'DXB_EXW' ? 'MIXED' : null),
         detection,
         mapping: parsedSheets.map((sheet) => ({ sheet: sheet.sheetName, template: sheet.template, headers: sheet.headers })),
       },
@@ -502,7 +502,11 @@ export class MerchantUploadsService {
       declaredType: raw.partType || raw.__suggestedPartType || defaults.defaultPartSource,
       brand,
       condition: raw.condition,
-      sourceContext: raw.__template === 'FEBEST_AVAILABILITY' ? 'AFTERMARKET_CATALOG' : raw.__template === 'DXB_EXW' ? 'MIXED_CATALOG' : undefined,
+      sourceContext: raw.__template === 'FEBEST_AVAILABILITY' || raw.__template === 'DYNATRADE_STOCK'
+        ? 'AFTERMARKET_CATALOG'
+        : raw.__template === 'DXB_EXW'
+          ? 'MIXED_CATALOG'
+          : undefined,
     });
     const partSource = classification.partType === 'AFTERMARKET' ? 'AFTERMARKET' : 'OEM';
     const qualityTier = normalizeQualityTier(raw.condition || defaults.defaultQualityTier);

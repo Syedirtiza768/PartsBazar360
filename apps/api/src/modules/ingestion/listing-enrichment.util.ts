@@ -16,6 +16,22 @@ export function upgradeImageUrl(url: string): string {
     .replace(/\/s-l\d+\?/i, '/s-l1600?');
 }
 
+/** True when the URL is an eBay-hosted asset (preferred gallery sources). */
+export function isEbayImageUrl(url: string): boolean {
+  return /ebay/i.test(url);
+}
+
+/**
+ * Keep remote image URLs only (never download/store binaries).
+ * eBay-hosted URLs are sorted to the front; order within each group is preserved.
+ */
+export function prioritizeEbayImages(urls: string[]): string[] {
+  const unique = [...new Set(urls.map((u) => upgradeImageUrl(String(u).trim())).filter((u) => u.startsWith('http')))];
+  const ebay = unique.filter(isEbayImageUrl);
+  const other = unique.filter((u) => !isEbayImageUrl(u));
+  return [...ebay, ...other];
+}
+
 /** Collect every image URL available on a RealTrack listing payload. */
 export function extractListingImages(listing: any): string[] {
   const collected: string[] = [];
@@ -54,8 +70,8 @@ export function extractListingImages(listing: any): string[] {
     // ignore
   }
 
-  // Preserve order, drop exact duplicates after upgrade
-  return [...new Set(collected.filter(Boolean))];
+  // Remote URLs only; eBay assets first
+  return prioritizeEbayImages(collected);
 }
 
 /** Normalize RealTrack compatibility payloads into eBay-style rows. */

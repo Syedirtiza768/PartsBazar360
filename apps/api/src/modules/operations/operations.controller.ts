@@ -2,6 +2,10 @@ import { Controller, Post, Param, Body, Logger, Get, Patch } from '@nestjs/commo
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma.service';
+import {
+  REALTRACK_MARKETPLACE_SELLERS,
+  resolveRealTrackSyncTarget,
+} from '../seed/marketplace-sellers.config';
 
 @Controller('operations')
 export class OperationsController {
@@ -96,26 +100,32 @@ export class OperationsController {
   @Get('stores')
   async getStores() {
     return {
-      stores: [
-        { slug: 'salvagea', id: '3b84b063-3811-481f-a61d-f7846a03558f', name: 'SalvageA', country: 'US' },
-        { slug: 'blackline', id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'Blackline', country: 'US' },
-      ]
+      stores: REALTRACK_MARKETPLACE_SELLERS.map((s) => ({
+        slug: s.key,
+        id: s.storeId,
+        name: s.name,
+        storeSlug: s.storeSlug,
+      })),
     };
   }
 
   @Post('sync/realtrack/:storeSlug')
   async triggerRealTrackSync(@Param('storeSlug') storeSlug: string, @Body('page') page?: number) {
     this.logger.log(`Triggering manual sync for store: ${storeSlug}`);
+    const target = resolveRealTrackSyncTarget({ storeSlug });
 
     const job = await this.ingestionQueue.add('sync-store', {
-      storeSlug,
+      storeId: target.storeId,
+      storeSlug: target.storeSlug || target.key,
       page: page || 1,
     });
 
     return {
-      message: 'Sync job queued successfully',
+      message: `Sync job queued for ${target.name} only`,
       jobId: job.id,
-      storeSlug,
+      storeSlug: target.key,
+      storeId: target.storeId,
+      seller: target.name,
     };
   }
 
@@ -137,13 +147,14 @@ export class OperationsController {
 
   @Post('sync/all-us')
   async triggerAllUSSync() {
-    this.logger.log('Triggering full US marketplace sync for all stores');
+    this.logger.log('Triggering marketplace RealTrack sync (Salvage + Blackline only)');
 
-    const job = await this.ingestionQueue.add('sync-all-us', {});
+    const job = await this.ingestionQueue.add('sync-marketplace-realtrack', {});
 
     return {
-      message: 'Full US marketplace sync job queued successfully',
+      message: 'Marketplace RealTrack sync queued for Salvage Auto Parts and Blackline Auto Parts only',
       jobId: job.id,
+      stores: REALTRACK_MARKETPLACE_SELLERS.map((s) => ({ name: s.name, storeId: s.storeId })),
     };
   }
 }

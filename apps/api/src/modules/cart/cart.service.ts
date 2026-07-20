@@ -53,10 +53,10 @@ export class CartService {
     // 1. Validate offer and stock
     const offer = await this.prisma.sellerOffer.findUnique({
       where: { id: offerId },
-      include: { inventory: true }
+      include: { inventory: true, seller: true }
     });
 
-    if (!offer || offer.status !== 'ACTIVE') {
+    if (!offer || offer.status !== 'ACTIVE' || offer.seller.onboardingStatus !== 'ACTIVE') {
       throw new BadRequestException('Offer is not available');
     }
 

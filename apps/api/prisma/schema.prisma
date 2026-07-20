@@ -37,6 +37,7 @@ model Seller {
   sourceAccounts       SellerSourceAccount[]
   sourceRecords        SourceRecord[]
   reviewTasks          ReviewTask[]
+  memberships          SellerMembership[]
 }
 
 model SellerProfile {
@@ -564,13 +565,33 @@ model SourceRecord {
 }
 
 model User {
-  id        String        @id @default(uuid())
-  email     String        @unique
-  name      String?
-  role      String        @default("BUYER")
-  vehicles  UserVehicle[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id           String             @id @default(uuid())
+  email        String             @unique
+  name         String?
+  /** BUYER | SELLER | ADMIN */
+  role         String             @default("BUYER")
+  passwordHash String?
+  vehicles     UserVehicle[]
+  memberships  SellerMembership[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+/** Links a user login to one seller store (3 staff accounts per seller). */
+model SellerMembership {
+  id        String   @id @default(uuid())
+  userId    String
+  sellerId  String
+  /** OWNER | MANAGER | STAFF */
+  role      String   @default("STAFF")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sellerId])
+  @@index([sellerId])
 }
 
 model UserVehicle {
