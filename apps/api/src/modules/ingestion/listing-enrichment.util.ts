@@ -96,6 +96,27 @@ export function normalizeCompatibility(raw: any): CompatibilityRow[] {
       });
     }
   } else if (typeof raw === 'object') {
+    // RealTrack API nests compatibility inside compatibleProducts[].compatibilityProperties[]
+    // where each property is {name, value} rather than {year, make, model, ...}.
+    if (Array.isArray(raw.compatibleProducts)) {
+      for (const product of raw.compatibleProducts) {
+        const props: Record<string, string> = {};
+        for (const prop of product.compatibilityProperties || []) {
+          if (prop.name && prop.value) props[prop.name] = prop.value;
+        }
+        const pf = product.productFamilyProperties || {};
+        pushRow({
+          year: props.Year || pf.year || '-',
+          make: props.Make || pf.make || '-',
+          model: props.Model || pf.model || '-',
+          trim: props.Trim || pf.trim || '-',
+          engine: props.Engine || pf.engine || '-',
+          source: 'ebay',
+        });
+      }
+      return dedupeCompatibility(rows);
+    }
+
     const list = raw.vehicles || raw.items || raw.compatibleVehicles || raw.list;
     if (Array.isArray(list)) return normalizeCompatibility(list);
   }
