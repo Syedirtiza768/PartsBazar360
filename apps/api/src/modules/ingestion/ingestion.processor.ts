@@ -30,7 +30,7 @@ export class IngestionProcessor extends WorkerHost {
 
     switch (job.name) {
       case 'sync-store':
-        return this.syncStore(job.data.storeId, job.data.page || 1);
+        return this.syncStore(job.data.storeId, job.data.page || 1, job.data.storeSlug);
       case 'sync-marketplace':
         return this.syncMarketplace(job.data.marketplaceId, job.data.page || 1);
       case 'sync-all-us':
@@ -41,7 +41,7 @@ export class IngestionProcessor extends WorkerHost {
     }
   }
 
-  async syncStoreComplete(storeId: string, listingLimit?: number) {
+  async syncStoreComplete(storeId: string, listingLimit?: number, storeSlug?: string) {
     let page = 1;
     let discovered = 0;
     let imported = 0;
@@ -49,7 +49,7 @@ export class IngestionProcessor extends WorkerHost {
     while (true) {
       const remaining = listingLimit ? listingLimit - discovered : 200;
       if (listingLimit && remaining <= 0) break;
-      const result = await this.realTrackService.fetchListings({ page, limit: Math.min(200, remaining), storeId });
+      const result = await this.realTrackService.fetchListings({ page, limit: Math.min(200, remaining), storeId, storeSlug });
       if (result.items.length === 0) break;
       discovered += result.items.length;
       for (const summary of result.items) {
@@ -68,9 +68,9 @@ export class IngestionProcessor extends WorkerHost {
     return { storeId, listingsDiscovered: discovered, listingsImported: imported, errors };
   }
 
-  private async syncStore(storeId: string, startPage: number) {
+  private async syncStore(storeId: string, startPage: number, storeSlug?: string) {
     try {
-      const result = await this.realTrackService.fetchListings({ page: startPage, limit: 200, storeId });
+      const result = await this.realTrackService.fetchListings({ page: startPage, limit: 200, storeId, storeSlug });
 
       if (result.items.length === 0) {
         this.logger.log(`No more listings for store ${storeId} at page ${startPage}`);
@@ -118,23 +118,14 @@ export class IngestionProcessor extends WorkerHost {
     this.logger.log('Starting full US marketplace sync...');
 
     const stores = [
-      { id: '79f249a5-31e0-42a8-978c-a99b0665c61b', name: 'All About Mercedes' },
-      { id: 'fa528c8a-f249-4816-94f6-f2ce8b932449', name: 'B.JLRWORLD' },
-      { id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'BLACKLINEAUTOPARTS' },
-      { id: '5fc75f19-31f3-44e4-b1ae-6545055f7945', name: 'K. Brit Auto Depot - UK' },
-      { id: '65aff8ec-21ee-460f-af17-20daa0b843c1', name: 'K. Euro Japan Auto Parts' },
-      { id: 'eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0', name: 'K. Salvage Auto Parts' },
-      { id: 'cc658cc0-ab21-4519-9f06-4aea8ff6a809', name: 'K. Salvage Dismantlers - DE' },
-      { id: '7658e52e-4dd6-48a7-ad78-6933630bdac7', name: 'K. Southern Cross Auto Parts - AU' },
-      { id: 'cfcc4a9c-c41b-4166-ab41-989c00a6fad1', name: 'Primemotive' },
-      { id: '8d7d8b23-d769-4ed5-91e2-e26d14a45215', name: 'VW & RR' },
-      { id: '70ad5c44-6424-4998-815c-99adf28c2487', name: 'eBay store' },
+      { slug: 'salvagea', id: '3b84b063-3811-481f-a61d-f7846a03558f', name: 'SalvageA' },
+      { slug: 'blackline', id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'Blackline' },
     ];
 
     let totalProcessed = 0;
 
     for (const store of stores) {
-      this.logger.log(`Syncing store: ${store.name} (${store.id})`);
+      this.logger.log(`Syncing store: ${store.name} (${store.slug})`);
       let page = 1;
       let hasMore = true;
 
@@ -143,7 +134,7 @@ export class IngestionProcessor extends WorkerHost {
           const result = await this.realTrackService.fetchListings({
             page,
             limit: 200,
-            storeId: store.id,
+            storeSlug: store.slug,
           });
 
           if (result.items.length === 0) {
@@ -152,7 +143,7 @@ export class IngestionProcessor extends WorkerHost {
           }
 
           for (const listing of result.items) {
-            await this.processListing(listing, store.id);
+            await this.processListing(listing, listing.storeId || store.id);
           }
 
           totalProcessed += result.items.length;

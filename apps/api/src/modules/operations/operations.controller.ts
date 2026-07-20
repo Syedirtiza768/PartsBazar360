@@ -97,34 +97,25 @@ export class OperationsController {
   async getStores() {
     return {
       stores: [
-        { id: '79f249a5-31e0-42a8-978c-a99b0665c61b', name: 'All About Mercedes', country: 'US' },
-        { id: 'fa528c8a-f249-4816-94f6-f2ce8b932449', name: 'B.JLRWORLD', country: 'US' },
-        { id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'BLACKLINEAUTOPARTS', country: 'US' },
-        { id: '5fc75f19-31f3-44e4-b1ae-6545055f7945', name: 'K. Brit Auto Depot - UK', country: 'UK' },
-        { id: '65aff8ec-21ee-460f-af17-20daa0b843c1', name: 'K. Euro Japan Auto Parts', country: 'US' },
-        { id: 'eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0', name: 'K. Salvage Auto Parts', country: 'US' },
-        { id: 'cc658cc0-ab21-4519-9f06-4aea8ff6a809', name: 'K. Salvage Dismantlers - DE', country: 'DE' },
-        { id: '7658e52e-4dd6-48a7-ad78-6933630bdac7', name: 'K. Southern Cross Auto Parts - AU', country: 'AU' },
-        { id: 'cfcc4a9c-c41b-4166-ab41-989c00a6fad1', name: 'Primemotive', country: 'US' },
-        { id: '8d7d8b23-d769-4ed5-91e2-e26d14a45215', name: 'VW & RR', country: 'US' },
-        { id: '70ad5c44-6424-4998-815c-99adf28c2487', name: 'eBay store', country: 'US' },
+        { slug: 'salvagea', id: '3b84b063-3811-481f-a61d-f7846a03558f', name: 'SalvageA', country: 'US' },
+        { slug: 'blackline', id: 'd16199c4-55b5-429e-ad27-892bed94e00d', name: 'Blackline', country: 'US' },
       ]
     };
   }
 
-  @Post('sync/realtrack/:storeId')
-  async triggerRealTrackSync(@Param('storeId') storeId: string, @Body('page') page?: number) {
-    this.logger.log(`Triggering manual sync for store: ${storeId}`);
+  @Post('sync/realtrack/:storeSlug')
+  async triggerRealTrackSync(@Param('storeSlug') storeSlug: string, @Body('page') page?: number) {
+    this.logger.log(`Triggering manual sync for store: ${storeSlug}`);
 
     const job = await this.ingestionQueue.add('sync-store', {
-      storeId,
+      storeSlug,
       page: page || 1,
     });
 
     return {
       message: 'Sync job queued successfully',
       jobId: job.id,
-      storeId,
+      storeSlug,
     };
   }
 

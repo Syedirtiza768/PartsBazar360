@@ -4,6 +4,7 @@ export interface FetchListingsOptions {
   page?: number;
   limit?: number;
   storeId?: string;
+  storeSlug?: string;
   marketplaceId?: string;
   status?: string;
   search?: string;
@@ -81,15 +82,16 @@ export class RealTrackService {
   async fetchListings(options: FetchListingsOptions = {}): Promise<FetchListingsResult> {
     await this.authenticate();
 
-    const { page = 1, limit = 200, storeId, marketplaceId, status, search } = options;
+    const { page = 1, limit = 200, storeId, storeSlug, marketplaceId, status, search } = options;
 
-    this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit}, storeId: ${storeId || 'all'}, marketplaceId: ${marketplaceId || 'all'})`);
+    this.logger.log(`Fetching RealTrack listings page ${page} (limit: ${limit}, storeSlug: ${storeSlug || storeId || 'all'}, marketplaceId: ${marketplaceId || 'all'})`);
 
     try {
       const url = new URL(`${this.baseUrl}/published-listings`);
       url.searchParams.append('page', page.toString());
       url.searchParams.append('limit', limit.toString());
-      if (storeId) url.searchParams.append('storeId', storeId);
+      if (storeSlug) url.searchParams.append('storeSlug', storeSlug);
+      else if (storeId) url.searchParams.append('storeId', storeId);
       if (marketplaceId) url.searchParams.append('marketplaceId', marketplaceId);
       if (status) url.searchParams.append('status', status);
       if (search) url.searchParams.append('search', search);
