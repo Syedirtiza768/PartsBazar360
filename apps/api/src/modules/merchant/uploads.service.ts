@@ -477,8 +477,21 @@ export class MerchantUploadsService {
       return { status: 'INVALID', message: missing.join('; '), needsReview: false };
     }
 
-    const primaryCurrency = raw.priceAed ? 'AED' : raw.priceUsd ? 'USD' : raw.currency?.trim() || defaults.defaultCurrency || '';
-    const priceText = raw.priceAed || raw.priceUsd || raw.price || '';
+    const preferredCurrency = (defaults.defaultCurrency || '').toUpperCase();
+    const primaryCurrency = preferredCurrency === 'USD' && raw.priceUsd
+      ? 'USD'
+      : preferredCurrency === 'AED' && raw.priceAed
+        ? 'AED'
+        : raw.priceAed && preferredCurrency !== 'USD'
+          ? 'AED'
+          : raw.priceUsd
+            ? 'USD'
+            : raw.currency?.trim() || defaults.defaultCurrency || '';
+    const priceText = preferredCurrency === 'USD'
+      ? (raw.priceUsd || raw.price || raw.priceAed || '')
+      : preferredCurrency === 'AED'
+        ? (raw.priceAed || raw.price || raw.priceUsd || '')
+        : (raw.priceAed || raw.priceUsd || raw.price || '');
     const price = priceText ? Number(priceText.replace(/[$,\s]/g, '')) : 0;
     const stockSharjah = raw.stockSharjah === undefined || raw.stockSharjah === '' ? null : parseInt(raw.stockSharjah, 10);
     const stockJebelAli = raw.stockJebelAli === undefined || raw.stockJebelAli === '' ? null : parseInt(raw.stockJebelAli, 10);
@@ -487,6 +500,10 @@ export class MerchantUploadsService {
       : [stockSharjah, stockJebelAli].some((value) => value !== null)
         ? (stockSharjah ?? 0) + (stockJebelAli ?? 0)
         : 0;
+    if (quantity <= 0) {
+      await this.createUploadRow(uploadJobId, row, 'SKIPPED', ['Zero or missing stock — excluded from live catalog'], {}, defaults.existingRowId);
+      return { status: 'SKIPPED', message: 'Zero stock excluded', needsReview: false };
+    }
     const imageUrls = (raw.imageUrls || '')
       .split('|')
       .map((u) => u.trim())
@@ -596,7 +613,7 @@ export class MerchantUploadsService {
         condition: qualityTier,
         price: Number.isFinite(price) ? price : undefined,
         quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
-        currency: primaryCurrency || 'AED',
+        currency: primaryCurrency || 'USD',
         imageUrls,
         fitmentSummary: parsedVehicle,
         sourceKey: deterministicSourceKey('SPREADSHEET_ROW', sellerId, defaults.fileChecksum, row.sheetName, row.rowNumber),
@@ -753,7 +770,7 @@ export class MerchantUploadsService {
         pricingPolicyId: priceQuote.pricingPolicyId,
         pricingPolicyVersion: priceQuote.pricingPolicyVersion,
         pricedAt: new Date(),
-        currency: priceQuote.pricingPolicyId ? priceQuote.currency : primaryCurrency || 'AED',
+        currency: priceQuote.pricingPolicyId ? priceQuote.currency : primaryCurrency || 'USD',
         condition: qualityTier,
         partSource,
         partType: classification.partType,

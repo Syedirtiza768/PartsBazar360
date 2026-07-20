@@ -7,6 +7,11 @@ import { OpenSearchService } from '../search/opensearch.service';
 import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 import { buildCompatibility, extractListingImages, prioritizeEbayImages } from './listing-enrichment.util';
+import {
+  isImportableListing,
+  MARKETPLACE_CURRENCY,
+  stockQuantityForImport,
+} from './listing-eligibility.util';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
 import {
@@ -58,6 +63,7 @@ export class IngestionProcessor extends WorkerHost {
     let discovered = 0;
     let imported = 0;
     let skippedWrongStore = 0;
+    let skippedInactiveOrZero = 0;
     const errors: Array<{ listingId?: string; message: string }> = [];
     while (true) {
       const remaining = listingLimit ? listingLimit - discovered : 200;
@@ -67,6 +73,7 @@ export class IngestionProcessor extends WorkerHost {
         limit: Math.min(200, remaining),
         storeId: canonicalStoreId,
         storeSlug: target.storeSlug || undefined,
+        status: 'ACTIVE',
       });
       if (result.items.length === 0) break;
       discovered += result.items.length;
@@ -75,7 +82,8 @@ export class IngestionProcessor extends WorkerHost {
           const detail = await this.realTrackService.fetchListingDetail(canonicalStoreId, summary.id);
           const outcome = await this.processListing({ ...summary, ...detail }, canonicalStoreId);
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
-          else imported++;
+          else if (outcome === 'skipped_inactive_or_zero_stock') skippedInactiveOrZero++;
+          else if (outcome === 'imported') imported++;
         } catch (error) {
           errors.push({ listingId: summary.id, message: error instanceof Error ? error.message : String(error) });
           this.logger.warn(`Listing ${summary.id} failed without stopping store sync`);
@@ -87,9 +95,11 @@ export class IngestionProcessor extends WorkerHost {
     return {
       storeId: canonicalStoreId,
       seller: target.name,
+      currency: MARKETPLACE_CURRENCY,
       listingsDiscovered: discovered,
       listingsImported: imported,
       skippedWrongStore,
+      skippedInactiveOrZero,
       errors,
     };
   }
@@ -197,7 +207,9 @@ export class IngestionProcessor extends WorkerHost {
   private async processListing(
     listing: any,
     expectedStoreId: string,
-  ): Promise<'imported' | 'skipped_wrong_store' | 'skipped_no_seller'> {
+  ): Promise<
+    'imported' | 'skipped_wrong_store' | 'skipped_no_seller' | 'skipped_inactive_or_zero_stock'
+  > {
     const listingStoreId = listing.storeId || expectedStoreId;
     if (listing.storeId && listing.storeId !== expectedStoreId) {
       this.logger.warn(
@@ -206,6 +218,11 @@ export class IngestionProcessor extends WorkerHost {
       return 'skipped_wrong_store';
     }
 
+    if (!isImportableListing(listing)) {
+      return 'skipped_inactive_or_zero_stock';
+    }
+
+    const stockQty = stockQuantityForImport(listing);
     const imageUrls = extractListingImages(listing);
     const title: string = listing.title || 'Unknown Part';
     const parsedVehicle = parseVehicleFromTitle(title);
@@ -219,7 +236,7 @@ export class IngestionProcessor extends WorkerHost {
         title: listing.title,
         sku: listing.sku,
         price: listing.price ? parseFloat(listing.price) : 0,
-        quantity: listing.quantityAvailable || 1,
+        quantity: stockQty,
         status: listing.listingStatus,
         ebayItemId: listing.ebayItemId,
         ebayAccountId: listing.ebayAccountId,
@@ -241,8 +258,8 @@ export class IngestionProcessor extends WorkerHost {
         title: listing.title,
         sku: listing.sku,
         price: listing.price ? parseFloat(listing.price) : 0,
-        currency: listing.currency,
-        quantity: listing.quantityAvailable || 1,
+        currency: MARKETPLACE_CURRENCY,
+        quantity: stockQty,
         status: listing.listingStatus,
         listingUrl: listing.listingUrl,
         imageUrls,
@@ -331,8 +348,8 @@ export class IngestionProcessor extends WorkerHost {
           pricingPolicyId: priceQuote.pricingPolicyId,
           pricingPolicyVersion: priceQuote.pricingPolicyVersion,
           pricedAt: new Date(),
-          currency: priceQuote.pricingPolicyId ? priceQuote.currency : listing.currency || offer.currency,
-          status: (listing.listingStatus || 'active').toUpperCase(),
+          currency: MARKETPLACE_CURRENCY,
+          status: 'ACTIVE',
           canonicalPartId: canonicalPart.id,
         },
       });
@@ -348,10 +365,10 @@ export class IngestionProcessor extends WorkerHost {
           pricingPolicyId: priceQuote.pricingPolicyId,
           pricingPolicyVersion: priceQuote.pricingPolicyVersion,
           pricedAt: new Date(),
-          currency: priceQuote.pricingPolicyId ? priceQuote.currency : listing.currency || 'AED',
+          currency: MARKETPLACE_CURRENCY,
           condition: 'USED',
           externalOfferId: listing.id,
-          status: (listing.listingStatus || 'active').toUpperCase(),
+          status: 'ACTIVE',
         },
       });
     }
@@ -363,14 +380,14 @@ export class IngestionProcessor extends WorkerHost {
       if (existingInventory) {
         await this.prisma.inventory.update({
           where: { id: existingInventory.id },
-          data: { quantity: listing.quantityAvailable || 1 },
+          data: { quantity: stockQty },
         });
       } else {
         await this.prisma.inventory.create({
           data: {
             warehouseId: seller.warehouses[0].id,
             offerId: offer.id,
-            quantity: listing.quantityAvailable || 1,
+            quantity: stockQty,
           },
         });
       }

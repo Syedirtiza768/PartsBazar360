@@ -14,6 +14,8 @@ import {
   REALTRACK_MARKETPLACE_SELLERS,
 } from './modules/seed/marketplace-sellers.config';
 import { deactivateLegacySellers } from './modules/seed/deactivate-legacy-sellers';
+import { wipeMarketplaceSellerInventory } from './modules/seed/wipe-marketplace-inventory';
+import { MARKETPLACE_CURRENCY } from './modules/ingestion/listing-eligibility.util';
 
 async function ensureSeller(
   prisma: PrismaService,
@@ -130,6 +132,11 @@ async function main() {
       });
     }
 
+    // Wipe existing 3-store inventory for a fresh catalog load
+    if (enabled('SEED_WIPE_MARKETPLACE_INVENTORY', true)) {
+      report.wiped = await wipeMarketplaceSellerInventory(prisma);
+    }
+
     // Suspend every seller outside Salvage / Blackline / Superior
     if (enabled('SEED_DEACTIVATE_LEGACY_SELLERS', true)) {
       report.deactivated = await deactivateLegacySellers(prisma);
@@ -171,21 +178,21 @@ async function main() {
           env: 'SEED_FEBEST_FILE',
           label: 'FEBEST Availability',
           brand: 'FEBEST',
-          currency: process.env.SEED_FEBEST_CURRENCY || 'AED',
+          currency: process.env.SEED_FEBEST_CURRENCY || MARKETPLACE_CURRENCY,
           partSource: 'AFTERMARKET',
         },
         {
           env: 'SEED_DXB_FILE',
           label: 'DXB-EXW',
           brand: undefined as string | undefined,
-          currency: 'AED',
+          currency: process.env.SEED_DXB_CURRENCY || MARKETPLACE_CURRENCY,
           partSource: 'MIXED',
         },
         {
           env: 'SEED_DYNATRADE_FILE',
           label: 'Dynatrade Stock List',
           brand: undefined as string | undefined,
-          currency: process.env.SEED_DYNATRADE_CURRENCY || 'AED',
+          currency: process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
           partSource: 'AFTERMARKET',
         },
       ];
