@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLinkIcon } from "@repo/ui/icons";
 import { INTERNAL_API_URL, SITE_URL } from "@/lib/api";
 import { ImageGallery } from "@/components/ImageGallery";
 import { CompatibilitySection } from "@/components/CompatibilitySection";
@@ -196,19 +195,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   <span className="part-number">{part.ebayItemId}</span>
                 </SpecRow>
               )}
-              {part.listingUrl && (
-                <SpecRow label="Provenance">
-                  <a
-                    href={part.listingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                    className="inline-flex items-center gap-1 text-brand-600 underline-offset-2 hover:underline"
-                  >
-                    Original source listing
-                    <ExternalLinkIcon className="h-3.5 w-3.5" />
-                  </a>
-                </SpecRow>
-              )}
+
             </dl>
             <p className="mt-3 text-xs leading-relaxed text-graphite-600">
               Photos show the actual item where provided by the seller. Report inaccurate listings{" "}
