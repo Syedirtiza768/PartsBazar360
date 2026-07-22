@@ -1,43 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, buttonClasses } from "@repo/ui/button";
 import { Input, Checkbox } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import {
   CartIcon,
-  CheckCircleIcon,
   StoreIcon,
   TruckIcon,
   ArrowLeftIcon,
   ShieldCheckIcon,
   CarIcon,
-  ReceiptIcon,
 } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import { useCart, type CartItem } from "@/lib/cart-context";
 import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
+import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
 import { formatPrice, humanize } from "@/lib/format";
 import { CartLineFitment } from "@/components/CartLineFitment";
 import { storeOrder } from "@/lib/order-history";
 
-interface OrderResult {
-  order: {
-    id: string;
-    status?: string;
-    createdAt?: string;
-    totalAmount: number;
-    currency: string;
-    sellerOrders: { id: string; subTotal: number; shippingTotal: number; status?: string }[];
-  };
-  paymentIntent: { status: string; provider: string };
-}
-
 type FormState = {
   name: string;
-  email: string;
   line1: string;
   line2: string;
   city: string;
@@ -47,7 +34,6 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   name: "",
-  email: "",
   line1: "",
   line2: "",
   city: "",
@@ -55,11 +41,10 @@ const EMPTY_FORM: FormState = {
   postalCode: "",
 };
 
-const REQUIRED: Array<keyof FormState> = ["name", "email", "line1", "city", "country"];
+const REQUIRED: Array<keyof FormState> = ["name", "line1", "city", "country"];
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
-  email: "Email address",
   line1: "Address line 1",
   line2: "Address line 2",
   city: "City",
@@ -72,22 +57,15 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
   for (const field of REQUIRED) {
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
-  if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-    errors.email = "Enter a valid email address.";
-  }
   return errors;
 }
 
-/* ------------------------------------------------------------------ */
-/* Step indicator                                                      */
-/* ------------------------------------------------------------------ */
-
-function Steps({ current }: { current: 1 | 2 | 3 }) {
-  const steps = ["Details", "Review", "Done"];
+function Steps({ current }: { current: 1 | 2 }) {
+  const steps = ["Details", "Review"];
   return (
     <ol className="flex items-center gap-2" aria-label="Checkout progress">
       {steps.map((label, i) => {
-        const n = (i + 1) as 1 | 2 | 3;
+        const n = (i + 1) as 1 | 2;
         const done = n < current;
         const active = n === current;
         return (
@@ -120,10 +98,6 @@ function Steps({ current }: { current: 1 | 2 | 3 }) {
     </ol>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Order summary card (shared by both steps)                           */
-/* ------------------------------------------------------------------ */
 
 function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtotal: number; currency: string | null }) {
   return (
@@ -159,13 +133,11 @@ function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtota
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Checkout page                                                       */
-/* ------------------------------------------------------------------ */
-
 export default function CheckoutPage() {
+  const router = useRouter();
   const { cart, subtotal, refresh } = useCart();
-  const { activeVehicle, ready } = useGarage();
+  const { activeVehicle, ready: garageReady } = useGarage();
+  const { user, ready: authReady, isAuthenticated, authHeaders } = useAuth();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -174,10 +146,26 @@ export default function CheckoutPage() {
   const [confirmError, setConfirmError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [result, setResult] = useState<OrderResult | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
 
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (!isAuthenticated) {
+      router.replace(`/login?next=${encodeURIComponent("/checkout")}`);
+    }
+  }, [authReady, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!user || prefilled) return;
+    setForm((prev) => ({
+      ...prev,
+      name: prev.name || user.name || "",
+    }));
+    setPrefilled(true);
+  }, [user, prefilled]);
 
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
@@ -217,9 +205,11 @@ export default function CheckoutPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/checkout/${cart.id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
         body: JSON.stringify({
-          email: form.email,
           name: form.name,
           shippingAddress: {
             line1: form.line1,
@@ -232,19 +222,19 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Checkout failed. Please try again.");
-      setResult(data);
+
       storeOrder({
         id: data.order.id,
         createdAt: data.order.createdAt || new Date().toISOString(),
         status: data.order.status || "PENDING_PAYMENT",
-        paymentStatus: data.paymentIntent.status,
+        paymentStatus: data.paymentIntent?.status || "PENDING",
         totalAmount: data.order.totalAmount,
         currency: data.order.currency,
         sellerOrders: data.order.sellerOrders,
         items,
         shippingAddress: {
           name: form.name,
-          email: form.email,
+          email: user?.email || "",
           line1: form.line1,
           line2: form.line2 || undefined,
           city: form.city,
@@ -254,92 +244,26 @@ export default function CheckoutPage() {
         vehicle: activeVehicle,
       });
       await refresh();
-      window.scrollTo({ top: 0 });
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      throw new Error("Stripe Checkout URL missing. Check sandbox configuration.");
     } catch (err: unknown) {
       setServerError(err instanceof Error ? err.message : "Checkout failed. Please try again.");
-    } finally {
       setSubmitting(false);
     }
   };
 
-  /* ---------- Confirmation ---------- */
-  if (result) {
+  if (!authReady || !isAuthenticated) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-12 sm:py-16">
-        <div className="text-center">
-          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-            <CheckCircleIcon className="h-8 w-8" />
-          </span>
-          <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Order confirmed
-          </h1>
-          <p className="mt-2 text-graphite-600">
-            Thank you, {form.name.split(" ")[0] || "there"}. We&apos;ve sent a confirmation to{" "}
-            <span className="font-medium text-slate-700">{form.email}</span>.
-          </p>
-        </div>
-
-        <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-3.5">
-            <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <ReceiptIcon className="h-4 w-4 text-slate-400" />
-              Order details
-            </p>
-          </div>
-          <dl className="space-y-3 px-5 py-4 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-graphite-600">Order ID</dt>
-              <dd className="part-number text-slate-900">{result.order.id}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-graphite-600">Seller shipments</dt>
-              <dd className="font-medium text-slate-900">
-                {result.order.sellerOrders.length} — each ships with its own tracking
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-graphite-600">Payment status</dt>
-              <dd className="font-medium capitalize text-slate-900">
-                {result.paymentIntent.status.toLowerCase().replace(/_/g, " ")}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3 border-t border-slate-100 pt-3 text-base">
-              <dt className="font-semibold text-slate-900">Total (incl. shipping)</dt>
-              <dd className="price">{formatPrice(result.order.totalAmount, result.order.currency)}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm leading-relaxed text-slate-600">
-          <p className="font-semibold text-slate-900">What happens next</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Payment is confirmed and each seller is notified to pack your parts.</li>
-            <li>Sellers add tracking numbers as shipments leave their warehouses.</li>
-            <li>Questions or fitment concerns? Support can intervene at any point.</li>
-          </ol>
-        </div>
-
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href="/search" className={buttonClasses()}>
-            Continue shopping
-          </Link>
-          <Link href={`/account/purchases/${encodeURIComponent(result.order.id)}`} className={buttonClasses({ variant: "outline" })}>
-            View purchase
-          </Link>
-          <Link
-            href={`/support?orderId=${encodeURIComponent(result.order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent(
-              "Question about order " + result.order.id,
-            )}`}
-            className={buttonClasses({ variant: "outline" })}
-          >
-            Contact support
-          </Link>
-        </div>
+      <div className="mx-auto max-w-md px-4 py-16 text-center text-sm text-graphite-600">
+        Checking your account…
       </div>
     );
   }
 
-  /* ---------- Empty cart ---------- */
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16">
@@ -357,7 +281,6 @@ export default function CheckoutPage() {
     );
   }
 
-  /* ---------- Steps 1 & 2 ---------- */
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -369,11 +292,12 @@ export default function CheckoutPage() {
         {step === 1 ? (
           <form onSubmit={goToReview} noValidate className="space-y-6">
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
-              <h2 className="text-base font-semibold text-slate-900">Contact information</h2>
+              <h2 className="text-base font-semibold text-slate-900">Account</h2>
               <p className="mt-1 text-sm text-graphite-600">
-                Order updates and tracking numbers go to this email. No account needed.
+                Signed in as <span className="font-medium text-slate-800">{user?.email}</span>. Payment
+                continues on Stripe — we never see your card details.
               </p>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-4">
                 <Input
                   label="Full name"
                   autoComplete="name"
@@ -381,15 +305,6 @@ export default function CheckoutPage() {
                   value={form.name}
                   onChange={setField("name")}
                   error={errors.name}
-                />
-                <Input
-                  label="Email address"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={form.email}
-                  onChange={setField("email")}
-                  error={errors.email}
                 />
               </div>
             </section>
@@ -454,7 +369,6 @@ export default function CheckoutPage() {
           </form>
         ) : (
           <div className="space-y-6">
-            {/* Address recap */}
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -467,7 +381,7 @@ export default function CheckoutPage() {
                     <br />
                     {[form.city, form.postalCode].filter(Boolean).join(" ")}, {form.country}
                     <br />
-                    <span className="text-graphite-600">{form.email}</span>
+                    <span className="text-graphite-600">{user?.email}</span>
                   </p>
                 </div>
                 <button
@@ -480,7 +394,6 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            {/* Items by seller with fitment recap */}
             {sellerGroups.map((group) => (
               <section
                 key={group.name}
@@ -520,7 +433,6 @@ export default function CheckoutPage() {
               </section>
             ))}
 
-            {/* Compatibility confirmation */}
             <section
               className={cn(
                 "rounded-xl border p-5 shadow-card",
@@ -531,7 +443,7 @@ export default function CheckoutPage() {
                 <CarIcon className="h-4 w-4 text-amber-700" />
                 Compatibility check
               </p>
-              {ready && activeVehicle ? (
+              {garageReady && activeVehicle ? (
                 <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
                   Your active vehicle is{" "}
                   <span className="font-semibold text-slate-900">{vehicleFullLabel(activeVehicle)}</span>.
@@ -580,14 +492,14 @@ export default function CheckoutPage() {
                 Back to details
               </button>
               <Button size="lg" onClick={placeOrder} loading={submitting}>
-                Place order — {formatPrice(subtotal, currency)} + shipping
+                Pay with Stripe — {formatPrice(subtotal, currency)} + shipping
               </Button>
             </div>
 
             <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
               <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              Payment is captured securely after order placement; sellers only ship once payment is
-              confirmed.
+              You&apos;ll be redirected to Stripe Checkout. Card details stay with Stripe; sellers ship
+              after payment is confirmed.
             </p>
           </div>
         )}

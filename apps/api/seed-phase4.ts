@@ -5,6 +5,7 @@ import { CartService } from './src/modules/cart/cart.service';
 import { OrderService } from './src/modules/order/order.service';
 import { ReservationService } from './src/modules/inventory/reservation.service';
 import { ShippingService } from './src/modules/checkout/shipping.service';
+import { StripeService } from './src/modules/checkout/stripe.service';
 
 const adapter = new PrismaPg(process.env.DATABASE_URL!);
 const prisma = new PrismaClient({ adapter } as any);
@@ -43,7 +44,15 @@ async function main() {
   const reservationService = new ReservationService();
   const orderService = new OrderService(prisma as any);
   const shippingService = new ShippingService();
-  const checkoutService = new CheckoutService(cartService, reservationService, orderService, shippingService, prisma as any);
+  const stripeService = new StripeService();
+  const checkoutService = new CheckoutService(
+    cartService,
+    reservationService,
+    orderService,
+    shippingService,
+    stripeService,
+    prisma as any,
+  );
 
   // 4. Create Cart and Add Items
   let cart = await cartService.getOrCreateCart(buyer.id);
@@ -60,11 +69,16 @@ async function main() {
   const shippingAddress = { line1: '123 Fake Street', city: 'Dubai', country: 'UAE' };
   
   try {
-    const checkoutResult = await checkoutService.processCheckout(cart.id, { buyerId: buyer.id }, shippingAddress);
+    const checkoutResult = await checkoutService.processCheckout(
+      cart.id,
+      { buyerId: buyer.id, email: buyer.email },
+      shippingAddress,
+    );
     console.log(`\nCheckout Successful!`);
     console.log(`Parent Order ID: ${checkoutResult.order.id}`);
     console.log(`Total Amount (incl Shipping): ${checkoutResult.order.totalAmount} ${checkoutResult.order.currency}`);
     console.log(`Payment Intent Status: ${checkoutResult.paymentIntent.status} via ${checkoutResult.paymentIntent.provider}`);
+    console.log(`Checkout URL: ${checkoutResult.checkoutUrl}`);
     console.log(`Seller Orders Split Count: ${checkoutResult.order.sellerOrders.length}`);
   } catch (error) {
     console.error('Checkout failed:', error.message);

@@ -188,13 +188,18 @@ async function main() {
           currency: process.env.SEED_DXB_CURRENCY || MARKETPLACE_CURRENCY,
           partSource: 'MIXED',
         },
-        {
-          env: 'SEED_DYNATRADE_FILE',
-          label: 'Dynatrade Stock List',
-          brand: undefined as string | undefined,
-          currency: process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
-          partSource: 'AFTERMARKET',
-        },
+        // Dynatrade is opt-in only (SEED_INCLUDE_DYNATRADE=1).
+        ...(process.env.SEED_INCLUDE_DYNATRADE === '1'
+          ? [
+              {
+                env: 'SEED_DYNATRADE_FILE',
+                label: 'Dynatrade Stock List',
+                brand: undefined as string | undefined,
+                currency: process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
+                partSource: 'AFTERMARKET',
+              },
+            ]
+          : []),
       ];
 
       for (const source of spreadsheetFiles) {

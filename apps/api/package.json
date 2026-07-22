@@ -22,7 +22,8 @@
     "seed:marketplace:dev": "ts-node seed-marketplace.ts",
     "seed:cleanup-auth": "node dist/src/seed-cleanup-auth.cli.js",
     "seed:realtrack-dynatrade": "node dist/src/seed-realtrack-dynatrade.cli.js",
-    "enrich:febest": "node scripts/enrich-febest-from-website.mjs"
+    "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
+    "enrich:dxb": "node scripts/enrich-dxb-from-partsouq.mjs"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -39,7 +40,8 @@
     "exceljs": "^4.4.0",
     "ioredis": "^5.10.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "stripe": "^22.3.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

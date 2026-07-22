@@ -1,9 +1,46 @@
-import { Controller, Post, Body, Param, Headers } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { IsObject, IsOptional, IsString } from 'class-validator';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
 import { CheckoutService } from './checkout.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/auth.types';
+
+class CheckoutDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsObject()
+  shippingAddress!: Record<string, unknown>;
+}
 
 @Controller('checkout')
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
+
+  /** Stripe-hosted Checkout webhook — card data never touches our servers. */
+  @Post('webhooks/stripe')
+  stripeWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('stripe-signature') signature: string | undefined,
+  ) {
+    const rawBody = req.rawBody;
+    if (!rawBody) {
+      throw new BadRequestException('Raw body unavailable for Stripe webhook verification');
+    }
+    return this.checkoutService.handleStripeWebhook(rawBody, signature);
+  }
 
   @Post('payments/:paymentIntentId/confirm')
   confirmPayment(
@@ -14,14 +51,22 @@ export class CheckoutController {
     return this.checkoutService.confirmPayment(paymentIntentId, body, webhookSecret);
   }
 
-  // Guest-friendly checkout — the buyer only needs to provide contact/shipping
-  // details; we find-or-create a lightweight buyer record from the email so
-  // orders can still be looked up later without requiring a full signup flow.
+  /** Authenticated checkout → Stripe hosted Checkout Session. */
   @Post(':cartId')
+  @UseGuards(JwtAuthGuard)
   async checkout(
     @Param('cartId') cartId: string,
-    @Body() body: { buyerId?: string; email?: string; name?: string; shippingAddress: any },
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: CheckoutDto,
   ) {
-    return this.checkoutService.processCheckout(cartId, body, body.shippingAddress);
+    return this.checkoutService.processCheckout(
+      cartId,
+      {
+        buyerId: user.userId,
+        email: user.email,
+        name: body.name,
+      },
+      body.shippingAddress,
+    );
   }
 }

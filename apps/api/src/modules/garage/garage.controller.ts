@@ -1,25 +1,29 @@
-import { Controller, Get, Post, Delete, Param, Body } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { GarageService } from './garage.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/auth.types';
 
 @Controller('garage')
+@UseGuards(JwtAuthGuard)
 export class GarageController {
   constructor(private readonly garageService: GarageService) {}
 
-  // Mocking userId for now since we haven't implemented full Auth middleware yet
-  private readonly mockUserId = '123e4567-e89b-12d3-a456-426614174000'; 
-
   @Get()
-  async getMyGarage() {
-    return this.garageService.getMyGarage(this.mockUserId);
+  async getMyGarage(@CurrentUser() user: AuthenticatedUser) {
+    return this.garageService.getMyGarage(user.userId);
   }
 
   @Post()
-  async addVehicle(@Body() body: { vehicleConfigId: string, nickname?: string, vin?: string }) {
-    return this.garageService.addVehicleToGarage(this.mockUserId, body);
+  async addVehicle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: { vehicleConfigId: string; nickname?: string; vin?: string },
+  ) {
+    return this.garageService.addVehicleToGarage(user.userId, body);
   }
 
   @Delete(':id')
-  async removeVehicle(@Param('id') id: string) {
-    return this.garageService.removeVehicleFromGarage(this.mockUserId, id);
+  async removeVehicle(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.garageService.removeVehicleFromGarage(user.userId, id);
   }
 }

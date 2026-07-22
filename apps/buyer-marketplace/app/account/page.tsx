@@ -10,13 +10,16 @@ import {
   RotateCcwIcon,
   ShieldCheckIcon,
 } from "@repo/ui/icons";
+import { buttonClasses } from "@repo/ui/button";
 import { useGarage } from "@/lib/garage-context";
 import { useWatchlist } from "@/lib/watchlist-context";
+import { useAuth } from "@/lib/auth-context";
 import { getStoredOrders } from "@/lib/order-history";
 
 export default function AccountOverviewPage() {
   const { vehicles, activeVehicle } = useGarage();
   const { count: watchCount } = useWatchlist();
+  const { user, ready, isAuthenticated, logout } = useAuth();
   const [orderCount, setOrderCount] = useState(0);
 
   useEffect(() => setOrderCount(getStoredOrders().length), []);
@@ -29,6 +32,44 @@ export default function AccountOverviewPage() {
 
   return (
     <div className="space-y-8">
+      <section className="border-2 border-slate-950 bg-white p-5 sm:p-6">
+        {ready && isAuthenticated && user ? (
+          <>
+            <p className="eyebrow">Signed in</p>
+            <h2 className="mt-1 font-display text-2xl font-black uppercase text-slate-950">
+              {user.name || "Buyer"}
+            </h2>
+            <p className="mt-1 text-sm text-graphite-600">{user.email}</p>
+            <button
+              type="button"
+              onClick={logout}
+              className="mt-4 text-sm font-semibold text-brand-700 hover:text-brand-800"
+            >
+              Sign out
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="eyebrow">Account</p>
+            <h2 className="mt-1 font-display text-2xl font-black uppercase text-slate-950">
+              Sign in to checkout
+            </h2>
+            <p className="mt-2 text-sm text-graphite-600">
+              Create a buyer account or sign in with your seeded demo login to place orders. Payment
+              runs on Stripe Checkout — card details never touch our servers.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href="/login" className={buttonClasses()}>
+                Sign in
+              </Link>
+              <Link href="/signup" className={buttonClasses({ variant: "outline" })}>
+                Create account
+              </Link>
+            </div>
+          </>
+        )}
+      </section>
+
       <section>
         <p className="eyebrow">At a glance</p>
         <div className="mt-3 grid border-l border-t border-stone-300 md:grid-cols-3">
@@ -57,7 +98,7 @@ export default function AccountOverviewPage() {
         </div>
       </section>
 
-      <p className="flex items-start gap-2 border-t border-stone-300 pt-4 text-xs leading-relaxed text-graphite-600"><ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />Until customer authentication is connected, garage, watchlist, and purchase references are stored on this device. Checkout still uses the existing marketplace order service.</p>
+      <p className="flex items-start gap-2 border-t border-stone-300 pt-4 text-xs leading-relaxed text-graphite-600"><ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />Garage and watchlist can stay on this device for browsing; checkout requires a signed-in buyer account and Stripe-hosted payment.</p>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { cn } from "@repo/ui/cn";
 import { useCart } from "@/lib/cart-context";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { useWatchlist } from "@/lib/watchlist-context";
+import { useAuth } from "@/lib/auth-context";
 import { clearRecentSearches, getRecentSearches, pushRecentSearch } from "@/lib/recent";
 import type { Facet } from "@/lib/types";
 
@@ -174,6 +175,7 @@ export function Header({ categories }: { categories: Facet[] }) {
   const { itemCount } = useCart();
   const { activeVehicle } = useGarage();
   const { count: watchCount } = useWatchlist();
+  const { user, ready: authReady, isAuthenticated, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => setMobileOpen(false), [pathname]);
@@ -189,6 +191,12 @@ export function Header({ categories }: { categories: Facet[] }) {
     ["/account/purchases", "Purchases"],
     ["/account/messages", "Messages"],
     ["/support", "Support"],
+    ...(isAuthenticated
+      ? ([["/account", "Account"]] as Array<[string, string]>)
+      : ([
+          ["/login", "Sign in"],
+          ["/signup", "Create account"],
+        ] as Array<[string, string]>)),
   ];
 
   return (
@@ -200,6 +208,13 @@ export function Header({ categories }: { categories: Facet[] }) {
             <Link href="/account/purchases" className="hover:text-brand-200">Purchases</Link>
             <Link href="/account/messages" className="hover:text-brand-200">Messages</Link>
             <Link href="/support" className="hover:text-brand-200">Help</Link>
+            {authReady && isAuthenticated ? (
+              <button type="button" onClick={logout} className="hover:text-brand-200">
+                Sign out
+              </button>
+            ) : (
+              <Link href="/login" className="hover:text-brand-200">Sign in</Link>
+            )}
             <a href="/seller" className="hover:text-brand-200">Sell parts</a>
           </nav>
         </div>
@@ -217,7 +232,12 @@ export function Header({ categories }: { categories: Facet[] }) {
           <div className="hidden min-w-0 flex-1 md:block"><SearchBox categories={categories} /></div>
           <div className="ml-auto flex items-center gap-0.5">
             <ActionLink href="/watchlist" label="Watchlist" count={watchCount} icon={<HeartIcon className="h-5 w-5" />} className="hidden sm:flex" />
-            <ActionLink href="/account" label="Account" icon={<UserIcon className="h-5 w-5" />} className="hidden sm:flex" />
+            <ActionLink
+              href={isAuthenticated ? "/account" : "/login"}
+              label={authReady && isAuthenticated ? (user?.name?.split(" ")[0] || "Account") : "Sign in"}
+              icon={<UserIcon className="h-5 w-5" />}
+              className="hidden sm:flex"
+            />
             <ActionLink href="/cart" label="Cart" count={itemCount} icon={<CartIcon className="h-5 w-5" />} />
           </div>
         </div>

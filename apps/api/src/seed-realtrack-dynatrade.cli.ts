@@ -1,6 +1,8 @@
 /**
- * Re-run RealTrack (Salvage storeId + Blackline) and Dynatrade only.
+ * Re-run RealTrack (Salvage storeId + Blackline) only.
  * Also activates Superior REVIEW→ACTIVE where stock > 0.
+ *
+ * Dynatrade import is disabled unless SEED_INCLUDE_DYNATRADE=1 and SEED_DYNATRADE_FILE is set.
  *
  *   node dist/src/seed-realtrack-dynatrade.cli.js
  */
@@ -55,7 +57,8 @@ async function main() {
     }
 
     const dynatradePath = process.env.SEED_DYNATRADE_FILE;
-    if (dynatradePath) {
+    const includeDynatrade = process.env.SEED_INCLUDE_DYNATRADE === '1';
+    if (includeDynatrade && dynatradePath) {
       try {
         const superior = await prisma.seller.findFirst({
           where: {
@@ -67,8 +70,6 @@ async function main() {
         });
         if (!superior) throw new Error('Superior Auto Parts seller not found');
         const buffer = await fs.readFile(dynatradePath);
-        // New checksum path: allow re-import after failed attempt by renaming conceptually via timestamp suffix in report only —
-        // clear prior failed/incomplete Dynatrade job checksum block by deleting matching failed jobs.
         await prisma.sellerUploadJob.deleteMany({
           where: {
             sellerId: superior.id,
@@ -93,7 +94,6 @@ async function main() {
           status: job.status,
           report: job.report,
         });
-        // Activate newly imported Dynatrade rows too
         report.activatedSuperiorAfterDynatrade = await activateSuperiorInStockOffers(prisma);
       } catch (error) {
         report.errors.push({
@@ -102,7 +102,13 @@ async function main() {
         });
       }
     } else {
-      report.errors.push({ source: 'Dynatrade Stock List', message: 'SEED_DYNATRADE_FILE not set' });
+      report.spreadsheetSources.push({
+        file: 'Dynatrade',
+        skipped: true,
+        reason: includeDynatrade
+          ? 'SEED_DYNATRADE_FILE not set'
+          : 'Dynatrade disabled (set SEED_INCLUDE_DYNATRADE=1 to import)',
+      });
     }
   } finally {
     report.completedAt = new Date().toISOString();

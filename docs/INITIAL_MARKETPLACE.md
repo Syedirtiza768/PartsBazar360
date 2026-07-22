@@ -26,6 +26,12 @@ Default password: `SEED_AUTH_PASSWORD` or `ChangeMe123!`.
 
 Buyer endpoints: `POST /auth/register`, `POST /auth/login`, `GET /auth/me`.
 
+Buyer marketplace: `/login`, `/signup`. Checkout requires sign-in and redirects to **Stripe Checkout** (hosted — card data never touches our servers).
+
+Admin portal: `/login` (ADMIN role only). Seeded admin works after marketplace seed.
+
+Stripe sandbox env (API): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `BUYER_APP_URL`. Webhook: `POST /checkout/webhooks/stripe` (`checkout.session.completed`).
+
 Lightweight cleanup (no RealTrack/spreadsheet): `npm run seed:cleanup-auth --workspace api`.
 
 Set `SEED_DYNATRADE_FILE` / `SEED_FEBEST_FILE` / `SEED_DXB_FILE` for Superior imports.

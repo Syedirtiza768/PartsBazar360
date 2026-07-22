@@ -5,6 +5,7 @@ import { CartProvider } from "@/lib/cart-context";
 import { GarageProvider } from "@/lib/garage-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { WatchlistProvider } from "@/lib/watchlist-context";
+import { AuthProvider } from "@/lib/auth-context";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { INTERNAL_API_URL, SITE_URL } from "@/lib/api";
@@ -105,17 +106,19 @@ export default async function RootLayout({
       <body className="flex min-h-screen flex-col">
         <a href="#main-content" className="skip-link">Skip to marketplace content</a>
         <ToastProvider>
-          <GarageProvider>
-            <WatchlistProvider>
-              <CartProvider>
-                <Header categories={categories} />
-                <main id="main-content" className="flex-1">
-                  {children}
-                </main>
-                <Footer />
-              </CartProvider>
-            </WatchlistProvider>
-          </GarageProvider>
+          <AuthProvider>
+            <GarageProvider>
+              <WatchlistProvider>
+                <CartProvider>
+                  <Header categories={categories} />
+                  <main id="main-content" className="flex-1">
+                    {children}
+                  </main>
+                  <Footer />
+                </CartProvider>
+              </WatchlistProvider>
+            </GarageProvider>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>
