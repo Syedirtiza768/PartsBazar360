@@ -63,6 +63,12 @@ services:
       REALTRACK_API_URL: https://mhn.realtrackapp.com/api
       REALTRACK_API_EMAIL: api-published-listings@realtrack.local
       REALTRACK_API_PASSWORD: Ebay$321
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
+      BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.realtrackapp.com/buyer}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
       interval: 10s
