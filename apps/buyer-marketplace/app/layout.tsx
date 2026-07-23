@@ -80,6 +80,7 @@ async function getNavCategories(): Promise<FacetsResponse["categories"]> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return [];
     const data: FacetsResponse = await res.json();

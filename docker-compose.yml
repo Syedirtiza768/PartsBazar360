@@ -65,16 +65,49 @@ services:
       REALTRACK_API_PASSWORD: Ebay$321
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.realtrackapp.com/buyer}
+      BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      RUN_INGESTION_WORKER: "0"
+      SCHEMA_MODE: ${SCHEMA_MODE:-migrate}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # BullMQ consumers — keeps RealTrack sync off the request-serving API process.
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["./docker-entrypoint-worker.sh"]
+    environment:
+      DATABASE_URL: postgresql://partsbazar_user:partsbazar_password@postgres:5432/partsbazar_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OPENSEARCH_URL: http://opensearch:9200
+      RUN_INGESTION_WORKER: "1"
+      DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-8}
+      REALTRACK_API_URL: https://mhn.realtrackapp.com/api
+      REALTRACK_API_EMAIL: api-published-listings@realtrack.local
+      REALTRACK_API_PASSWORD: Ebay$321
+      OPENSEARCH_REFRESH_ON_INDEX: ${OPENSEARCH_REFRESH_ON_INDEX:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,6 +141,7 @@ services:
       # extra hop through nginx for SSR data fetching).
       INTERNAL_API_URL: http://api:3001
       SITE_URL: https://partsbazar360.realtrackapp.com/buyer
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
     restart: unless-stopped
     networks:
       - app-network

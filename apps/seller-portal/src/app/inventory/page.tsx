@@ -117,12 +117,16 @@ export default function InventoryPage() {
   const loading = inventory === null && !error;
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}`)
+    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}&page=1&limit=50`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
       })
-      .then((data) => setInventory(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (Array.isArray(data)) setInventory(data);
+        else if (Array.isArray(data?.items)) setInventory(data.items);
+        else setInventory([]);
+      })
       .catch(() => setError(true));
   }, []);
 

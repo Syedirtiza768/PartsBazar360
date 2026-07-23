@@ -89,6 +89,9 @@ export class FebestWebsiteService {
       (item) =>
         this.isFebestPart(item) &&
         item.manufacturerPartNumber &&
+        // Skip live HTTP when the card already has any image — enrichment
+        // scripts persist febest.de URLs; cold live fetch is for empty cards only.
+        !(item.imageUrls && item.imageUrls.length > 0) &&
         !this.hasFebestImage(item),
     );
     if (targets.length === 0) return items;

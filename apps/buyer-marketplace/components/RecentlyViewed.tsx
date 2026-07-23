@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClockIcon } from "@repo/ui/icons";
 import { PartImage } from "./PartImage";
 import { Price } from "./Price";
@@ -11,11 +11,13 @@ import { lowestOfferPrice, offerCurrency } from "@/lib/format";
 
 /**
  * Horizontal rail of parts the buyer opened recently (device-local).
- * Snapshots in localStorage are re-checked against the live API so deleted
- * / no-offer parts never appear — stale IDs are pruned from storage.
+ * Renders localStorage snapshots immediately, then re-checks against the live
+ * API in the background (idle / when visible) so deleted or empty-offer parts
+ * are pruned without blocking first paint.
  */
 export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
   const [items, setItems] = useState<RecentPart[] | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +28,10 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
       return;
     }
 
-    (async () => {
+    // Paint snapshots first — avoid waiting on N PDP fetches before anything shows.
+    setItems(local);
+
+    const validate = async () => {
       const checked = await Promise.all(
         local.map(async (snapshot): Promise<RecentPart | null> => {
           const live = await fetchLivePart(snapshot.id);
@@ -43,15 +48,11 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
       );
       if (cancelled) return;
       const alive = checked.filter((row): row is RecentPart => row !== null);
-      // Keep excludeId in storage if present; only rewrite the filtered list
-      // when we are not excluding (home). When excluding (PDP), merge prune
-      // into full storage by dropping dead IDs only.
       const deadIds = new Set(
         local.filter((p) => !alive.some((a) => a.id === p.id)).map((p) => p.id),
       );
       if (deadIds.size > 0 || alive.length !== local.length) {
         const full = getRecentlyViewed().filter((p) => !deadIds.has(p.id));
-        // Refresh surviving snapshots with live title/price/image when we have them.
         const byId = new Map(alive.map((a) => [a.id, a]));
         setRecentlyViewed(
           full.map((p) => {
@@ -61,17 +62,56 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
         );
       }
       setItems(alive);
-    })();
+    };
 
+    const runWhenIdle = () => {
+      const w = window as Window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (typeof w.requestIdleCallback === "function") {
+        const id = w.requestIdleCallback(() => {
+          void validate();
+        }, { timeout: 2500 });
+        return () => w.cancelIdleCallback?.(id);
+      }
+      const t = window.setTimeout(() => {
+        void validate();
+      }, 400);
+      return () => window.clearTimeout(t);
+    };
+
+    // Defer network work until the rail is near the viewport when possible.
+    const node = sectionRef.current;
+    if (node && typeof IntersectionObserver !== "undefined") {
+      let cancelIdle: (() => void) | undefined;
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((e) => e.isIntersecting)) return;
+          io.disconnect();
+          cancelIdle = runWhenIdle();
+        },
+        { rootMargin: "200px" },
+      );
+      io.observe(node);
+      return () => {
+        cancelled = true;
+        io.disconnect();
+        cancelIdle?.();
+      };
+    }
+
+    const cancelIdle = runWhenIdle();
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, [excludeId]);
 
   if (!items || items.length === 0) return null;
 
   return (
-    <section aria-labelledby="recently-viewed-heading">
+    <section ref={sectionRef} aria-labelledby="recently-viewed-heading">
       <h2
         id="recently-viewed-heading"
         className="flex items-center gap-2 text-lg font-semibold text-slate-900"
@@ -87,7 +127,7 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
             className="w-40 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover"
           >
             <div className="relative aspect-square border-b border-slate-100 bg-slate-50">
-              <PartImage src={item.image} alt={item.title} className="object-contain p-2" />
+              <PartImage src={item.image} alt={item.title} className="object-contain p-2" imageSize={300} />
             </div>
             <div className="p-2.5">
               <p className="line-clamp-2 text-xs font-medium leading-snug text-slate-700">

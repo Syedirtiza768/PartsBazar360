@@ -4,7 +4,6 @@ import { OrdersController } from './orders.controller';
 import { AnalyticsController } from './analytics.controller';
 import { UploadsController } from './uploads.controller';
 import { MerchantUploadsService } from './uploads.service';
-import { PrismaService } from '../../prisma.service';
 import { SearchModule } from '../search/search.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { SellerOnboardingController } from './onboarding.controller';
@@ -22,7 +21,7 @@ import { CatalogImportModule } from '../catalog-import/catalog-import.module';
     SellerOnboardingController,
     MerchantPricingController,
   ],
-  providers: [PrismaService, MerchantUploadsService, SellerOnboardingService],
+  providers: [MerchantUploadsService, SellerOnboardingService],
   exports: [MerchantUploadsService],
 })
 export class MerchantModule {}

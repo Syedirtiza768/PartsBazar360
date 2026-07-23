@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaModule } from './prisma.module';
 import { IntegrationModule } from './modules/integration/integration.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { OperationsModule } from './modules/operations/operations.module';
@@ -14,10 +15,10 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
 import { CatalogImportModule } from './modules/catalog-import/catalog-import.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { PrismaService } from './prisma.service';
 
 @Module({
   imports: [
+    PrismaModule,
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
@@ -38,6 +39,6 @@ import { PrismaService } from './prisma.service';
     AuthModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService],
+  providers: [AppService],
 })
 export class AppModule {}

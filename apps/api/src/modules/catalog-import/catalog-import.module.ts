@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaService } from '../../prisma.service';
 import { SpreadsheetParserService } from './spreadsheet-parser.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogMatchService } from './catalog-match.service';
@@ -11,7 +10,6 @@ import { AdminCatalogController } from './admin-catalog.controller';
 @Module({
   controllers: [FitmentController, AdminCatalogController],
   providers: [
-    PrismaService,
     SpreadsheetParserService,
     CatalogAuditService,
     CatalogMatchService,

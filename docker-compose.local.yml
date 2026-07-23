@@ -15,11 +15,19 @@ services:
   api:
     environment:
       CORS_ORIGIN: http://localhost
+      RUN_INGESTION_WORKER: "0"
+      SCHEMA_MODE: ${SCHEMA_MODE:-migrate}
+      BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-partsbazar-local-revalidate}
+
+  worker:
+    environment:
+      RUN_INGESTION_WORKER: "1"
 
   buyer-marketplace:
     environment:
       SITE_URL: http://localhost/buyer
-
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-partsbazar-local-revalidate}
   certbot:
     profiles:
       - donotstart

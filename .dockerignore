@@ -6,8 +6,8 @@ coverage
 .commandcode
 certbot
 docx-temp
+tmp
 screenshot-*.png
 test-images*.ps1
-{
 *.log
 .DS_Store

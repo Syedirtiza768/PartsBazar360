@@ -45,10 +45,20 @@ export class SearchController {
     @Query('includeInterchange') includeInterchange?: string,
   ) {
     if (vehicleConfigId) {
-      const items = await this.searchService.searchCompatibleParts(vehicleConfigId, q);
-      const visible = sanitizeSearchItems(items);
+      const pageNum = page ? parseInt(page, 10) : 1;
+      const limitNum = limit ? Math.min(parseInt(limit, 10), 200) : 24;
+      const result = await this.searchService.searchCompatibleParts(vehicleConfigId, q, {
+        page: pageNum,
+        limit: limitNum,
+      });
+      const visible = sanitizeSearchItems(result.items);
       const enriched = await this.febestWebsite.attachImagesToSearchItems(visible);
-      return { items: enriched, total: enriched.length, page: 1, limit: enriched.length || 1 };
+      return {
+        items: enriched,
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+      };
     }
 
     const result = await this.searchService.browseParts({
@@ -72,22 +82,96 @@ export class SearchController {
     return this.searchService.getFacets();
   }
 
-  /** Validate a single Year/Make/Model row against the MVL catalog in the DB. */
-  private async mvlVerifyRow(row: CompatRow): Promise<CompatRow> {
-    const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
-    if (!Number.isFinite(year) || !row.make || !row.model || row.make === '-' || row.model === '-') {
-      return { ...row, mvlVerified: false };
+  /**
+   * Validate Year/Make/Model rows against MVL in one (or few) batched queries
+   * instead of findFirst-per-row-per-market. Preserves market preference order
+   * DE → UK → AU → US and modelLookupVariants priority.
+   */
+  private async mvlVerifyRows(rows: CompatRow[]): Promise<CompatRow[]> {
+    type LookupKey = { year: number; nMake: string; nModel: string };
+    const lookups: LookupKey[] = [];
+    const seen = new Set<string>();
+
+    const parsed = rows.map((row) => {
+      const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+      if (!Number.isFinite(year) || !row.make || !row.model || row.make === '-' || row.model === '-') {
+        return { row, year: NaN, nMake: '', variants: [] as string[] };
+      }
+      const nMake = normalizeMvlToken(row.make);
+      if (!nMake) return { row, year: NaN, nMake: '', variants: [] as string[] };
+      const variants = modelLookupVariants(row.model)
+        .map((v) => normalizeMvlToken(v))
+        .filter(Boolean) as string[];
+      for (const nModel of variants) {
+        const key = `${year}|${nMake}|${nModel}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          lookups.push({ year, nMake, nModel });
+        }
+      }
+      return { row, year, nMake, variants };
+    });
+
+    type Hit = {
+      year: number;
+      normalizedMake: string;
+      normalizedModel: string;
+      market: string;
+      make: string | null;
+      model: string | null;
+      trim: string | null;
+      engine: string | null;
+      epid: string | null;
+    };
+    const hits: Hit[] = [];
+    const CHUNK = 80;
+    for (let i = 0; i < lookups.length; i += CHUNK) {
+      const chunk = lookups.slice(i, i + CHUNK);
+      const batch = await this.prisma.mvlVehicle.findMany({
+        where: {
+          OR: chunk.map((k) => ({
+            year: k.year,
+            normalizedMake: k.nMake,
+            normalizedModel: k.nModel,
+            market: { in: [...MVL_MARKETS] },
+          })),
+        },
+        select: {
+          year: true,
+          normalizedMake: true,
+          normalizedModel: true,
+          market: true,
+          make: true,
+          model: true,
+          trim: true,
+          engine: true,
+          epid: true,
+        },
+      });
+      hits.push(...batch);
     }
-    const nMake = normalizeMvlToken(row.make);
-    if (!nMake) return { ...row, mvlVerified: false };
-    for (const variant of modelLookupVariants(row.model)) {
-      const nModel = normalizeMvlToken(variant);
-      if (!nModel) continue;
-      for (const market of MVL_MARKETS) {
-        const hit = await this.prisma.mvlVehicle.findFirst({
-          where: { year, normalizedMake: nMake, normalizedModel: nModel, market },
-          select: { make: true, model: true, trim: true, engine: true, epid: true },
-        });
+
+    const marketRank = new Map<string, number>(MVL_MARKETS.map((m, i) => [m, i]));
+    // Best hit per year|make|model by market preference
+    const bestByKey = new Map<string, Hit>();
+    for (const hit of hits) {
+      const key = `${hit.year}|${hit.normalizedMake}|${hit.normalizedModel}`;
+      const existing = bestByKey.get(key);
+      if (!existing) {
+        bestByKey.set(key, hit);
+        continue;
+      }
+      const prev = marketRank.get(existing.market) ?? 99;
+      const next = marketRank.get(hit.market) ?? 99;
+      if (next < prev) bestByKey.set(key, hit);
+    }
+
+    return parsed.map(({ row, year, nMake, variants }) => {
+      if (!Number.isFinite(year) || !nMake || variants.length === 0) {
+        return { ...row, mvlVerified: false };
+      }
+      for (const nModel of variants) {
+        const hit = bestByKey.get(`${year}|${nMake}|${nModel}`);
         if (hit) {
           return {
             ...row,
@@ -101,8 +185,8 @@ export class SearchController {
           };
         }
       }
-    }
-    return { ...row, mvlVerified: false };
+      return { ...row, mvlVerified: false };
+    });
   }
 
   // Direct canonical-part lookup for product detail pages, bypassing
@@ -308,15 +392,12 @@ export class SearchController {
       }
     }
 
-    // MVL validation: verify every compatibility row against the MVL vehicle
-    // catalog in the DB. Only MVL-verified rows are shown to buyers so the
-    // PDP compatibility table always reflects catalog-validated fitment.
+    // MVL validation: verify compatibility rows against the MVL vehicle
+    // catalog in batched queries. Only MVL-verified rows are shown to buyers
+    // so the PDP compatibility table always reflects catalog-validated fitment.
     const ROW_VERIFY_CAP = 400;
     const toVerify = compatibilityTable.slice(0, ROW_VERIFY_CAP);
-    const verifiedRows: CompatRow[] = [];
-    for (const row of toVerify) {
-      verifiedRows.push(await this.mvlVerifyRow(row));
-    }
+    const verifiedRows = await this.mvlVerifyRows(toVerify);
     let mvlVerifiedTable = verifiedRows.filter((r) => r.mvlVerified);
 
     // If nothing verifies (e.g. MVL has no data for this market yet), fall back

@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { OpenSearchService } from './opensearch.service';
 import { SearchController } from './search.controller';
-import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
+import { BuyerCacheService } from './buyer-cache.service';
 
 @Module({
-  providers: [OpenSearchService, PrismaService, FebestWebsiteService],
+  providers: [OpenSearchService, FebestWebsiteService, BuyerCacheService],
   controllers: [SearchController],
-  exports: [OpenSearchService, FebestWebsiteService],
+  exports: [OpenSearchService, FebestWebsiteService, BuyerCacheService],
 })
 export class SearchModule {}

@@ -3,7 +3,6 @@ import { BullModule } from '@nestjs/bullmq';
 import { OperationsController } from './operations.controller';
 import { SupportController } from './support.controller';
 import { SupportService } from './support.service';
-import { PrismaService } from '../../prisma.service';
 import { PricingModule } from '../pricing/pricing.module';
 import { SellerOperationsController } from './sellers.controller';
 import { PricingOperationsController } from './pricing.controller';
@@ -16,6 +15,6 @@ import { PricingOperationsController } from './pricing.controller';
     PricingModule,
   ],
   controllers: [OperationsController, SupportController, SellerOperationsController, PricingOperationsController],
-  providers: [PrismaService, SupportService],
+  providers: [SupportService],
 })
 export class OperationsModule {}

@@ -49,8 +49,13 @@ async function getResults(
   qs.set("limit", String(PAGE_SIZE));
 
   try {
+    // Anonymous catalog browse is safe to cache briefly. Fitment / vehicle
+    // searches stay live so stock and verified-fit sets stay current.
     const res = await fetch(`${INTERNAL_API_URL}/search/parts?${qs.toString()}`, {
-      cache: "no-store",
+      ...(params.vehicleConfigId
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 30 } }),
+      signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) return null;
     return res.json();
@@ -63,6 +68,7 @@ async function getFacets(): Promise<FacetsResponse> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return { brands: [], categories: [] };
     return res.json();
@@ -105,20 +111,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const [resultsRaw, facets] = await Promise.all([getResults(params), getFacets()]);
 
-  // Vehicle search returns the full verified-fit set in one response —
-  // paginate it here so long lists stay usable.
+  // Both browse and fitment search are server-paginated via the API.
   let results = resultsRaw;
   let totalPages = 1;
   if (resultsRaw) {
-    if (isFitmentMode) {
-      totalPages = Math.max(1, Math.ceil(resultsRaw.items.length / PAGE_SIZE));
-      results = {
-        ...resultsRaw,
-        items: resultsRaw.items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      };
-    } else {
-      totalPages = Math.max(1, Math.ceil(resultsRaw.total / (resultsRaw.limit || PAGE_SIZE)));
-    }
+    totalPages = Math.max(1, Math.ceil(resultsRaw.total / (resultsRaw.limit || PAGE_SIZE)));
   }
 
   const paramsShape: SearchParamsShape = {
@@ -157,9 +154,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 "Results unavailable"
               ) : (
                 <>
-                  {(isFitmentMode ? resultsRaw!.items.length : results.total).toLocaleString()}{" "}
+                  {results.total.toLocaleString()}{" "}
                   {isFitmentMode ? "verified-fit " : ""}
-                  {(isFitmentMode ? resultsRaw!.items.length : results.total) === 1 ? "part" : "parts"}
+                  {results.total === 1 ? "part" : "parts"}
                 </>
               )}
             </p>

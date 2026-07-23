@@ -54,7 +54,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
     <div>
       {/* Main stage */}
       <div className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <PartImage src={active} alt={title} className="object-contain p-4" priority />
+        <PartImage src={active} alt={title} className="object-contain p-4" priority imageSize={1600} />
 
         {hasImages && (
           <>
@@ -116,7 +116,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
                   : "border-slate-200 opacity-80 hover:border-slate-300 hover:opacity-100",
               )}
             >
-              <PartImage src={img} alt="" className="object-contain p-1" />
+              <PartImage src={img} alt="" className="object-contain p-1" imageSize={300} />
             </button>
           ))}
         </div>
@@ -193,7 +193,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
                     i === clamped ? "border-brand-400" : "border-transparent opacity-60 hover:opacity-100",
                   )}
                 >
-                  <PartImage src={img} alt="" className="object-contain p-0.5" />
+                  <PartImage src={img} alt="" className="object-contain p-0.5" imageSize={300} />
                 </button>
               ))}
             </div>

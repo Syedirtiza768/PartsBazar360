@@ -11,12 +11,10 @@ import { SalvagePanel } from "@/components/SalvagePanel";
 import { lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
 import type { Part } from "@/lib/types";
 
-// PDPs must always reflect the current DB state — never a cached page that
-// could serve a stale (deleted/no-offer) listing. force-dynamic opts out of
-// the Next.js Full Route Cache so notFound() returns a live 404 when the API
-// reports the part as gone.
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// Short ISR window: PDPs are mostly catalog data. Merchant edits trigger
+// on-demand revalidateTag(`part:${id}`) via /api/revalidate when configured.
+// Worst-case staleness without a purge is REVALIDATE_SECONDS.
+export const revalidate = 45;
 
 interface PartPageProps {
   params: Promise<{ id: string }>;
@@ -24,7 +22,10 @@ interface PartPageProps {
 
 async function getPart(id: string): Promise<Part | null> {
   try {
-    const res = await fetch(`${INTERNAL_API_URL}/search/parts/${id}`, { cache: "no-store" });
+    const res = await fetch(`${INTERNAL_API_URL}/search/parts/${id}`, {
+      next: { revalidate: 45, tags: [`part:${id}`] },
+      signal: AbortSignal.timeout(20_000),
+    });
     if (!res.ok) return null;
     return res.json();
   } catch {

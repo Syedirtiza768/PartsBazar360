@@ -335,6 +335,8 @@ model SellerOffer {
   salvageUnits   SalvageUnit[]
 
   @@index([canonicalPartId])
+  @@index([sellerId, status])
+  @@index([sellerId, updatedAt])
 }
 
 model OfferPrice {
@@ -366,6 +368,7 @@ model Inventory {
   offer     SellerOffer @relation(fields: [offerId], references: [id])
 
   @@unique([warehouseId, offerId])
+  @@index([offerId])
 }
 
 model RawStagingListing {
@@ -514,6 +517,7 @@ model Fitment {
   evidence      FitmentEvidence[]
 
   @@unique([canonicalPartId, vehicleConfigId])
+  @@index([vehicleConfigId])
 }
 
 model FitmentEvidence {
@@ -665,6 +669,8 @@ model Cart {
   updatedAt DateTime @updatedAt
 
   items CartItem[]
+
+  @@index([userId, status])
 }
 
 model CartItem {
@@ -676,6 +682,9 @@ model CartItem {
 
   cart        Cart        @relation(fields: [cartId], references: [id])
   sellerOffer SellerOffer @relation(fields: [sellerOfferId], references: [id])
+
+  @@index([cartId])
+  @@index([sellerOfferId])
 }
 
 model Order {
@@ -711,6 +720,10 @@ model SellerOrder {
   seller         Seller          @relation(fields: [sellerId], references: [id])
   items          OrderItem[]
   supportTickets SupportTicket[]
+
+  @@index([sellerId, status])
+  @@index([sellerId, createdAt])
+  @@index([parentOrderId])
 }
 
 model OrderItem {

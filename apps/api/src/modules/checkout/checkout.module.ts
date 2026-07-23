@@ -7,11 +7,10 @@ import { CartModule } from '../cart/cart.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { OrderModule } from '../order/order.module';
 import { AuthModule } from '../auth/auth.module';
-import { PrismaService } from '../../prisma.service';
 
 @Module({
   imports: [CartModule, InventoryModule, OrderModule, AuthModule],
-  providers: [CheckoutService, ShippingService, StripeService, PrismaService],
+  providers: [CheckoutService, ShippingService, StripeService],
   controllers: [CheckoutController],
 })
 export class CheckoutModule {}

@@ -35,7 +35,7 @@ export class OpenSearchService implements OnModuleInit {
         } catch {
           /* ignore missing */
         }
-        this.logger.log(`Removed part ${part.id} from OpenSearch (no buyer-visible offers)`);
+        this.logger.debug(`Removed part ${part.id} from OpenSearch (no buyer-visible offers)`);
         return;
       }
 
@@ -100,16 +100,24 @@ export class OpenSearchService implements OnModuleInit {
             sellerName: o.sellerName || o.seller?.name || null,
           })),
         },
-        refresh: true,
+        refresh: process.env.OPENSEARCH_REFRESH_ON_INDEX === 'true',
       });
-      this.logger.log(`Indexed part ${part.id} into OpenSearch`);
+      this.logger.debug(`Indexed part ${part.id} into OpenSearch`);
     } catch (error) {
       this.logger.error(`Failed to index part ${part.id}`, error.stack);
     }
   }
 
-  async searchCompatibleParts(vehicleConfigId: string, query?: string) {
+  async searchCompatibleParts(
+    vehicleConfigId: string,
+    query?: string,
+    opts?: { page?: number; limit?: number },
+  ) {
     try {
+      const page = Math.max(1, opts?.page || 1);
+      const limit = Math.min(Math.max(1, opts?.limit || 24), 200);
+      const from = (page - 1) * limit;
+
       const must: any[] = [
         { term: { 'fitments.keyword': vehicleConfigId } }
       ];
@@ -124,7 +132,9 @@ export class OpenSearchService implements OnModuleInit {
       const response = await this.client.search({
         index: this.INDEX_NAME,
         body: {
-          size: 200,
+          from,
+          size: limit,
+          track_total_hits: true,
           query: {
             bool: {
               must
@@ -134,7 +144,15 @@ export class OpenSearchService implements OnModuleInit {
         } as any,
       });
 
-      return response.body.hits.hits.map((hit: any) => ({ id: hit._id, ...(hit._source as object) }));
+      const totalRaw = response.body.hits.total;
+      const total =
+        typeof totalRaw === 'number' ? totalRaw : Number(totalRaw?.value || 0);
+      const items = response.body.hits.hits.map((hit: any) => ({
+        id: hit._id,
+        ...(hit._source as object),
+      }));
+
+      return { items, total, page, limit };
     } catch (error) {
       this.logger.error(`Search failed for vehicleConfigId ${vehicleConfigId}`, error.stack);
       throw error;

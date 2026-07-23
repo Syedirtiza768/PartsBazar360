@@ -17,11 +17,16 @@ import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { VehiclePicker } from "@/components/VehiclePicker";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
+// Keep the route dynamic so Docker/CI builds do not require a live API, while
+// still caching featured listings and facets in the Next.js Data Cache.
 export const dynamic = "force-dynamic";
 
 async function getFeaturedParts(): Promise<BrowseResponse | null> {
   try {
-    const response = await fetch(`${INTERNAL_API_URL}/search/parts?sort=newest&limit=8`, { cache: "no-store" });
+    const response = await fetch(`${INTERNAL_API_URL}/search/parts?sort=newest&limit=8`, {
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(8_000),
+    });
     return response.ok ? response.json() : null;
   } catch {
     return null;
@@ -30,7 +35,10 @@ async function getFeaturedParts(): Promise<BrowseResponse | null> {
 
 async function getFacets(): Promise<FacetsResponse> {
   try {
-    const response = await fetch(`${INTERNAL_API_URL}/search/facets`, { cache: "no-store" });
+    const response = await fetch(`${INTERNAL_API_URL}/search/facets`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8_000),
+    });
     return response.ok ? response.json() : { brands: [], categories: [] };
   } catch {
     return { brands: [], categories: [] };

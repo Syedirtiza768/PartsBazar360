@@ -9,19 +9,33 @@ export class AnalyticsController {
   async getSummary(@Query('sellerId') sellerId: string) {
     if (!sellerId) throw new NotFoundException('sellerId query parameter is required');
 
-    const orders = await this.prisma.sellerOrder.findMany({
-      where: { sellerId }
-    });
+    const [activeOffers, pendingOrders, aggregates] = await Promise.all([
+      this.prisma.sellerOffer.count({
+        where: { sellerId, status: 'ACTIVE' },
+      }),
+      this.prisma.sellerOrder.count({
+        where: { sellerId, status: 'PROCESSING' },
+      }),
+      this.prisma.sellerOrder.aggregate({
+        where: {
+          sellerId,
+          status: { notIn: ['AWAITING_PAYMENT', 'CANCELLED'] },
+        },
+        _sum: {
+          subTotal: true,
+          shippingTotal: true,
+          marketplaceFeeTotal: true,
+          sellerProceedsTotal: true,
+        },
+      }),
+    ]);
 
-    const activeOffers = await this.prisma.sellerOffer.count({
-      where: { sellerId, status: 'ACTIVE' }
-    });
-
-    const paidOrders = orders.filter(o => !['AWAITING_PAYMENT', 'CANCELLED'].includes(o.status));
-    const pendingOrders = paidOrders.filter(o => o.status === 'PROCESSING').length;
-    const grossSales = paidOrders.reduce((sum, o) => sum + o.subTotal + o.shippingTotal, 0);
-    const marketplaceFees = paidOrders.reduce((sum, o) => sum + o.marketplaceFeeTotal, 0);
-    const sellerProceeds = paidOrders.reduce((sum, o) => sum + o.sellerProceedsTotal + o.shippingTotal, 0);
+    const subTotal = aggregates._sum.subTotal || 0;
+    const shippingTotal = aggregates._sum.shippingTotal || 0;
+    const marketplaceFees = aggregates._sum.marketplaceFeeTotal || 0;
+    const sellerProceedsBase = aggregates._sum.sellerProceedsTotal || 0;
+    const grossSales = subTotal + shippingTotal;
+    const sellerProceeds = sellerProceedsBase + shippingTotal;
 
     return {
       activeListings: activeOffers,

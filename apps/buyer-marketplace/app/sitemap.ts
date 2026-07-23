@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { INTERNAL_API_URL, SITE_URL } from '@/lib/api';
 
+// Runtime-only — avoid blocking Docker/CI builds when the API is unreachable.
+export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
 async function getPartUrls(): Promise<{ id: string; updatedAt?: string }[]> {
@@ -12,6 +14,7 @@ async function getPartUrls(): Promise<{ id: string; updatedAt?: string }[]> {
     try {
       const res = await fetch(`${INTERNAL_API_URL}/search/parts?sort=newest&page=${page}&limit=${pageSize}`, {
         next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(5_000),
       });
       if (!res.ok) break;
       const data = await res.json();

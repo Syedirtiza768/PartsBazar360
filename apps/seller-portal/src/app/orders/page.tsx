@@ -153,10 +153,12 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/orders?sellerId=${DEMO_SELLER_ID}`);
+      const res = await fetch(`${API_BASE_URL}/merchant/orders?sellerId=${DEMO_SELLER_ID}&page=1&limit=50`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) setOrders(data);
+      else if (Array.isArray(data?.items)) setOrders(data.items);
+      else setOrders([]);
       setError(false);
     } catch {
       setError(true);
