@@ -6,12 +6,21 @@ import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
 import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
-import { buildCompatibility, extractListingImages, prioritizeEbayImages } from './listing-enrichment.util';
+import {
+  buildCompatibility,
+  extractListingBrand,
+  extractListingDescription,
+  extractListingImages,
+  extractListingOeNumbers,
+  prioritizeEbayImages,
+} from './listing-enrichment.util';
 import {
   isImportableListing,
   MARKETPLACE_CURRENCY,
   stockQuantityForImport,
 } from './listing-eligibility.util';
+import { extractEnglishTitle, looksLikeEnglishTitle } from './listing-title.util';
+import { MvlFitmentService } from './mvl-fitment.service';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
 import {
@@ -30,6 +39,7 @@ export class IngestionProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly searchService: OpenSearchService,
     private readonly pricing: PricingService,
+    private readonly mvlFitment: MvlFitmentService,
   ) {
     super();
   }
@@ -120,14 +130,23 @@ export class IngestionProcessor extends WorkerHost {
 
       let imported = 0;
       let skippedWrongStore = 0;
-      for (const listing of result.items) {
-        const outcome = await this.processListing(listing, canonicalStoreId);
-        if (outcome === 'skipped_wrong_store') skippedWrongStore++;
-        else imported++;
+      let skippedInactiveOrZero = 0;
+      for (const summary of result.items) {
+        try {
+          const detail = await this.realTrackService.fetchListingDetail(canonicalStoreId, summary.id);
+          const outcome = await this.processListing({ ...summary, ...detail }, canonicalStoreId);
+          if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+          else if (outcome === 'skipped_inactive_or_zero_stock') skippedInactiveOrZero++;
+          else if (outcome === 'imported') imported++;
+        } catch (error) {
+          this.logger.warn(
+            `Listing ${summary.id} failed on page sync: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
 
       this.logger.log(
-        `Processed ${imported} listings for ${target.name} (page ${startPage}, skippedWrongStore=${skippedWrongStore})`,
+        `Processed ${imported} listings for ${target.name} (page ${startPage}, skippedWrongStore=${skippedWrongStore}, skippedInactiveOrZero=${skippedInactiveOrZero})`,
       );
       return {
         status: 'page_processed',
@@ -136,6 +155,7 @@ export class IngestionProcessor extends WorkerHost {
         page: startPage,
         count: imported,
         skippedWrongStore,
+        skippedInactiveOrZero,
         total: result.total,
       };
     } catch (error) {
@@ -206,7 +226,12 @@ export class IngestionProcessor extends WorkerHost {
     listing: any,
     expectedStoreId: string,
   ): Promise<
-    'imported' | 'skipped_wrong_store' | 'skipped_no_seller' | 'skipped_inactive_or_zero_stock'
+    | 'imported'
+    | 'skipped_wrong_store'
+    | 'skipped_no_seller'
+    | 'skipped_inactive_or_zero_stock'
+    | 'skipped_non_english_title'
+    | 'skipped_duplicate'
   > {
     const listingStoreId = listing.storeId || expectedStoreId;
     if (listing.storeId && listing.storeId !== expectedStoreId) {
@@ -222,11 +247,22 @@ export class IngestionProcessor extends WorkerHost {
 
     const stockQty = stockQuantityForImport(listing);
     const imageUrls = extractListingImages(listing);
-    const title: string = listing.title || 'Unknown Part';
+    const title: string = extractEnglishTitle(listing);
+    if (!looksLikeEnglishTitle(title)) {
+      this.logger.warn(`Skipping listing ${listing.id}: non-English title`);
+      return 'skipped_non_english_title';
+    }
     const parsedVehicle = parseVehicleFromTitle(title);
     const category = extractCategory(title);
-    const oeNumbers = extractOeNumbers(title);
-    const compatibility = buildCompatibility(listing, parsedVehicle);
+    const oeNumbers = extractListingOeNumbers(listing, extractOeNumbers(title));
+    const description = extractListingDescription(listing);
+    const brand = extractListingBrand(listing) || parsedVehicle?.make || null;
+    const mpn =
+      (typeof listing.mpn === 'string' && listing.mpn.trim()) ||
+      (typeof listing.manufacturerPartNumber === 'string' && listing.manufacturerPartNumber.trim()) ||
+      oeNumbers[0] ||
+      null;
+    let compatibility = buildCompatibility(listing, parsedVehicle);
 
     await this.prisma.rawStagingListing.upsert({
       where: { sourceListingId: listing.id },
@@ -299,9 +335,11 @@ export class IngestionProcessor extends WorkerHost {
         where: { id: canonicalPart.id },
         data: {
           title,
-          brand: parsedVehicle?.make || canonicalPart.brand,
+          brand: brand || canonicalPart.brand,
           category: category || canonicalPart.category,
           oeNumbers: oeNumbers.length > 0 ? oeNumbers : canonicalPart.oeNumbers,
+          manufacturerPartNumber: mpn || canonicalPart.manufacturerPartNumber,
+          description: description || canonicalPart.description,
           imageUrls: combinedImages,
           listingUrl: listing.listingUrl || canonicalPart.listingUrl,
           compatibility: compatibility.length > 0
@@ -315,9 +353,11 @@ export class IngestionProcessor extends WorkerHost {
       canonicalPart = await this.prisma.canonicalPart.create({
         data: {
           title,
-          brand: parsedVehicle?.make || null,
+          brand,
           category,
           oeNumbers,
+          manufacturerPartNumber: mpn,
+          description,
           fitmentFlags: [],
           imageUrls: mergedImages,
           listingUrl: listing.listingUrl || null,
@@ -327,9 +367,20 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
-    let offer = await this.prisma.sellerOffer.findFirst({
-      where: { externalOfferId: listing.id },
-    });
+    const sourceKey = `rt:${expectedStoreId}:${listing.id}`;
+    let offer =
+      (await this.prisma.sellerOffer.findFirst({ where: { externalOfferId: listing.id } })) ||
+      (await this.prisma.sellerOffer.findFirst({ where: { sourceKey } }));
+    // No-duplicate: same ebay item already offered by this seller → update that offer.
+    if (!offer && listing.ebayItemId) {
+      offer = await this.prisma.sellerOffer.findFirst({
+        where: {
+          sellerId: seller.id,
+          canonicalPart: { ebayItemId: listing.ebayItemId },
+          status: 'ACTIVE',
+        },
+      });
+    }
     const sellerBasePrice = listing.price
       ? parseFloat(listing.price)
       : offer?.sellerBasePrice ?? offer?.price ?? 0;
@@ -349,6 +400,10 @@ export class IngestionProcessor extends WorkerHost {
           currency: MARKETPLACE_CURRENCY,
           status: 'ACTIVE',
           canonicalPartId: canonicalPart.id,
+          externalOfferId: listing.id,
+          sourceKey,
+          sellerSku: listing.sku || offer.sellerSku,
+          sellerTitle: title,
         },
       });
     } else {
@@ -366,6 +421,9 @@ export class IngestionProcessor extends WorkerHost {
           currency: MARKETPLACE_CURRENCY,
           condition: 'USED',
           externalOfferId: listing.id,
+          sourceKey,
+          sellerSku: listing.sku || null,
+          sellerTitle: title,
           status: 'ACTIVE',
         },
       });
@@ -391,56 +449,68 @@ export class IngestionProcessor extends WorkerHost {
       }
     }
 
-    let fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
-    // eBay catalog compatibility (compatibleProducts) is more reliable than title-only.
-    const hasCatalogCompat = compatibility.some((r) => r.source === 'ebay');
-    const evidenceLevel = hasCatalogCompat ? 'B' : 'D';
-    const confidence = hasCatalogCompat ? 0.9 : 0.4;
-    const reviewer = hasCatalogCompat ? 'Auto (eBay catalog)' : 'Auto (title-inferred)';
+    // Build YMM candidates from eBay catalog rows and/or title parse, then verify via US MVL.
+    const ymmCandidates: Array<{
+      year: number;
+      make: string;
+      model: string;
+      trim?: string | null;
+      engine?: string | null;
+      source?: string;
+    }> = [];
+    for (const row of compatibility) {
+      if (!row.make || row.make === '-' || !row.model || row.model === '-') continue;
+      const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+      if (!Number.isFinite(year)) continue;
+      ymmCandidates.push({
+        year,
+        make: row.make,
+        model: row.model,
+        trim: row.trim === '-' ? null : row.trim,
+        engine: row.engine === '-' ? null : row.engine,
+        source: row.source || 'ebay',
+      });
+    }
+    if (parsedVehicle && ymmCandidates.length === 0) {
+      for (let year = parsedVehicle.startYear; year <= parsedVehicle.endYear; year++) {
+        ymmCandidates.push({
+          year,
+          make: parsedVehicle.make,
+          model: parsedVehicle.model,
+          source: 'title',
+        });
+      }
+    }
 
-    if (parsedVehicle) {
-      const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
-      const fitment = await this.prisma.fitment.upsert({
-        where: {
-          canonicalPartId_vehicleConfigId: {
-            canonicalPartId: canonicalPart.id,
-            vehicleConfigId: vehicleConfig.id,
-          },
-        },
-        update: { evidenceLevel, confidence, reviewer },
-        create: {
-          canonicalPartId: canonicalPart.id,
-          vehicleConfigId: vehicleConfig.id,
-          evidenceLevel,
-          confidence,
-          reviewer,
+    let fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
+    const mvlVerified = await this.mvlFitment.verifyCandidates(ymmCandidates);
+    if (mvlVerified.configs.length > 0) {
+      fitments = await this.mvlFitment.upsertVerifiedFitments({
+        canonicalPartId: canonicalPart.id,
+        configs: mvlVerified.configs,
+        source: compatibility.some((r) => r.source === 'ebay') ? 'EBAY_MVL' : 'TITLE_MVL',
+        reviewer: 'Auto (US MVL verified)',
+      });
+      compatibility = this.mvlFitment.mergeCompatJson(null, mvlVerified.rows) as any;
+      canonicalPart = await this.prisma.canonicalPart.update({
+        where: { id: canonicalPart.id },
+        data: {
+          compatibility: compatibility as unknown as Prisma.InputJsonValue,
+          fitmentStatus: 'CONFIRMED',
+          fitmentConfidence: 0.9,
+          fitmentFlags: [
+            ...new Set([...(canonicalPart.fitmentFlags || []), 'MVL_VERIFIED']),
+          ],
         },
       });
-      fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence }];
-    } else if (hasCatalogCompat) {
-      // No title-parsed vehicle, but we have eBay catalog compatibility.
-      // Create fitments from the unique make/model/year ranges in compatibility rows.
-      const uniqueVehicles = new Map<string, { make: string; model: string; startYear: number; endYear: number }>();
-      for (const row of compatibility) {
-        if (row.source !== 'ebay' || !row.make || row.make === '-' || !row.model || row.model === '-') continue;
-        const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
-        if (isNaN(year)) continue;
-        const key = `${row.make}|${row.model}`.toLowerCase();
-        const existing = uniqueVehicles.get(key);
-        if (existing) {
-          existing.startYear = Math.min(existing.startYear, year);
-          existing.endYear = Math.max(existing.endYear, year);
-        } else {
-          uniqueVehicles.set(key, { make: row.make, model: row.model, startYear: year, endYear: year });
-        }
-      }
-      for (const vehicle of uniqueVehicles.values()) {
-        const vehicleConfig = await this.findOrCreateVehicleConfig({
-          make: vehicle.make,
-          model: vehicle.model,
-          startYear: vehicle.startYear,
-          endYear: vehicle.endYear,
-        } as any);
+    } else if (ymmCandidates.length > 0) {
+      // Candidates present but not in MVL — keep unverified D-level fitment + raw compat JSON.
+      const hasCatalogCompat = compatibility.some((r) => r.source === 'ebay');
+      const evidenceLevel = hasCatalogCompat ? 'C' : 'D';
+      const confidence = hasCatalogCompat ? 0.6 : 0.4;
+      const reviewer = hasCatalogCompat ? 'Auto (eBay catalog, MVL miss)' : 'Auto (title-inferred, MVL miss)';
+      if (parsedVehicle) {
+        const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
         const fitment = await this.prisma.fitment.upsert({
           where: {
             canonicalPartId_vehicleConfigId: {
@@ -448,17 +518,28 @@ export class IngestionProcessor extends WorkerHost {
               vehicleConfigId: vehicleConfig.id,
             },
           },
-          update: { evidenceLevel, confidence, reviewer },
+          update: { evidenceLevel, confidence, reviewer, verificationStatus: 'UNVERIFIED' },
           create: {
             canonicalPartId: canonicalPart.id,
             vehicleConfigId: vehicleConfig.id,
             evidenceLevel,
             confidence,
             reviewer,
+            verificationStatus: 'UNVERIFIED',
           },
         });
-        fitments.push({ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence });
+        fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence }];
       }
+      canonicalPart = await this.prisma.canonicalPart.update({
+        where: { id: canonicalPart.id },
+        data: {
+          compatibility: compatibility.length > 0
+            ? compatibility as unknown as Prisma.InputJsonValue
+            : Prisma.JsonNull,
+          fitmentStatus: 'NOT_VERIFIED',
+          fitmentConfidence: confidence,
+        },
+      });
     }
 
     await this.searchService.indexPart({

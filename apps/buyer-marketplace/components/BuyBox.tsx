@@ -23,7 +23,7 @@ import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { useToast } from "@/lib/toast-context";
 import { fitmentForConfig, FITMENT_COPY } from "@/lib/fitment";
 import { pushRecentlyViewed } from "@/lib/recent";
-import { formatPrice, humanize, lowestOfferPrice, offerCurrency } from "@/lib/format";
+import { formatPrice, humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
 import { WatchlistButton } from "./WatchlistButton";
@@ -318,7 +318,7 @@ function OfferRow({
 /* ------------------------------------------------------------------ */
 
 export function BuyBox({ part }: { part: Part }) {
-  const offers = useMemo(() => [...(part.offers || [])].sort((a, b) => a.price - b.price), [part.offers]);
+  const offers = useMemo(() => buyerVisibleOffers(part.offers), [part.offers]);
   const best = offers[0];
   const partType = part.partType || best?.partType || (part.partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
   const identityLabel = partType === "AFTERMARKET" ? "Aftermarket brand" : partType === "SALVAGE_OEM" ? "Original make" : "Genuine vehicle make";
@@ -439,7 +439,7 @@ export function BuyBox({ part }: { part: Part }) {
 /* ------------------------------------------------------------------ */
 
 export function StickyMobileBar({ part }: { part: Part }) {
-  const offers = useMemo(() => [...(part.offers || [])].sort((a, b) => a.price - b.price), [part.offers]);
+  const offers = useMemo(() => buyerVisibleOffers(part.offers), [part.offers]);
   const best = offers[0];
   const { addToCart } = useCart();
   const { push } = useToast();

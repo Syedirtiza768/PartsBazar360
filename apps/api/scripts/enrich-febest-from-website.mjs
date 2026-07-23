@@ -9,8 +9,9 @@
  *   FEBEST_LIMIT=5 node /app/scripts/enrich-febest-from-website.mjs
  *   FEBEST_FORCE=1 FEBEST_DELAY_MS=400 node /app/scripts/enrich-febest-from-website.mjs
  *
- * Evidence is catalog-declared (NOT verified A/B fitment). Compatibility is stored
- * as year/make/model rows for the buyer PDP table; Fitment graph is not claimed.
+ * Evidence: FEBEST website model list is matched to US MVL Year/Make/Model.
+ * Matched rows become verified Fitment (evidenceLevel B, verificationStatus VERIFIED).
+ * Unmatched website rows stay in compatibility JSON as catalog-declared.
  */
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -21,7 +22,8 @@ import path from 'node:path';
 const BASE = 'https://febest.de';
 const USER_AGENT =
   'PartsBazar360CatalogBot/1.0 (+https://partsbazar360.realtrackapp.com; catalog enrichment; contact: ops)';
-const SELLER_ID = process.env.FEBEST_SELLER_ID || 'seed-febest-inventory-supplier';
+// Marketplace FEBEST catalog is sold under Superior Auto Parts (not the suspended seed seller).
+const SELLER_ID = process.env.FEBEST_SELLER_ID || 'seller-superior-auto-parts';
 const DELAY_MS = Number(process.env.FEBEST_DELAY_MS || 400);
 const LIMIT = process.env.FEBEST_LIMIT ? Number(process.env.FEBEST_LIMIT) : null;
 const FORCE = process.env.FEBEST_FORCE === '1';
@@ -99,6 +101,123 @@ function parseModelOptions(html) {
     .map((m) => m[1].trim())
     .filter(Boolean);
   return [...new Set(opts)];
+}
+
+function normalizeMvlToken(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '')
+    .trim();
+}
+
+function modelLookupVariants(model) {
+  const raw = String(model || '').trim();
+  if (!raw) return [];
+  const variants = [raw];
+  const withoutCode = raw.replace(/\s+[A-Z0-9#-]{1,8}$/i, '').trim();
+  if (withoutCode && withoutCode.toLowerCase() !== raw.toLowerCase()) variants.push(withoutCode);
+  const first = raw.split(/\s+/)[0];
+  if (first && !variants.some((v) => v.toLowerCase() === first.toLowerCase())) variants.push(first);
+  // "AVENSISAT22AZT220" / "RAV4ACA20" → try alpha run before digit block
+  const glued = raw.match(/^([A-Za-z]{2,}?)(?=[0-9])/);
+  if (glued?.[1] && glued[1].length >= 2) variants.push(glued[1]);
+  // "RAV 4" style already normalized via token strip
+  return [...new Set(variants)];
+}
+
+async function findMvlHit(prisma, year, nMake, nModel, markets) {
+  for (const market of markets) {
+    const rows = await prisma.$queryRaw`
+      SELECT make, model, epid, "kType", trim, engine, market
+      FROM "MvlVehicle"
+      WHERE year = ${year}
+        AND "normalizedMake" = ${nMake}
+        AND "normalizedModel" = ${nModel}
+        AND market = ${market}
+      LIMIT 1
+    `;
+    if (rows?.[0]) return rows[0];
+  }
+  return null;
+}
+
+async function verifyCompatAgainstMvl(prisma, compatibility) {
+  const verifiedRows = [];
+  const configIds = [];
+  const seen = new Set();
+
+  for (const row of compatibility || []) {
+    const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+    if (!Number.isFinite(year) || !row.make || row.make === '-' || !row.model) continue;
+    const key = `${year}|${normalizeMvlToken(row.make)}|${normalizeMvlToken(row.model)}`;
+    if (seen.has(key)) continue;
+
+    const marketHint = String(row.market || '').toUpperCase();
+    let markets = ['DE', 'UK', 'AU', 'US'];
+    if (marketHint.includes('EU') || marketHint === 'DE') markets = ['DE', 'UK', 'AU', 'US'];
+    else if (marketHint === 'UK' || marketHint === 'GB') markets = ['UK', 'DE', 'AU', 'US'];
+    else if (marketHint === 'AU') markets = ['AU', 'US', 'UK', 'DE'];
+    else if (marketHint === 'US' || marketHint === 'USA') markets = ['US', 'AU', 'UK', 'DE'];
+
+    let hit = null;
+    const nMake = normalizeMvlToken(row.make);
+    for (const variant of modelLookupVariants(row.model)) {
+      const nModel = normalizeMvlToken(variant);
+      if (!nMake || !nModel) continue;
+      hit = await findMvlHit(prisma, year, nMake, nModel, markets);
+      if (hit) break;
+    }
+    if (!hit) continue;
+    seen.add(key);
+
+    verifiedRows.push({
+      year,
+      make: hit.make,
+      model: hit.model,
+      trim: row.trim && row.trim !== '-' ? row.trim : hit.trim || '-',
+      engine: row.engine && row.engine !== '-' ? row.engine : hit.engine || '-',
+      source: `febest.de+mvl:${hit.market}`,
+      epid: hit.epid || undefined,
+      kType: hit.kType || undefined,
+      verified: true,
+      market: hit.market || row.market || null,
+      raw: row.raw || null,
+    });
+
+    const make = await prisma.vehicleMake.upsert({
+      where: { name: hit.make },
+      update: {},
+      create: { name: hit.make, canonicalName: hit.make, displayName: hit.make },
+    });
+    let model = await prisma.vehicleModel.findFirst({ where: { makeId: make.id, name: hit.model } });
+    if (!model) model = await prisma.vehicleModel.create({ data: { makeId: make.id, name: hit.model } });
+    let generation = await prisma.vehicleGeneration.findFirst({
+      where: { modelId: model.id, startYear: year, endYear: year },
+    });
+    if (!generation) {
+      generation = await prisma.vehicleGeneration.create({
+        data: { modelId: model.id, name: String(year), startYear: year, endYear: year },
+      });
+    }
+    const cfgMarket = hit.market || 'DE';
+    let config = await prisma.vehicleConfiguration.findFirst({
+      where: { generationId: generation.id, market: cfgMarket },
+    });
+    if (!config) {
+      config = await prisma.vehicleConfiguration.create({
+        data: {
+          generationId: generation.id,
+          market: cfgMarket,
+          trim: hit.trim,
+          engine: hit.engine,
+        },
+      });
+    }
+    configIds.push(config.id);
+  }
+
+  return { verifiedRows, configIds: [...new Set(configIds)] };
 }
 
 function parseImages(html) {
@@ -232,60 +351,78 @@ async function saveState(state) {
   await fs.writeFile(STATE_PATH, JSON.stringify(payload, null, 2));
 }
 
+function buyerVisibleOffers(offers = []) {
+  // Browse/search must never surface inactive or suspended-seller offers
+  // (e.g. legacy FEBEST Inventory Supplier duplicates still on the part row).
+  return (offers || []).filter(
+    (o) =>
+      o &&
+      o.status === 'ACTIVE' &&
+      o.seller?.onboardingStatus === 'ACTIVE' &&
+      o.sellerId !== 'seed-febest-inventory-supplier',
+  );
+}
+
 async function indexPart(os, part) {
   if (!os) return;
-  const minPrice =
-    Array.isArray(part.offers) && part.offers.length > 0
-      ? Math.min(...part.offers.map((o) => o.price ?? Infinity))
-      : null;
-  await os.index({
-    index: INDEX_NAME,
-    id: part.id,
-    body: {
+  const offers = buyerVisibleOffers(part.offers);
+  if (offers.length === 0) {
+    // No buyer-visible offer — remove from browse rather than leave a ghost.
+    try {
+      await os.delete({ index: INDEX_NAME, id: part.id });
+    } catch {
+      /* ignore missing */
+    }
+    return;
+  }
+  const minPrice = Math.min(...offers.map((o) => o.price ?? Infinity));
+  try {
+    await os.index({
+      index: INDEX_NAME,
       id: part.id,
-      title: part.title,
-      partType: part.partType || null,
-      brand: part.brand,
-      manufacturerPartNumber: part.manufacturerPartNumber || null,
-      partNumbers: (part.partNumbers || []).map((n) => ({
-        displayNumber: n.displayNumber,
-        normalizedNumber: n.normalizedNumber,
-        numberType: n.numberType,
-      })),
-      normalizedPartNumbers: (part.partNumbers || [])
-        .filter((n) => n.numberType !== 'OEM_CROSS_REFERENCE')
-        .map((n) => n.normalizedNumber)
-        .filter(Boolean),
-      category: part.category,
-      oeNumbers: part.oeNumbers,
-      interchangePartNumbers: (part.partNumbers || [])
-        .filter((n) => n.numberType === 'OEM_CROSS_REFERENCE')
-        .map((n) => n.normalizedNumber)
-        .filter(Boolean),
-      imageUrls: part.imageUrls || [],
-      listingUrl: part.listingUrl || null,
-      ebayItemId: part.ebayItemId || null,
-      compatibility: part.compatibility || null,
-      partSource: part.partSource || null,
-      qualityTier: part.qualityTier || null,
-      fitmentStatus: part.fitmentStatus || null,
-      fitmentConfidence: part.fitmentConfidence ?? null,
-      createdAt: part.createdAt || new Date().toISOString(),
-      minPrice: Number.isFinite(minPrice) ? minPrice : null,
-      fitments: [],
-      offers: (part.offers || []).map((o) => ({
-        id: o.id,
-        price: o.price,
-        currency: o.currency || null,
-        condition: o.condition,
-        partSource: o.partSource || null,
-        qualityTier: o.qualityTier || null,
-        sellerId: o.sellerId,
-        sellerName: o.seller?.name || null,
-        status: o.status,
-      })),
-    },
-  });
+      body: {
+        id: part.id,
+        title: part.title,
+        partType: part.partType || null,
+        brand: part.brand,
+        manufacturerPartNumber: part.manufacturerPartNumber || null,
+        partNumbers: (part.partNumbers || []).map((n) => ({
+          displayNumber: n.displayNumber,
+          normalizedNumber: n.normalizedNumber,
+          numberType: n.numberType,
+        })),
+        normalizedPartNumbers: (part.partNumbers || [])
+          .filter((n) => n.numberType !== 'OEM_CROSS_REFERENCE')
+          .map((n) => n.normalizedNumber)
+          .filter(Boolean),
+        category: part.category,
+        oeNumbers: part.oeNumbers,
+        interchangePartNumbers: (part.partNumbers || [])
+          .filter((n) => n.numberType === 'OEM_CROSS_REFERENCE')
+          .map((n) => n.normalizedNumber)
+          .filter(Boolean),
+        imageUrls: part.imageUrls,
+        listingUrl: part.listingUrl,
+        ebayItemId: part.ebayItemId,
+        // Do not index raw compatibility JSON (year can be "-" and break mapping).
+        // PDP / fitments handle vehicle match.
+        minPrice: Number.isFinite(minPrice) ? minPrice : null,
+        createdAt: part.createdAt,
+        offers: offers.map((o) => ({
+          id: o.id,
+          price: o.price,
+          currency: o.currency || null,
+          condition: o.condition,
+          partSource: o.partSource || null,
+          qualityTier: o.qualityTier || null,
+          sellerId: o.sellerId,
+          sellerName: o.seller?.name || null,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'opensearch_index_warn', id: part.id, error: String(err?.message || err) }));
+  }
 }
 
 async function enrichOne(prisma, os, part, state) {
@@ -349,20 +486,80 @@ async function enrichOne(prisma, os, part, state) {
     ...new Set([...(part.oeNumbers || []), ...parsed.oems].map((x) => String(x).trim()).filter(Boolean)),
   ];
 
+  const mvl = await verifyCompatAgainstMvl(prisma, parsed.compatibility);
+  // Prefer MVL-verified rows; keep unmatched website rows for PDP visibility.
+  const unmatched = (parsed.compatibility || []).filter((row) => {
+    const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+    if (!Number.isFinite(year) || !row.make || !row.model) return true;
+    return !mvl.verifiedRows.some(
+      (v) =>
+        v.year === year &&
+        normalizeMvlToken(v.make) === normalizeMvlToken(row.make) &&
+        normalizeMvlToken(v.model) === normalizeMvlToken(String(row.model).split(/\s+/)[0]),
+    );
+  });
+  const finalCompat = [...mvl.verifiedRows, ...unmatched];
+  const isVerified = mvl.verifiedRows.length > 0;
+
   await prisma.canonicalPart.update({
     where: { id: part.id },
     data: {
       imageUrls: mergedImages,
       listingUrl: detailsUrl,
       oeNumbers: mergedOe,
-      compatibility: parsed.compatibility,
-      fitmentStatus: 'NOT_VERIFIED',
+      compatibility: finalCompat,
+      fitmentStatus: isVerified ? 'CONFIRMED' : 'NOT_VERIFIED',
+      fitmentConfidence: isVerified ? 0.9 : 0.55,
       fitmentFlags: [
-        ...new Set([...(part.fitmentFlags || []), 'FEBEST_WEBSITE_DECLARED']),
+        ...new Set([
+          ...(part.fitmentFlags || []),
+          'FEBEST_WEBSITE_DECLARED',
+          ...(isVerified ? ['MVL_VERIFIED', 'FEBEST_MVL_VERIFIED'] : []),
+        ]),
       ],
       updatedAt: new Date(),
     },
   });
+
+  for (const vehicleConfigId of mvl.configIds) {
+    const fitment = await prisma.fitment.upsert({
+      where: {
+        canonicalPartId_vehicleConfigId: {
+          canonicalPartId: part.id,
+          vehicleConfigId,
+        },
+      },
+      update: {
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        reviewer: 'Auto (FEBEST.de + US MVL)',
+        source: 'FEBEST_WEBSITE_MVL',
+        verificationStatus: 'VERIFIED',
+        reason: 'FEBEST website model list matched US MVL',
+      },
+      create: {
+        canonicalPartId: part.id,
+        vehicleConfigId,
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        reviewer: 'Auto (FEBEST.de + US MVL)',
+        source: 'FEBEST_WEBSITE_MVL',
+        verificationStatus: 'VERIFIED',
+        reason: 'FEBEST website model list matched US MVL',
+      },
+    });
+    await prisma.fitmentEvidence.create({
+      data: {
+        fitmentId: fitment.id,
+        evidenceType: 'FEBEST_WEBSITE',
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        source: detailsUrl,
+        verifiedBy: 'Auto (FEBEST.de + US MVL)',
+        verifiedAt: new Date(),
+      },
+    }).catch(() => undefined);
+  }
 
   for (let i = 0; i < parsed.images.length; i++) {
     const url = normalizeImageUrl(parsed.images[i]);
@@ -440,7 +637,13 @@ async function enrichOne(prisma, os, part, state) {
     where: { id: part.id },
     include: {
       partNumbers: true,
-      offers: { include: { seller: true } },
+      offers: {
+        where: {
+          status: 'ACTIVE',
+          seller: { onboardingStatus: 'ACTIVE' },
+        },
+        include: { seller: true },
+      },
     },
   });
   await indexPart(os, updated);

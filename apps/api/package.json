@@ -22,7 +22,10 @@
     "seed:marketplace:dev": "ts-node seed-marketplace.ts",
     "seed:cleanup-auth": "node dist/src/seed-cleanup-auth.cli.js",
     "seed:realtrack-dynatrade": "node dist/src/seed-realtrack-dynatrade.cli.js",
+    "seed:salvagea": "node dist/src/seed-salvagea.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
+    "import:mvl": "node scripts/import-us-mvl.mjs",
+    "backfill:compat-mvl": "node scripts/backfill-compat-from-mvl.mjs",
     "enrich:dxb": "node scripts/enrich-dxb-from-partsouq.mjs"
   },
   "dependencies": {

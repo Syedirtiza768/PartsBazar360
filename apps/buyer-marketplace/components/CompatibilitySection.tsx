@@ -185,7 +185,15 @@ export function CompatibilitySection({
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.trim || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.engine || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5">
-                            {item.source === "title" ? (
+                            {item.mvlVerified === true ? (
+                              <Badge tone="success" size="sm">
+                                MVL verified
+                              </Badge>
+                            ) : item.mvlVerified === false ? (
+                              <Badge tone="warning" size="sm">
+                                Unverified
+                              </Badge>
+                            ) : item.source === "title" ? (
                               <Badge tone="warning" size="sm">
                                 Title-inferred
                               </Badge>

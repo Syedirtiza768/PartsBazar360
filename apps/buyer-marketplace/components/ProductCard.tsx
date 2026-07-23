@@ -8,7 +8,7 @@ import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
 import { Price } from "./Price";
 import { WatchlistButton } from "./WatchlistButton";
-import { lowestOfferPrice, offerCurrency } from "@/lib/format";
+import { lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { fitmentForConfig } from "@/lib/fitment";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import type { Part } from "@/lib/types";
@@ -33,24 +33,28 @@ export function ProductCard({
 }) {
   const { activeVehicle, ready } = useGarage();
 
-  const price = lowestOfferPrice(part.offers);
-  const currency = offerCurrency(part.offers);
-  const offerCount = part.offers?.length || 0;
+  const offers = buyerVisibleOffers(part.offers);
+  const price = lowestOfferPrice(offers);
+  const currency = offerCurrency(offers);
+  const offerCount = offers.length;
   const image = part.imageUrls?.[0];
+  const bestOffer = offers[0];
   const sellerName =
-    part.offers?.[0]?.seller?.name || part.offers?.[0]?.sellerName || null;
+    bestOffer?.seller?.name || bestOffer?.sellerName || null;
   const oeNumber = part.oeNumbers?.[0] || null;
   // Older index documents carry tier/source only on the offer — fall back
   // through the chain rather than hiding it. Offer condition outranks the
   // offer's qualityTier, which has a schema default that can contradict it.
   const qualityTier =
-    part.qualityTier || part.offers?.[0]?.condition || part.offers?.[0]?.qualityTier;
-  const partSource = part.partSource || part.offers?.[0]?.partSource;
-  const partType = part.partType || part.offers?.[0]?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
+    part.qualityTier || bestOffer?.condition || bestOffer?.qualityTier;
+  const partSource = part.partSource || bestOffer?.partSource;
+  const partType = part.partType || bestOffer?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
   const isAftermarket = partType === "AFTERMARKET";
   const isSalvage = partType === "SALVAGE_OEM";
   const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];
   const identityNumber = part.manufacturerPartNumber || oeNumber;
+
+  if (offerCount === 0) return null;
 
   const vehicleName = activeVehicle ? vehicleShortLabel(activeVehicle) : null;
   const fitment =

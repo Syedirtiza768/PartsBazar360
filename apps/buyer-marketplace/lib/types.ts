@@ -60,6 +60,8 @@ export interface CompatibilityRow {
   engine?: string;
   notes?: string;
   source?: string;
+  mvlVerified?: boolean;
+  epid?: string | null;
 }
 
 /** Raw fitment relation as returned by the part detail endpoint. */

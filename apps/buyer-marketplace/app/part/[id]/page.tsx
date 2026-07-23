@@ -11,6 +11,13 @@ import { SalvagePanel } from "@/components/SalvagePanel";
 import { lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
 import type { Part } from "@/lib/types";
 
+// PDPs must always reflect the current DB state — never a cached page that
+// could serve a stale (deleted/no-offer) listing. force-dynamic opts out of
+// the Next.js Full Route Cache so notFound() returns a live 404 when the API
+// reports the part as gone.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface PartPageProps {
   params: Promise<{ id: string }>;
 }

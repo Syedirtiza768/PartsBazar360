@@ -46,13 +46,24 @@ export function extractListingImages(listing: any): string[] {
     for (const url of listing.imageUrls) push(url);
   }
 
+  // Prefer structured RealTrack `images` gallery when present (source + sortOrder).
+  if (Array.isArray(listing?.images)) {
+    const ordered = [...listing.images].sort(
+      (a, b) => Number(a?.sortOrder ?? 0) - Number(b?.sortOrder ?? 0),
+    );
+    for (const img of ordered) {
+      push(typeof img === 'string' ? img : img?.url);
+    }
+  }
+
   push(listing?.rawEbayResponse?.item?.imageUrl);
   push(listing?.rawEbayResponse?.item?.pictureURL);
   push(listing?.rawEbayResponse?.item?.galleryURL);
 
   const rawPics = listing?.rawEbayResponse?.item?.pictureURLLarge
     || listing?.rawEbayResponse?.item?.PictureURL
-    || listing?.rawEbayResponse?.item?.pictureUrls;
+    || listing?.rawEbayResponse?.item?.pictureUrls
+    || listing?.rawEbayResponse?.item?.imageUrls;
   if (Array.isArray(rawPics)) {
     for (const url of rawPics) push(url);
   } else {
@@ -72,6 +83,72 @@ export function extractListingImages(listing: any): string[] {
 
   // Remote URLs only; eBay assets first
   return prioritizeEbayImages(collected);
+}
+
+/** Prefer HTML description, then plain text / legacy description fields. */
+export function extractListingDescription(listing: any): string | null {
+  const candidates = [
+    listing?.descriptionHtml,
+    listing?.descriptionText,
+    listing?.description,
+    listing?.rawEbayResponse?.item?.description,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+/** Brand from RealTrack top-level fields or item specifics. */
+export function extractListingBrand(listing: any): string | null {
+  const specifics = listing?.itemSpecifics;
+  const fromSpecifics =
+    specifics && typeof specifics === 'object'
+      ? specifics.Brand || specifics.brand || specifics.Manufacturer || specifics.Make
+      : null;
+  const raw = listing?.brand || fromSpecifics || listing?.rawEbayResponse?.item?.brand || null;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Merge OE / MPN numbers from RealTrack fields, specifics, and title heuristics. */
+export function extractListingOeNumbers(listing: any, titleOeNumbers: string[] = []): string[] {
+  const out: string[] = [];
+  const push = (value?: unknown) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (!out.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) {
+      out.push(trimmed);
+    }
+  };
+
+  if (Array.isArray(listing?.oeNumbers)) {
+    for (const n of listing.oeNumbers) push(n);
+  }
+  push(listing?.mpn);
+  push(listing?.manufacturerPartNumber);
+
+  const specifics = listing?.itemSpecifics;
+  if (specifics && typeof specifics === 'object') {
+    const keys = [
+      'Manufacturer Part Number',
+      'MPN',
+      'OE/OEM Part Number',
+      'OEM Number',
+      'Interchange Part Number',
+      'Other Part Number',
+    ];
+    for (const key of keys) {
+      const val = specifics[key] ?? specifics[key.toLowerCase()];
+      if (Array.isArray(val)) val.forEach(push);
+      else push(val);
+    }
+  }
+
+  for (const n of titleOeNumbers) push(n);
+  return out;
 }
 
 /** Normalize RealTrack compatibility payloads into eBay-style rows. */

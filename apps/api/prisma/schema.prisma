@@ -333,6 +333,8 @@ model SellerOffer {
   prices         OfferPrice[]
   sourceRecords  SourceRecord[]
   salvageUnits   SalvageUnit[]
+
+  @@index([canonicalPartId])
 }
 
 model OfferPrice {
@@ -445,10 +447,51 @@ model VehicleConfiguration {
   market          String?
   productionStart DateTime?
   productionEnd   DateTime?
+  /// eBay Motors Vehicle List ePID when this config was created from US MVL.
+  epid            String?   @unique
 
   fitments     Fitment[]
   userVehicles UserVehicle[]
   generation   VehicleGeneration @relation(fields: [generationId], references: [id])
+}
+
+/// eBay Motors Vehicle List (MVL) — US / DE / UK / AU catalogs for verified fitment.
+model MvlVehicle {
+  id               String   @id @default(uuid())
+  /// eBay ePID when present (US / AU). Nullable for DE/UK K-Type rows.
+  epid             String?
+  /// TecDoc / eBay K-Type id when present (DE / UK / AU).
+  kType            String?
+  /// Marketplace catalog: US | DE | UK | AU
+  market           String
+  /// Stable upsert key, e.g. US:73920154 or DE:14419:1970:1600SPORT
+  sourceKey        String
+  year             Int
+  make             String
+  model            String
+  trim             String?
+  submodel         String?
+  engine           String?
+  driveType        String?
+  fuelType         String?
+  body             String?
+  aspiration       String?
+  displayName      String?
+  /// Original region/body/platform field from source file (not market code).
+  region           String?
+  partsModel       String?
+  numDoors         Int?
+  normalizedMake   String
+  normalizedModel  String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([market, sourceKey])
+  @@index([epid])
+  @@index([kType])
+  @@index([market, year, normalizedMake])
+  @@index([normalizedMake, normalizedModel, year])
+  @@index([year, normalizedMake])
 }
 
 model Fitment {
@@ -536,6 +579,7 @@ model SalvageUnit {
   donorVehicle  DonorVehicle? @relation(fields: [donorVehicleId], references: [id])
 
   @@unique([sellerOfferId])
+  @@index([canonicalPartId])
 }
 
 model SourceRecord {
@@ -562,6 +606,8 @@ model SourceRecord {
   sellerSourceAccount SellerSourceAccount? @relation(fields: [sellerSourceAccountId], references: [id])
   canonicalPart       CanonicalPart?       @relation(fields: [canonicalPartId], references: [id])
   sellerOffer         SellerOffer?         @relation(fields: [sellerOfferId], references: [id])
+
+  @@index([canonicalPartId])
 }
 
 model User {
@@ -777,6 +823,7 @@ model SellerUploadRow {
 
   @@unique([uploadJobId, rowNumber])
   @@index([status])
+  @@index([canonicalPartId])
 }
 
 model CanonicalPartRedirect {
@@ -822,6 +869,7 @@ model ReviewTask {
   @@index([queueType, status])
   @@index([sellerId, status])
   @@index([uploadJobId])
+  @@index([canonicalPartId])
 }
 
 model AuditEvent {
@@ -886,4 +934,6 @@ model SupportTicket {
   sellerOrder   SellerOrder?   @relation(fields: [sellerOrderId], references: [id])
   canonicalPart CanonicalPart? @relation(fields: [canonicalPartId], references: [id])
   sellerOffer   SellerOffer?   @relation(fields: [sellerOfferId], references: [id])
+
+  @@index([canonicalPartId])
 }

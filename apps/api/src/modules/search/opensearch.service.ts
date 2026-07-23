@@ -17,9 +17,29 @@ export class OpenSearchService implements OnModuleInit {
 
   async indexPart(part: any) {
     try {
-      const minPrice = Array.isArray(part.offers) && part.offers.length > 0
-        ? Math.min(...part.offers.map((o: any) => o.price ?? Infinity))
-        : null;
+      const rawOffers = Array.isArray(part.offers) ? part.offers : [];
+      const offers = rawOffers.filter((o: any) => {
+        if (!o) return false;
+        if (o.sellerId === 'seed-febest-inventory-supplier') return false;
+        if (o.status && o.status !== 'ACTIVE') return false;
+        const sellerStatus = o.seller?.onboardingStatus || o.sellerOnboardingStatus;
+        if (sellerStatus && sellerStatus !== 'ACTIVE') return false;
+        const sellerName = o.sellerName || o.seller?.name || '';
+        if (/febest\s+inventory\s+supplier/i.test(sellerName)) return false;
+        return true;
+      });
+
+      if (offers.length === 0) {
+        try {
+          await this.client.delete({ index: this.INDEX_NAME, id: part.id });
+        } catch {
+          /* ignore missing */
+        }
+        this.logger.log(`Removed part ${part.id} from OpenSearch (no buyer-visible offers)`);
+        return;
+      }
+
+      const minPrice = Math.min(...offers.map((o: any) => o.price ?? Infinity));
 
       await this.client.index({
         index: this.INDEX_NAME,
@@ -60,14 +80,14 @@ export class OpenSearchService implements OnModuleInit {
           fitmentStatus: part.fitmentStatus || null,
           fitmentConfidence: part.fitmentConfidence ?? null,
           createdAt: part.createdAt || new Date().toISOString(),
-          minPrice,
+          minPrice: Number.isFinite(minPrice) ? minPrice : null,
           // Only structured, high-confidence evidence can power a green "fits"
           // result. Title-inferred D-level matches remain available on the PDP
           // as advisory compatibility and never enter guaranteed-fit search.
           fitments: (part.fitments || [])
             .filter((f: any) => ['A', 'B'].includes(f.evidenceLevel) && Number(f.confidence) >= 0.8)
             .map((f: any) => f.vehicleConfigId),
-          offers: (part.offers || []).map((o: any) => ({
+          offers: offers.map((o: any) => ({
             id: o.id,
             price: o.price,
             // Currency must travel with the price — cards previously assumed
@@ -77,7 +97,7 @@ export class OpenSearchService implements OnModuleInit {
             partSource: o.partSource || null,
             qualityTier: o.qualityTier || null,
             sellerId: o.sellerId,
-            sellerName: o.sellerName || null,
+            sellerName: o.sellerName || o.seller?.name || null,
           })),
         },
         refresh: true,
@@ -166,7 +186,10 @@ export class OpenSearchService implements OnModuleInit {
       ? [{ bool: { should, minimum_should_match: 1 } }]
       : [{ match_all: {} }];
 
-    const filter: any[] = [];
+    const filter: any[] = [
+      // Browse only parts that still have at least one indexed offer.
+      { exists: { field: 'offers.sellerId' } },
+    ];
     if (category) filter.push({ term: { 'category.keyword': category } });
     if (brand) filter.push({ term: { 'brand.keyword': brand } });
     if (partType) filter.push({ term: { 'partType.keyword': partType } });

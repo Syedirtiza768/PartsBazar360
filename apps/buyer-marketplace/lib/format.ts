@@ -28,14 +28,50 @@ export function formatPrice(
   }
 }
 
+const HIDDEN_SELLER_IDS = new Set(["seed-febest-inventory-supplier"]);
+const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
+
+/** Buyer-visible offers only — drops legacy/suspended sellers from card/PDP payloads. */
+export function buyerVisibleOffers<T extends {
+  price?: number;
+  sellerId?: string | null;
+  sellerName?: string | null;
+  status?: string | null;
+  seller?: { name?: string | null; onboardingStatus?: string | null } | null;
+}>(offers?: T[] | null): T[] {
+  return (offers || [])
+    .filter((offer) => {
+      if (!offer) return false;
+      if (offer.sellerId && HIDDEN_SELLER_IDS.has(offer.sellerId)) return false;
+      const name = offer.sellerName || offer.seller?.name || "";
+      if (HIDDEN_SELLER_NAME_RE.test(name)) return false;
+      if (offer.status && offer.status !== "ACTIVE") return false;
+      if (offer.seller?.onboardingStatus && offer.seller.onboardingStatus !== "ACTIVE") return false;
+      if (offer.price === null || offer.price === undefined || Number(offer.price) <= 0) return false;
+      return Boolean(offer.sellerId || name);
+    })
+    .slice()
+    .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+}
+
 export function lowestOfferPrice(offers?: { price: number }[]): number | null {
-  if (!offers || offers.length === 0) return null;
-  return Math.min(...offers.map((o) => o.price));
+  const visible = buyerVisibleOffers(offers);
+  if (visible.length === 0) return null;
+  return Math.min(...visible.map((o) => o.price as number));
 }
 
 /** Currency shared by the offers, or null when the data doesn't say. */
-export function offerCurrency(offers?: { currency?: string | null }[]): string | null {
-  return offers?.find((o) => o.currency)?.currency ?? null;
+export function offerCurrency(
+  offers?: Array<{
+    currency?: string | null;
+    price?: number;
+    sellerId?: string | null;
+    sellerName?: string | null;
+    status?: string | null;
+    seller?: { name?: string | null; onboardingStatus?: string | null } | null;
+  }>,
+): string | null {
+  return buyerVisibleOffers(offers).find((o) => o.currency)?.currency ?? null;
 }
 
 /** Human label for enum-ish values: "FOR_PARTS" -> "For parts". */
