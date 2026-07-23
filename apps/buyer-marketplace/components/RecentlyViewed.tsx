@@ -5,20 +5,70 @@ import { useEffect, useState } from "react";
 import { ClockIcon } from "@repo/ui/icons";
 import { PartImage } from "./PartImage";
 import { Price } from "./Price";
-import { getRecentlyViewed, type RecentPart } from "@/lib/recent";
+import { getRecentlyViewed, setRecentlyViewed, type RecentPart } from "@/lib/recent";
+import { fetchLivePart } from "@/lib/live-part";
+import { lowestOfferPrice, offerCurrency } from "@/lib/format";
 
 /**
  * Horizontal rail of parts the buyer opened recently (device-local).
- * Renders nothing until mounted and only when there's history.
+ * Snapshots in localStorage are re-checked against the live API so deleted
+ * / no-offer parts never appear — stale IDs are pruned from storage.
  */
 export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
-  const [items, setItems] = useState<RecentPart[]>([]);
+  const [items, setItems] = useState<RecentPart[] | null>(null);
 
   useEffect(() => {
-    setItems(getRecentlyViewed().filter((p) => p.id !== excludeId));
+    let cancelled = false;
+    const local = getRecentlyViewed().filter((p) => p.id !== excludeId);
+
+    if (local.length === 0) {
+      setItems([]);
+      return;
+    }
+
+    (async () => {
+      const checked = await Promise.all(
+        local.map(async (snapshot) => {
+          const live = await fetchLivePart(snapshot.id);
+          if (!live) return null;
+          return {
+            id: live.id,
+            title: live.title,
+            image: live.imageUrls?.[0] ?? snapshot.image ?? null,
+            price: lowestOfferPrice(live.offers) ?? snapshot.price ?? null,
+            currency: offerCurrency(live.offers) ?? snapshot.currency ?? null,
+            viewedAt: snapshot.viewedAt,
+          } satisfies RecentPart;
+        }),
+      );
+      if (cancelled) return;
+      const alive = checked.filter((row): row is RecentPart => row != null);
+      // Keep excludeId in storage if present; only rewrite the filtered list
+      // when we are not excluding (home). When excluding (PDP), merge prune
+      // into full storage by dropping dead IDs only.
+      const deadIds = new Set(
+        local.filter((p) => !alive.some((a) => a.id === p.id)).map((p) => p.id),
+      );
+      if (deadIds.size > 0 || alive.length !== local.length) {
+        const full = getRecentlyViewed().filter((p) => !deadIds.has(p.id));
+        // Refresh surviving snapshots with live title/price/image when we have them.
+        const byId = new Map(alive.map((a) => [a.id, a]));
+        setRecentlyViewed(
+          full.map((p) => {
+            const refreshed = byId.get(p.id);
+            return refreshed ? { ...p, ...refreshed, viewedAt: p.viewedAt } : p;
+          }),
+        );
+      }
+      setItems(alive);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [excludeId]);
 
-  if (items.length === 0) return null;
+  if (!items || items.length === 0) return null;
 
   return (
     <section aria-labelledby="recently-viewed-heading">

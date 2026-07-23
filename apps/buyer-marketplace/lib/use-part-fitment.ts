@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_BASE_URL } from "./api";
 import { fitmentForConfig, type FitmentState } from "./fitment";
-import type { Part } from "./types";
+import { fetchLivePart } from "./live-part";
 
 /**
  * Lazily evaluates a part's fitment against a vehicle configuration by
@@ -11,19 +10,6 @@ import type { Part } from "./types";
  * are cached per part id for the session — cart lines and review steps reuse
  * the same lookup without refetching.
  */
-
-const partCache = new Map<string, Promise<Part | null>>();
-
-function loadPart(partId: string): Promise<Part | null> {
-  let cached = partCache.get(partId);
-  if (!cached) {
-    cached = fetch(`${API_BASE_URL}/search/parts/${partId}`)
-      .then((res) => (res.ok ? (res.json() as Promise<Part>) : null))
-      .catch(() => null);
-    partCache.set(partId, cached);
-  }
-  return cached;
-}
 
 export function usePartFitment(
   partId: string | undefined,
@@ -37,7 +23,7 @@ export function usePartFitment(
       setState(null);
       return;
     }
-    loadPart(partId).then((part) => {
+    fetchLivePart(partId).then((part) => {
       if (cancelled) return;
       setState(part ? fitmentForConfig(part, configId) : null);
     });

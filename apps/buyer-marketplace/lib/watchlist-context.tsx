@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Part } from "./types";
+import { fetchLivePart } from "./live-part";
 
 const STORAGE_KEY = "pb360_watchlist_v1";
 
@@ -38,14 +39,35 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Part[]>([]);
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    setItems(readStoredItems());
-    setReady(true);
-  }, []);
-
   const persist = useCallback((next: Part[]) => {
     setItems(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  // Re-validate device-local snapshots against the live API so deleted /
+  // no-offer parts never linger on the watchlist page or badge count.
+  useEffect(() => {
+    let cancelled = false;
+    const stored = readStoredItems();
+
+    if (stored.length === 0) {
+      setItems([]);
+      setReady(true);
+      return;
+    }
+
+    (async () => {
+      const lives = await Promise.all(stored.map((part) => fetchLivePart(part.id)));
+      if (cancelled) return;
+      const next = lives.filter((part): part is Part => part != null);
+      setItems(next);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const isWatched = useCallback(

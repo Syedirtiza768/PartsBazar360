@@ -40,6 +40,17 @@ export function getRecentlyViewed(): RecentPart[] {
   return read<RecentPart>(VIEWED_KEY);
 }
 
+export function setRecentlyViewed(parts: RecentPart[]) {
+  if (typeof window === "undefined") return;
+  write(VIEWED_KEY, parts.slice(0, VIEWED_MAX));
+}
+
+export function removeRecentlyViewed(ids: string[]) {
+  if (typeof window === "undefined" || ids.length === 0) return;
+  const drop = new Set(ids);
+  setRecentlyViewed(getRecentlyViewed().filter((p) => !drop.has(p.id)));
+}
+
 export function pushRecentlyViewed(part: Omit<RecentPart, "viewedAt">) {
   if (typeof window === "undefined") return;
   const list = getRecentlyViewed().filter((p) => p.id !== part.id);
