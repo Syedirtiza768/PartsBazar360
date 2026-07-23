@@ -5,17 +5,20 @@ set -e
 #   SKIP_DB_MIGRATE=1     — skip entirely (replicas, workers, read-only boots)
 #   SCHEMA_MODE=push      — legacy db push (bootstrap / drift recovery only)
 #   SCHEMA_MODE=skip      — same as SKIP_DB_MIGRATE=1
-# Never use --accept-data-loss in production entrypoints.
 SCHEMA_MODE="${SCHEMA_MODE:-migrate}"
+PRISMA_BIN="./node_modules/.bin/prisma"
+if [ ! -x "$PRISMA_BIN" ]; then
+  PRISMA_BIN="npx prisma"
+fi
 
 if [ "${SKIP_DB_MIGRATE:-0}" = "1" ] || [ "$SCHEMA_MODE" = "skip" ]; then
   echo "[entrypoint] Skipping database schema sync"
 elif [ "$SCHEMA_MODE" = "push" ]; then
-  echo "[entrypoint] SCHEMA_MODE=push — running prisma db push (no data-loss flag)..."
-  npx prisma db push
+  echo "[entrypoint] SCHEMA_MODE=push — running prisma db push..."
+  $PRISMA_BIN db push
 elif [ "$SCHEMA_MODE" = "migrate" ]; then
   echo "[entrypoint] Applying Prisma migrations (migrate deploy)..."
-  npx prisma migrate deploy
+  $PRISMA_BIN migrate deploy
 else
   echo "[entrypoint] Unknown SCHEMA_MODE=$SCHEMA_MODE — skipping schema sync"
 fi

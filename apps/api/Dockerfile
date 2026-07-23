@@ -29,13 +29,10 @@ COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/scripts ./scripts
 COPY --from=builder /app/apps/api/docker-entrypoint.sh ./
 COPY --from=builder /app/apps/api/docker-entrypoint-worker.sh ./
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
 RUN sed -i 's/\r$//' ./docker-entrypoint.sh ./docker-entrypoint-worker.sh \
   && chmod +x ./docker-entrypoint.sh ./docker-entrypoint-worker.sh \
   && mkdir -p node_modules/@repo \
   && rm -rf node_modules/@repo/catalog-contracts \
-  && ln -s /app/packages/catalog-contracts node_modules/@repo/catalog-contracts \
-  && npm prune --omit=dev
+  && ln -s /app/packages/catalog-contracts node_modules/@repo/catalog-contracts
 EXPOSE 3001
 CMD ["./docker-entrypoint.sh"]
