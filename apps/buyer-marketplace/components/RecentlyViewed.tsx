@@ -28,7 +28,7 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
 
     (async () => {
       const checked = await Promise.all(
-        local.map(async (snapshot) => {
+        local.map(async (snapshot): Promise<RecentPart | null> => {
           const live = await fetchLivePart(snapshot.id);
           if (!live) return null;
           return {
@@ -38,11 +38,11 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
             price: lowestOfferPrice(live.offers) ?? snapshot.price ?? null,
             currency: offerCurrency(live.offers) ?? snapshot.currency ?? null,
             viewedAt: snapshot.viewedAt,
-          } satisfies RecentPart;
+          };
         }),
       );
       if (cancelled) return;
-      const alive = checked.filter((row): row is RecentPart => row != null);
+      const alive = checked.filter((row): row is RecentPart => row !== null);
       // Keep excludeId in storage if present; only rewrite the filtered list
       // when we are not excluding (home). When excluding (PDP), merge prune
       // into full storage by dropping dead IDs only.
