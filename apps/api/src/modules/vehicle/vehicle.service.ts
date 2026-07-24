@@ -7,27 +7,44 @@ export class VehicleService {
 
   async getMakes() {
     return this.prisma.vehicleMake.findMany({
+      where: {
+        models: {
+          some: {
+            generations: {
+              some: { configurations: { some: { fitments: { some: {} } } } },
+            },
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }
 
   async getModelsByMake(makeId: string) {
     return this.prisma.vehicleModel.findMany({
-      where: { makeId },
+      where: {
+        makeId,
+        generations: {
+          some: { configurations: { some: { fitments: { some: {} } } } },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }
 
   async getGenerationsByModel(modelId: string) {
     return this.prisma.vehicleGeneration.findMany({
-      where: { modelId },
+      where: {
+        modelId,
+        configurations: { some: { fitments: { some: {} } } },
+      },
       orderBy: { name: 'asc' },
     });
   }
 
   async getConfigurationsByGeneration(generationId: string) {
     return this.prisma.vehicleConfiguration.findMany({
-      where: { generationId },
+      where: { generationId, fitments: { some: {} } },
     });
   }
 }
