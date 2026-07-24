@@ -1,14 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
+// Mirrors OpenSearchService#indexPart's buyer-visibility rule: a part with
+// no ACTIVE offer from an onboarded, non-seed seller is removed from the
+// index entirely, so it can never appear in search results.
+const BUYER_VISIBLE_OFFER = {
+  status: 'ACTIVE',
+  sellerId: { not: 'seed-febest-inventory-supplier' },
+  seller: {
+    onboardingStatus: 'ACTIVE',
+    name: { not: { contains: 'febest inventory supplier', mode: 'insensitive' as const } },
+  },
+};
+
 // Mirrors the guaranteed-fit criteria OpenSearch indexing uses (see
 // opensearch.service.ts indexPart): only A/B evidence at >=0.8 confidence
-// ever surfaces in search results. A config with only weaker, title-inferred
-// fitments would let a buyer complete the picker and land on an empty
-// search page, so the picker must require the same bar search does.
+// ever surfaces in search results, and only for parts with a buyer-visible
+// offer. A config whose only fitments fall short of either bar would let a
+// buyer complete the picker and land on an empty search page, so the
+// picker must require exactly what search requires.
 const SEARCH_GRADE_FITMENT = {
   evidenceLevel: { in: ['A', 'B'] as string[] },
   confidence: { gte: 0.8 },
+  canonicalPart: { offers: { some: BUYER_VISIBLE_OFFER } },
 };
 
 @Injectable()
