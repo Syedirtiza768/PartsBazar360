@@ -9,7 +9,7 @@ const BUYER_VISIBLE_OFFER = {
   sellerId: { not: 'seed-febest-inventory-supplier' },
   seller: {
     onboardingStatus: 'ACTIVE',
-    name: { not: { contains: 'febest inventory supplier', mode: 'insensitive' as const } },
+    NOT: { name: { contains: 'febest inventory supplier', mode: 'insensitive' as const } },
   },
 };
 
