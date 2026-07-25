@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
 import { Input } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
@@ -71,7 +72,7 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Commercial terms"
         title="Pricing & seller proceeds"
@@ -85,7 +86,7 @@ export default function PricingPage() {
       )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card" aria-label="Active policy assignments">
-        <div className="border-b border-slate-200 bg-slate-50/70 px-5 py-4">
+        <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3.5 sm:px-6">
           <h2 className="font-semibold text-slate-900">Active policy assignments</h2>
         </div>
         {assignments === null ? (
@@ -104,19 +105,19 @@ export default function PricingPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {assignments.map((assignment) => (
-              <div key={assignment.id} className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between sm:px-6">
-                <div>
+              <div key={assignment.id} className="flex flex-col gap-3 p-4 sm:px-6 md:flex-row md:items-center md:justify-between md:gap-4">
+                <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{assignment.pricingPolicy.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-graphite-600">
                     {assignment.category || "All categories"} · v{assignment.pricingPolicy.version} ·{" "}
                     <span className="capitalize">{assignment.pricingPolicy.mode.replace(/_/g, " ").toLowerCase()}</span>
                   </p>
                 </div>
-                <div className="md:text-right">
-                  <p className="text-2xl font-bold tabular-nums text-slate-900">
+                <div className="shrink-0 md:text-right">
+                  <p className="text-xl font-bold tabular-nums text-slate-900 sm:text-2xl">
                     {(assignment.pricingPolicy.percentRate * 100).toFixed(2)}%
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-graphite-600">
                     + {assignment.pricingPolicy.currency} {assignment.pricingPolicy.fixedFee.toFixed(2)} fixed fee
                   </p>
                 </div>
@@ -126,19 +127,26 @@ export default function PricingPage() {
         )}
       </section>
 
-      <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6" aria-label="Price preview">
+      <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6" aria-label="Price preview">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Price preview</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-pretty text-sm text-graphite-600">
             See the split between your submitted amount, buyer price, marketplace fee, and your proceeds.
           </p>
         </div>
-        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
+        {/*
+          The action sits on its own row rather than as a third grid cell. The
+          old layout used `items-end` plus a hand-tuned `md:mb-6` to line the
+          button up with the inputs, which broke the moment the Category hint
+          wrapped to two lines — i.e. on every screen under 900px.
+        */}
+        <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
           <Input
             label="Submitted / base amount"
             type="number"
             min={0}
             step="0.01"
+            inputMode="decimal"
             value={basePrice}
             onChange={(event) => setBasePrice(event.target.value)}
           />
@@ -148,22 +156,22 @@ export default function PricingPage() {
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           />
-          <Button onClick={preview} loading={quoting} className="md:mb-6">
-            Calculate
-          </Button>
         </div>
+        <Button onClick={preview} loading={quoting} fullWidth className="sm:w-auto">
+          Calculate
+        </Button>
 
         {quote && (
-          <dl className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-5 lg:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 lg:grid-cols-4">
             {[
               { label: "Seller base", value: quote.sellerBasePrice },
               { label: "Buyer pays", value: quote.customerPrice },
               { label: "Marketplace fee", value: quote.marketplaceFee },
               { label: "You receive", value: quote.sellerProceeds, highlight: true },
             ].map((metric) => (
-              <div key={metric.label}>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</dt>
-                <dd className={`mt-1 text-xl font-bold tabular-nums ${metric.highlight ? "text-emerald-700" : "text-slate-900"}`}>
+              <div key={metric.label} className="min-w-0">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-graphite-600">{metric.label}</dt>
+                <dd className={`mt-1 break-anywhere text-lg font-bold tabular-nums sm:text-xl ${metric.highlight ? "text-emerald-700" : "text-slate-900"}`}>
                   {quote.currency} {Number(metric.value).toFixed(2)}
                 </dd>
               </div>
@@ -171,6 +179,6 @@ export default function PricingPage() {
           </dl>
         )}
       </section>
-    </div>
+    </PageBody>
   );
 }

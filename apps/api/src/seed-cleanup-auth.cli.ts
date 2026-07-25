@@ -30,10 +30,14 @@ async function ensureSeller(
     ? await prisma.seller.findUnique({ where: { id: input.id } })
     : null;
   if (!seller && input.storeId) {
-    seller = await prisma.seller.findFirst({ where: { storeId: input.storeId } });
+    seller = await prisma.seller.findFirst({
+      where: { storeId: input.storeId },
+    });
   }
   if (!seller) {
-    seller = await prisma.seller.findFirst({ where: { organizationId, name: input.name } });
+    seller = await prisma.seller.findFirst({
+      where: { organizationId, name: input.name },
+    });
   }
 
   const data = {
@@ -109,7 +113,11 @@ async function main() {
         sourcePlatform: cfg.sourcePlatform,
         externalId: cfg.externalAccountId,
       });
-      report.sellers.push({ id: seller.id, name: seller.name, storeId: seller.storeId });
+      report.sellers.push({
+        id: seller.id,
+        name: seller.name,
+        storeId: seller.storeId,
+      });
     }
 
     report.deactivated = await deactivateLegacySellers(prisma);

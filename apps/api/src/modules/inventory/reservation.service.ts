@@ -7,7 +7,7 @@ export class ReservationService {
   private redisClient: Redis;
 
   // Recommended TTL: 15 minutes = 900 seconds
-  private readonly LOCK_TTL_SECONDS = 900; 
+  private readonly LOCK_TTL_SECONDS = 900;
 
   constructor() {
     this.redisClient = new Redis({
@@ -16,19 +16,31 @@ export class ReservationService {
     });
   }
 
-  async reserveStock(cartId: string, offerId: string, quantity: number): Promise<boolean> {
+  async reserveStock(
+    cartId: string,
+    offerId: string,
+    quantity: number,
+  ): Promise<boolean> {
     const lockKey = `stock_lock:${offerId}:${cartId}`;
-    
+
     // We attempt to set the lock. In a real highly-concurrent environment,
     // we would check the existing stock minus locked stock before granting this lock.
     // For MVP, we will assume setting the lock represents our intent to hold.
-    const result = await this.redisClient.set(lockKey, quantity, 'EX', this.LOCK_TTL_SECONDS, 'NX');
-    
+    const result = await this.redisClient.set(
+      lockKey,
+      quantity,
+      'EX',
+      this.LOCK_TTL_SECONDS,
+      'NX',
+    );
+
     if (result === 'OK') {
-      this.logger.log(`Reserved ${quantity} of offer ${offerId} for cart ${cartId}`);
+      this.logger.log(
+        `Reserved ${quantity} of offer ${offerId} for cart ${cartId}`,
+      );
       return true;
     }
-    
+
     this.logger.warn(`Failed to reserve stock for offer ${offerId}`);
     return false;
   }
@@ -36,6 +48,8 @@ export class ReservationService {
   async releaseStock(cartId: string, offerId: string): Promise<void> {
     const lockKey = `stock_lock:${offerId}:${cartId}`;
     await this.redisClient.del(lockKey);
-    this.logger.log(`Released stock lock for offer ${offerId} in cart ${cartId}`);
+    this.logger.log(
+      `Released stock lock for offer ${offerId} in cart ${cartId}`,
+    );
   }
 }

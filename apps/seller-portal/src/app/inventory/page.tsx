@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { buttonClasses, Button } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
+import { DataTable, type Column } from "@repo/ui/data-table";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
 import { BoxIcon, CheckIcon } from "@repo/ui/icons";
@@ -68,8 +70,10 @@ function PriceEditor({
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-1.5">
+    <div className="min-w-0">
+      {/* Wraps rather than overflowing: in the mobile card this control shares
+          a row with its label, so it can be as narrow as ~9rem. */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <label className="sr-only" htmlFor={`price-${item.id}`}>
           Base price for {item.canonicalPart?.title || "part"}
         </label>
@@ -78,6 +82,8 @@ function PriceEditor({
           type="number"
           min="0"
           step="0.01"
+          // Brings up the numeric keypad with a decimal point on both platforms.
+          inputMode="decimal"
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
@@ -87,7 +93,7 @@ function PriceEditor({
             if (e.key === "Enter" && dirty) save();
           }}
           aria-invalid={error || undefined}
-          className={`w-24 rounded-lg border px-2.5 py-1.5 text-sm tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+          className={`w-24 min-h-touch rounded-lg border px-2.5 py-1.5 text-base tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 sm:min-h-0 sm:text-sm ${
             error ? "border-red-400" : "border-slate-300 hover:border-slate-400"
           }`}
         />
@@ -97,7 +103,7 @@ function PriceEditor({
           </Button>
         )}
         {saved && !dirty && (
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
             <CheckIcon className="h-3.5 w-3.5" /> Saved
           </span>
         )}
@@ -134,8 +140,80 @@ export default function InventoryPage() {
     setInventory((prev) => (prev ? prev.map((i) => (i.id === updated.id ? updated : i)) : prev));
   };
 
+  const money = (amount: number | null | undefined, currency: string) =>
+    `${currency} ${Number(amount ?? 0).toFixed(2)}`;
+
+  /*
+   * One definition drives both presentations. Below `lg` each row becomes a
+   * card whose heading is the part (thumbnail + title), with condition/status
+   * on the meta line and the money columns as labelled fields — so the price
+   * editor stays usable at 320px instead of sitting 700px off-screen inside a
+   * `min-w-[880px]` table.
+   */
+  const columns: Column<InventoryItem>[] = [
+    {
+      key: "part",
+      header: "Part",
+      priority: "primary",
+      cell: (item) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <PartThumbnail src={item.canonicalPart?.imageUrls?.[0]} alt="" />
+          <p className="line-clamp-2 min-w-0 font-medium leading-snug text-slate-900">
+            {item.canonicalPart?.title || "Unknown part"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "condition",
+      header: "Condition",
+      priority: "secondary",
+      cell: (item) => <StatusBadge status={item.condition} size="sm" />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      priority: "secondary",
+      cell: (item) => <StatusBadge status={item.status} size="sm" />,
+    },
+    {
+      key: "basePrice",
+      header: "Base price",
+      cell: (item) => <PriceEditor item={item} onSaved={replaceItem} />,
+    },
+    {
+      key: "buyerPrice",
+      header: "Buyer price",
+      cell: (item) => (
+        <>
+          <p className="price text-sm">{money(item.price, item.currency)}</p>
+          <p className="text-xs text-graphite-600">
+            Fee {money(item.marketplaceFee, item.currency)}
+          </p>
+        </>
+      ),
+    },
+    {
+      key: "proceeds",
+      header: "Your proceeds",
+      cell: (item) => (
+        <p className="price text-sm text-emerald-700">
+          {money(item.sellerProceeds ?? item.price, item.currency)}
+        </p>
+      ),
+    },
+    {
+      key: "stock",
+      header: "Stock",
+      align: "right",
+      cell: (item) => (
+        <span className="tabular-nums text-slate-700">{item.inventory?.[0]?.quantity ?? 0}</span>
+      ),
+    },
+  ];
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Catalog control"
         title="Inventory management"
@@ -155,80 +233,30 @@ export default function InventoryPage() {
         <div className="space-y-3" aria-busy="true">
           <Skeleton className="h-12 w-full rounded-xl" />
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            <Skeleton key={i} className="h-24 w-full rounded-xl lg:h-16" />
           ))}
         </div>
-      ) : inventory!.length === 0 ? (
-        <EmptyState
-          variant="page"
-          icon={<BoxIcon />}
-          title="No inventory yet"
-          description="Upload a CSV of listings to start selling — rows that pass validation become live offers."
-        >
-          <Link href="/uploads" className={buttonClasses()}>
-            Upload listings
-          </Link>
-        </EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3.5 sm:px-5" colSpan={2}>
-                    Part
-                  </th>
-                  <th className="px-4 py-3.5">Condition</th>
-                  <th className="px-4 py-3.5">Base price</th>
-                  <th className="px-4 py-3.5">Buyer price</th>
-                  <th className="px-4 py-3.5">Your proceeds</th>
-                  <th className="px-4 py-3.5">Stock</th>
-                  <th className="px-4 py-3.5">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {inventory!.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className="w-16 py-3 pl-4 sm:pl-5">
-                      <PartThumbnail src={item.canonicalPart?.imageUrls?.[0]} alt="" />
-                    </td>
-                    <td className="max-w-[280px] px-3 py-3">
-                      <p className="line-clamp-2 font-medium leading-snug text-slate-900">
-                        {item.canonicalPart?.title || "Unknown part"}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={item.condition} size="sm" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <PriceEditor item={item} onSaved={replaceItem} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="price text-sm">
-                        {item.currency} {Number(item.price).toFixed(2)}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Fee {item.currency} {Number(item.marketplaceFee || 0).toFixed(2)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="price text-sm text-emerald-700">
-                        {item.currency} {Number(item.sellerProceeds ?? item.price).toFixed(2)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-slate-700">
-                      {item.inventory?.[0]?.quantity ?? 0}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={item.status} size="sm" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          caption="Inventory listings"
+          rows={inventory!}
+          columns={columns}
+          getRowKey={(item) => item.id}
+          tableFrom="lg"
+          empty={
+            <EmptyState
+              variant="page"
+              icon={<BoxIcon />}
+              title="No inventory yet"
+              description="Upload a CSV of listings to start selling — rows that pass validation become live offers."
+            >
+              <Link href="/uploads" className={buttonClasses()}>
+                Upload listings
+              </Link>
+            </EmptyState>
+          }
+        />
       )}
-    </div>
+    </PageBody>
   );
 }

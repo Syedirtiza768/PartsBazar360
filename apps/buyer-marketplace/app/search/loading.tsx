@@ -3,7 +3,7 @@ import { ProductCardSkeleton } from "@/components/ProductCard";
 
 export default function SearchLoading() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8" aria-busy="true">
+    <div className="mx-auto max-w-wide gutter py-6 sm:py-8" aria-busy="true">
       <div className="border-b border-slate-200 pb-5">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="mt-2 h-4 w-32" />
@@ -19,7 +19,7 @@ export default function SearchLoading() {
             <Skeleton key={`b-${i}`} className="h-4 w-full" />
           ))}
         </div>
-        <div className="grid flex-1 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 xs:grid-cols-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5">
           {Array.from({ length: 12 }).map((_, i) => (
             <ProductCardSkeleton key={i} />
           ))}

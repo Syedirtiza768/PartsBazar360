@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge } from "@repo/ui/badge";
+import { TableScroller } from "@repo/ui/data-table";
 import {
   ShieldCheckIcon,
   AlertTriangleIcon,
@@ -147,20 +148,30 @@ export function CompatibilitySection({
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Filter by year, make, model…"
                     aria-label="Filter compatibility table"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-graphite-600 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
+                    className="min-h-touch w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-base placeholder:text-graphite-600 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60 sm:min-h-0 sm:text-sm"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/*
+                This one stays a real table: year / make / model / trim / engine
+                is a comparison grid, and stacking it into cards would lose the
+                scanning behaviour buyers rely on. Instead it becomes a labelled,
+                keyboard-focusable scroll region with the Year column pinned, so
+                a row never loses its identifier while the buyer swipes across.
+              */}
+              <TableScroller label="Compatibility table" className="rounded-none border-0">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {["Year", "Make", "Model", "Trim", "Engine", "Source"].map((h) => (
+                      {["Year", "Make", "Model", "Trim", "Engine", "Source"].map((h, hi) => (
                         <th
                           key={h}
                           scope="col"
-                          className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-graphite-600"
+                          className={
+                            "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-graphite-600" +
+                            (hi === 0 ? " sticky left-0 z-10 bg-slate-50" : "")
+                          }
                         >
                           {h}
                         </th>
@@ -176,8 +187,8 @@ export function CompatibilitySection({
                       </tr>
                     ) : (
                       visible.map((item, i) => (
-                        <tr key={`${item.year}-${item.make}-${item.model}-${i}`} className={i % 2 === 1 ? "bg-slate-50/60" : undefined}>
-                          <td className="whitespace-nowrap px-4 py-2.5 font-medium tabular-nums text-slate-900">
+                        <tr key={`${item.year}-${item.make}-${item.model}-${i}`} className={i % 2 === 1 ? "bg-slate-50" : "bg-white"}>
+                          <td className="sticky left-0 z-10 whitespace-nowrap bg-inherit px-4 py-2.5 font-medium tabular-nums text-slate-900">
                             {item.year || "—"}
                           </td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">{item.make || "—"}</td>
@@ -208,7 +219,7 @@ export function CompatibilitySection({
                     )}
                   </tbody>
                 </table>
-              </div>
+              </TableScroller>
 
               {filtered.length > 10 && (
                 <div className="border-t border-slate-200 px-4 py-3 text-center">

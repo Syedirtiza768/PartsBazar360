@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Body, Param, Query, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Query,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { BuyerCacheService } from '../search/buyer-cache.service';
@@ -17,10 +25,14 @@ export class InventoryController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    if (!sellerId) throw new NotFoundException('sellerId query parameter is required');
+    if (!sellerId)
+      throw new NotFoundException('sellerId query parameter is required');
 
     const pageNum = Math.max(1, page ? parseInt(page, 10) || 1 : 1);
-    const take = Math.min(Math.max(1, limit ? parseInt(limit, 10) || 50 : 50), 200);
+    const take = Math.min(
+      Math.max(1, limit ? parseInt(limit, 10) || 50 : 50),
+      200,
+    );
     const skip = (pageNum - 1) * take;
 
     const where = { sellerId };
@@ -37,7 +49,9 @@ export class InventoryController {
               manufacturerPartNumber: true,
             },
           },
-          inventory: { select: { quantity: true, status: true, warehouseId: true } },
+          inventory: {
+            select: { quantity: true, status: true, warehouseId: true },
+          },
         },
         orderBy: { updatedAt: 'desc' },
         skip,
@@ -62,7 +76,10 @@ export class InventoryController {
     if (!offer) throw new NotFoundException('Offer not found');
 
     if (body.status !== undefined) {
-      await this.prisma.sellerOffer.update({ where: { id: offerId }, data: { status: body.status } });
+      await this.prisma.sellerOffer.update({
+        where: { id: offerId },
+        data: { status: body.status },
+      });
     }
 
     let result;

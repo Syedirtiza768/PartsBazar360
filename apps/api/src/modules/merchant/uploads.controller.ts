@@ -45,24 +45,32 @@ export class UploadsController {
     if (!file) throw new BadRequestException('file is required');
     const name = file.originalname.toLowerCase();
     if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
-      throw new BadRequestException('Upload a .csv or .xlsx seller inventory file');
+      throw new BadRequestException(
+        'Upload a .csv or .xlsx seller inventory file',
+      );
     }
-    return this.uploads.processUpload(sellerId, file.originalname, file.buffer, {
-      defaultPartSource,
-      defaultQualityTier,
-      defaultBrand,
-      defaultCurrency,
-      defaultWeightUnit,
-      defaultDimensionUnit,
-      commitMode,
-      catalogType,
-    });
+    return this.uploads.processUpload(
+      sellerId,
+      file.originalname,
+      file.buffer,
+      {
+        defaultPartSource,
+        defaultQualityTier,
+        defaultBrand,
+        defaultCurrency,
+        defaultWeightUnit,
+        defaultDimensionUnit,
+        commitMode,
+        catalogType,
+      },
+    );
   }
 
   @Put(':jobId/mapping')
   async updateMapping(
     @Param('jobId') jobId: string,
-    @Body() body: {
+    @Body()
+    body: {
       mapping?: unknown;
       defaultBrand?: string;
       defaultCurrency?: string;

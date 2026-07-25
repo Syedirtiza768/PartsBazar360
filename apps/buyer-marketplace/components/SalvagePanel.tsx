@@ -22,7 +22,7 @@ export function SalvagePanel({ units }: { units: SalvageUnit[] }) {
         )}
       </div>
 
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+      <dl className="mt-4 grid gap-3 xs:grid-cols-2">
         {donor && (
           <div>
             <dt className="text-xs font-semibold uppercase tracking-wide text-graphite-500">Donor vehicle</dt>

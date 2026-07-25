@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { INTERNAL_API_URL, SITE_URL } from "@/lib/api";
+import { INTERNAL_API_URL } from "@/lib/api";
+import { absoluteUrl, getSiteUrl } from "@/lib/seo";
 import { ImageGallery } from "@/components/ImageGallery";
 import { CompatibilitySection } from "@/components/CompatibilitySection";
 import { BuyBox, StickyMobileBar } from "@/components/BuyBox";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { SalvagePanel } from "@/components/SalvagePanel";
-import { lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
+import { buyerVisibleOffers, lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
 import type { Part } from "@/lib/types";
 
 // Short ISR window: PDPs are mostly catalog data. Merchant edits trigger
@@ -38,19 +39,34 @@ export async function generateMetadata({ params }: PartPageProps): Promise<Metad
   const part = await getPart(id);
   if (!part) return { title: "Part Not Found | PartsBazar360" };
 
-  const price = lowestOfferPrice(part.offers);
-  const currency = offerCurrency(part.offers);
-  const description = `${part.title}${part.brand ? ` — ${part.brand}` : ""}${part.category ? ` (${part.category})` : ""}. ${part.offers.length} offer(s) from verified sellers${price && currency ? `, starting at ${currency} ${price.toFixed(2)}` : ""}.`;
+  const offers = buyerVisibleOffers(part.offers);
+  const price = lowestOfferPrice(offers);
+  const currency = offerCurrency(offers);
+  const mpn = part.manufacturerPartNumber || part.oeNumbers?.[0];
+  const description = [
+    part.title,
+    part.brand ? `${part.brand}` : null,
+    mpn ? `Part no. ${mpn}` : null,
+    part.category ? `${part.category}` : null,
+    offers.length > 0
+      ? `${offers.length} offer${offers.length === 1 ? "" : "s"} from marketplace sellers${price && currency ? `, from ${currency} ${price.toFixed(2)}` : ""}`
+      : "Currently unavailable from marketplace sellers",
+  ]
+    .filter(Boolean)
+    .join(" — ")
+    .slice(0, 160);
   const image = part.imageUrls?.[0];
+  const canonical = absoluteUrl(`/part/${id}`);
 
   return {
     title: `${part.title} | PartsBazar360`,
     description,
-    alternates: { canonical: `${SITE_URL}/part/${id}` },
+    alternates: { canonical },
     openGraph: {
       title: part.title,
       description,
       type: "website",
+      url: canonical,
       images: image ? [{ url: image }] : undefined,
     },
     twitter: {
@@ -89,30 +105,93 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
     return groups;
   }, {});
 
+  const offers = buyerVisibleOffers(part.offers);
+  const mpn = part.manufacturerPartNumber || part.oeNumbers?.[0];
+  const productUrl = absoluteUrl(`/part/${id}`);
+  const breadcrumbItems = [
+    { name: "Home", item: absoluteUrl("/") },
+    { name: "All parts", item: absoluteUrl("/search") },
+    ...(part.category
+      ? [
+          {
+            name: part.category,
+            item: `${getSiteUrl()}/search?category=${encodeURIComponent(part.category)}`,
+          },
+        ]
+      : []),
+    { name: part.title, item: productUrl },
+  ];
+
+  const conditionMap: Record<string, string> = {
+    NEW: "https://schema.org/NewCondition",
+    USED: "https://schema.org/UsedCondition",
+    REFURBISHED: "https://schema.org/RefurbishedCondition",
+    REMANUFACTURED: "https://schema.org/RefurbishedCondition",
+  };
+  const primaryCondition =
+    conditionMap[(offers[0]?.condition || part.qualityTier || "").toUpperCase()] ||
+    "https://schema.org/UsedCondition";
+
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Product",
-    name: part.title,
-    brand: part.brand ? { "@type": "Brand", name: part.brand } : undefined,
-    category: part.category || undefined,
-    image: images.length > 0 ? images : undefined,
-    sku: part.id,
-    mpn: part.oeNumbers?.[0] || undefined,
-    offers:
-      part.offers.length > 0
-        ? {
-            "@type": "AggregateOffer",
-            priceCurrency: offerCurrency(part.offers) ?? undefined,
-            lowPrice: lowestOfferPrice(part.offers),
-            highPrice: Math.max(...part.offers.map((o) => o.price)),
-            offerCount: part.offers.length,
-            availability: "https://schema.org/InStock",
-          }
-        : undefined,
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumbItems.map((crumb, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: crumb.name,
+          item: crumb.item,
+        })),
+      },
+      {
+        "@type": "Product",
+        name: part.title,
+        url: productUrl,
+        brand: part.brand ? { "@type": "Brand", name: part.brand } : undefined,
+        category: part.category || undefined,
+        image: images.length > 0 ? images : undefined,
+        sku: part.manufacturerPartNumber || part.id,
+        mpn: mpn || undefined,
+        productID: part.id,
+        material: part.partSource === "OEM" ? "Genuine OEM" : part.partSource || undefined,
+        offers:
+          offers.length > 0
+            ? {
+                "@type": "AggregateOffer",
+                url: productUrl,
+                priceCurrency: offerCurrency(offers) ?? "USD",
+                lowPrice: lowestOfferPrice(offers),
+                highPrice: Math.max(...offers.map((o) => o.price)),
+                offerCount: offers.length,
+                availability: "https://schema.org/InStock",
+                itemCondition: primaryCondition,
+                offer: offers.slice(0, 10).map((o) => ({
+                  "@type": "Offer",
+                  price: o.price,
+                  priceCurrency: o.currency || offerCurrency(offers) || "USD",
+                  availability: "https://schema.org/InStock",
+                  itemCondition:
+                    conditionMap[(o.condition || "").toUpperCase()] || primaryCondition,
+                  url: productUrl,
+                  seller: {
+                    "@type": "Organization",
+                    name: o.seller?.name || o.sellerName || "Marketplace seller",
+                  },
+                })),
+              }
+            : {
+                "@type": "Offer",
+                url: productUrl,
+                availability: "https://schema.org/OutOfStock",
+                priceCurrency: "USD",
+              },
+      },
+    ],
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-12">
+    <div className="mx-auto max-w-content gutter pb-[calc(env(safe-area-inset-bottom,0px)+6rem)] pt-5 lg:pb-12">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <Breadcrumbs
@@ -121,6 +200,9 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
           { href: "/search", label: "All parts" },
           ...(part.category
             ? [{ href: `/search?category=${encodeURIComponent(part.category)}`, label: part.category }]
+            : []),
+          ...(part.brand
+            ? [{ href: `/search?brand=${encodeURIComponent(part.brand)}`, label: part.brand }]
             : []),
           { label: part.title },
         ]}
@@ -135,7 +217,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
           <ImageGallery images={images} title={part.title} />
         </div>
 
-        <aside className="min-w-0 self-start lg:sticky lg:top-40 lg:row-span-2" aria-label="Purchase options">
+        <aside className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2" aria-label="Purchase options">
           <BuyBox part={part} />
         </aside>
 
@@ -175,11 +257,29 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               Technical details
             </h2>
             <dl className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-5 py-1.5">
-              {part.brand && <SpecRow label="Brand">{part.brand}</SpecRow>}
+              {part.category && (
+                <SpecRow label="Category">
+                  <Link
+                    href={`/search?category=${encodeURIComponent(part.category)}`}
+                    className="text-brand-700 underline-offset-2 hover:underline"
+                  >
+                    {part.category}
+                  </Link>
+                </SpecRow>
+              )}
+              {part.brand && (
+                <SpecRow label="Brand">
+                  <Link
+                    href={`/search?brand=${encodeURIComponent(part.brand)}`}
+                    className="text-brand-700 underline-offset-2 hover:underline"
+                  >
+                    {part.brand}
+                  </Link>
+                </SpecRow>
+              )}
               {part.manufacturer && part.manufacturer !== part.brand && (
                 <SpecRow label="Manufacturer">{part.manufacturer}</SpecRow>
               )}
-              {part.category && <SpecRow label="Category">{part.category}</SpecRow>}
               {(part.qualityTier || part.offers?.[0]?.qualityTier) && (
                 <SpecRow label="Condition tier">
                   {humanize(part.qualityTier || part.offers?.[0]?.qualityTier)}

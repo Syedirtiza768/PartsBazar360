@@ -25,16 +25,18 @@ function CartLine({ item }: { item: CartItem }) {
   const image = part?.imageUrls?.[0];
 
   return (
-    <div className="flex gap-4 px-4 py-4 sm:px-5">
+    <div className="flex gap-3 px-4 py-4 sm:gap-4 sm:px-5">
       <Link
         href={part ? `/part/${part.id}` : "#"}
-        className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+        // A 96px thumbnail left 176px of line at 320px, which squeezed the
+        // title to ~80px beside the price. It steps down with the viewport.
+        className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 xs:h-24 xs:w-24"
       >
         <PartImage src={image} alt={part?.title || "Part"} className="object-contain p-1.5" />
       </Link>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1.5 xs:flex-row xs:items-start xs:justify-between xs:gap-3">
           <div className="min-w-0">
             <Link
               href={part ? `/part/${part.id}` : "#"}
@@ -54,7 +56,7 @@ function CartLine({ item }: { item: CartItem }) {
           </p>
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <QuantityStepper
             quantity={item.quantity}
             disabled={loading}
@@ -68,7 +70,7 @@ function CartLine({ item }: { item: CartItem }) {
             type="button"
             onClick={() => removeItem(item.id)}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-graphite-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            className="inline-flex min-h-touch items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-graphite-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:min-h-9"
           >
             <TrashIcon className="h-4 w-4" />
             Remove
@@ -102,8 +104,8 @@ export default function CartPage() {
   const initialLoading = loading && items.length === 0;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+    <div className="mx-auto max-w-content gutter py-8 pb-[calc(env(safe-area-inset-bottom,0px)+6.5rem)] sm:py-10 lg:pb-10">
+      <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
         Your cart
         {itemCount > 0 && (
           <span className="ml-2 text-lg font-normal text-graphite-600">
@@ -166,21 +168,21 @@ export default function CartPage() {
           </div>
 
           {/* Summary */}
-          <aside className="lg:sticky lg:top-40" aria-label="Order summary">
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
+          <aside className="lg:sticky lg:top-28" aria-label="Order summary">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
               <h2 className="text-base font-bold text-slate-900">Order summary</h2>
               <dl className="mt-4 space-y-2.5 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-graphite-600">
+                <div className="flex justify-between gap-3">
+                  <dt className="min-w-0 text-graphite-600">
                     Subtotal ({itemCount} item{itemCount === 1 ? "" : "s"})
                   </dt>
                   <dd className="price">{formatPrice(subtotal, currency)}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-3">
                   <dt className="text-graphite-600">Shipping</dt>
                   <dd className="text-graphite-600">Calculated at checkout</dd>
                 </div>
-                <div className="flex justify-between border-t border-slate-100 pt-2.5 text-base">
+                <div className="flex justify-between gap-3 border-t border-slate-100 pt-2.5 text-base">
                   <dt className="font-semibold text-slate-900">Estimated total</dt>
                   <dd className="price">{formatPrice(subtotal, currency)}</dd>
                 </div>
@@ -199,7 +201,7 @@ export default function CartPage() {
               </Button>
               <Link
                 href="/search"
-                className="mt-3 block text-center text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
+                className="mt-2 flex min-h-touch items-center justify-center text-center text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
               >
                 Continue shopping
               </Link>
@@ -217,6 +219,32 @@ export default function CartPage() {
               </li>
             </ul>
           </aside>
+        </div>
+      )}
+
+      {/*
+        Sticky mobile checkout bar. The order summary sits below every seller
+        group on a phone, so with three sellers in the cart "Continue to
+        checkout" was three screens down. The bar keeps the running total and
+        the primary action in reach without duplicating the summary's detail.
+      */}
+      {items.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-sticky border-t border-slate-200 bg-white/95 gutter pb-safe-b-3 pt-3 shadow-top-bar backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-graphite-600">
+                {itemCount} item{itemCount === 1 ? "" : "s"} · shipping at checkout
+              </p>
+              <p className="price text-lg leading-tight">{formatPrice(subtotal, currency)}</p>
+            </div>
+            <Button
+              className="shrink-0"
+              onClick={() => router.push("/checkout")}
+              disabled={loading}
+            >
+              Checkout
+            </Button>
+          </div>
         </div>
       )}
     </div>

@@ -45,7 +45,9 @@ export class CheckoutService {
       throw new BadRequestException('Cart is empty');
     }
 
-    const dbUser = await this.prisma.user.findUnique({ where: { id: buyer.buyerId } });
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: buyer.buyerId },
+    });
     if (!dbUser) {
       throw new UnauthorizedException('Buyer account not found');
     }
@@ -61,7 +63,11 @@ export class CheckoutService {
     // 1. Lock stock for all items
     const reservedOffers: string[] = [];
     for (const item of cart.items) {
-      const locked = await this.reservationService.reserveStock(cartId, item.sellerOfferId, item.quantity);
+      const locked = await this.reservationService.reserveStock(
+        cartId,
+        item.sellerOfferId,
+        item.quantity,
+      );
       if (!locked) {
         for (const reservedOfferId of reservedOffers) {
           await this.reservationService.releaseStock(cartId, reservedOfferId);
@@ -91,7 +97,9 @@ export class CheckoutService {
         quantity: i.quantity,
       }));
       shippingTotalsBySeller[sellerId] =
-        this.shippingService.calculateSellerShippingTotal(formattedItemsForShipping);
+        this.shippingService.calculateSellerShippingTotal(
+          formattedItemsForShipping,
+        );
     }
 
     // 3. Create Multi-Seller Order
@@ -113,7 +121,9 @@ export class CheckoutService {
       },
     });
 
-    const buyerAppUrl = (process.env.BUYER_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const buyerAppUrl = (
+      process.env.BUYER_APP_URL || 'http://localhost:3000'
+    ).replace(/\/$/, '');
     // Single line item for the order total (parts + shipping) so Stripe amount matches exactly.
     const lineItems = [
       {
@@ -136,7 +146,10 @@ export class CheckoutService {
         cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}`,
       });
     } catch (err) {
-      this.logger.error(`Stripe Checkout Session failed for order ${order.id}`, err);
+      this.logger.error(
+        `Stripe Checkout Session failed for order ${order.id}`,
+        err,
+      );
       await this.prisma.paymentIntent.update({
         where: { id: paymentIntent.id },
         data: { status: 'FAILED' },
@@ -161,7 +174,9 @@ export class CheckoutService {
       data: { status: 'CHECKED_OUT', userId: buyer.buyerId },
     });
 
-    this.logger.log(`Checkout completed for Cart ${cartId}. Order ${order.id} → Stripe ${checkoutSession.id}`);
+    this.logger.log(
+      `Checkout completed for Cart ${cartId}. Order ${order.id} → Stripe ${checkoutSession.id}`,
+    );
 
     return {
       order,
@@ -181,7 +196,10 @@ export class CheckoutService {
     webhookSecret?: string,
   ) {
     const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
-    if (!expectedSecret) throw new ServiceUnavailableException('Payment webhook is not configured');
+    if (!expectedSecret)
+      throw new ServiceUnavailableException(
+        'Payment webhook is not configured',
+      );
     if (!webhookSecret || webhookSecret !== expectedSecret) {
       throw new UnauthorizedException('Invalid payment webhook secret');
     }
@@ -189,7 +207,11 @@ export class CheckoutService {
       throw new BadRequestException('Unsupported payment status');
     }
 
-    return this.applyPaymentStatus(paymentIntentId, body.status, body.externalId);
+    return this.applyPaymentStatus(
+      paymentIntentId,
+      body.status,
+      body.externalId,
+    );
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string | undefined) {
@@ -201,7 +223,9 @@ export class CheckoutService {
     try {
       event = this.stripeService.constructWebhookEvent(rawBody, signature);
     } catch (err) {
-      this.logger.warn(`Stripe webhook signature verification failed: ${String(err)}`);
+      this.logger.warn(
+        `Stripe webhook signature verification failed: ${String(err)}`,
+      );
       throw new UnauthorizedException('Invalid Stripe webhook signature');
     }
 
@@ -213,7 +237,9 @@ export class CheckoutService {
       };
       const paymentIntentId = session.metadata?.paymentIntentId;
       if (!paymentIntentId) {
-        this.logger.warn(`Stripe session ${session.id} missing paymentIntentId metadata`);
+        this.logger.warn(
+          `Stripe session ${session.id} missing paymentIntentId metadata`,
+        );
         return { received: true, ignored: true };
       }
       if (session.payment_status && session.payment_status !== 'paid') {
@@ -243,7 +269,9 @@ export class CheckoutService {
     status: 'SUCCEEDED' | 'FAILED',
     externalId?: string,
   ) {
-    const payment = await this.prisma.paymentIntent.findUnique({ where: { id: paymentIntentId } });
+    const payment = await this.prisma.paymentIntent.findUnique({
+      where: { id: paymentIntentId },
+    });
     if (!payment) throw new BadRequestException('Payment intent not found');
     if (payment.status === 'SUCCEEDED') return payment;
 

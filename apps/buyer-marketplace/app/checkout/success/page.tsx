@@ -11,12 +11,12 @@ function SuccessContent() {
   const orderId = params.get("orderId");
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-12 sm:py-16">
+    <div className="mx-auto max-w-2xl gutter py-12 sm:py-16">
       <div className="text-center">
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
           <CheckCircleIcon className="h-8 w-8" />
         </span>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+        <h1 className="mt-5 text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           Payment submitted
         </h1>
         <p className="mt-2 text-graphite-600">
@@ -56,7 +56,7 @@ function SuccessContent() {
 
 export default function CheckoutSuccessPage() {
   return (
-    <Suspense fallback={<div className="px-4 py-16 text-center text-sm text-graphite-600">Loading…</div>}>
+    <Suspense fallback={<div className="gutter py-16 text-center text-sm text-graphite-600">Loading…</div>}>
       <SuccessContent />
     </Suspense>
   );

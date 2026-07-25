@@ -11,21 +11,30 @@ describe('marketplace store isolation', () => {
     expect(MARKETPLACE_SELLERS.salvage.storeId).toBe(SALVAGE_STORE_ID);
     expect(MARKETPLACE_SELLERS.blackline.storeId).toBe(BLACKLINE_STORE_ID);
     expect(MARKETPLACE_SELLERS.salvage.storeSlug).toBeNull();
-    expect(MARKETPLACE_SELLERS.blackline.storeSlug).toBe('blacklineusedautoparts');
+    expect(MARKETPLACE_SELLERS.blackline.storeSlug).toBe(
+      'blacklineusedautoparts',
+    );
     expect(SALVAGE_STORE_ID).not.toBe(BLACKLINE_STORE_ID);
   });
 
   it('resolves sync targets without cross-assigning stores', () => {
     const salvage = resolveRealTrackSyncTarget({ storeId: SALVAGE_STORE_ID });
-    const blackline = resolveRealTrackSyncTarget({ storeSlug: 'blacklineusedautoparts' });
+    const blackline = resolveRealTrackSyncTarget({
+      storeSlug: 'blacklineusedautoparts',
+    });
     expect(salvage.name).toBe('Salvage Auto Parts');
     expect(blackline.name).toBe('Blackline Auto Parts');
     expect(salvage.storeId).not.toBe(blackline.storeId);
   });
 
   it('rejects unknown RealTrack stores', () => {
-    expect(() => resolveRealTrackSyncTarget({ storeId: '00000000-0000-0000-0000-000000000000' }))
-      .toThrow(/not a marketplace/);
-    expect(findMarketplaceSellerByStoreId('eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0')).toBeNull();
+    expect(() =>
+      resolveRealTrackSyncTarget({
+        storeId: '00000000-0000-0000-0000-000000000000',
+      }),
+    ).toThrow(/not a marketplace/);
+    expect(
+      findMarketplaceSellerByStoreId('eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0'),
+    ).toBeNull();
   });
 });

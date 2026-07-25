@@ -1,12 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Button } from '@repo/ui/button';
+import { Badge } from '@repo/ui/badge';
+import { PageBody } from '@repo/ui/container';
+import { DataTable, type Column } from '@repo/ui/data-table';
+import { EmptyState } from '@repo/ui/empty-state';
+import { Input } from '@repo/ui/field';
+import { PageHeader, StatCard, StatGrid } from '@repo/ui/page-header';
+import { Sheet } from '@repo/ui/sheet';
+import { AlertCircleIcon } from '@repo/ui/icons';
 import { API_BASE_URL } from '@/lib/api';
 
 interface SyncResult {
   message: string;
   jobId: string;
   storeId: string;
+}
+
+/** Loosely-shaped operational records from the ops endpoints. */
+type Record_ = Record<string, unknown>;
+
+interface UploadJobRow extends Record_ {
+  id: string;
+  fileName?: string;
+  status?: string;
+  insertedRows?: number;
+  reviewRows?: number;
+  invalidRows?: number;
+  seller?: { name?: string };
+}
+
+interface TicketRow extends Record_ {
+  id: string;
+  subject?: string;
+  category?: string;
+  priority?: string;
+  customerEmail?: string;
+}
+
+interface OrderRow extends Record_ {
+  id: string;
+  customerEmail?: string;
+  totalAmount?: number;
+  currency?: string;
+  sellerOrders?: QueueRow[];
 }
 
 interface DashboardData {
@@ -16,8 +54,18 @@ interface DashboardData {
     pendingSellerOrders: number;
     recentOrderCount: number;
   };
-  recentUploads?: any[];
-  recentTickets?: any[];
+  recentUploads?: UploadJobRow[];
+  recentTickets?: TicketRow[];
+}
+
+interface QueueRow {
+  id: string;
+  parentOrderId: string;
+  customerEmail?: string;
+  status: string;
+  seller?: { name?: string };
+  items?: unknown[];
+  [key: string]: unknown;
 }
 
 export default function OperationsCommandCenterPage() {
@@ -28,18 +76,22 @@ export default function OperationsCommandCenterPage() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<SyncResult[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [tickets, setTickets] = useState<any[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Replaces two chained window.prompt() calls: prompt is suppressed outright
+  // in several mobile in-app browsers, which made "mark shipped" a dead button
+  // on exactly the devices operators use on the warehouse floor.
+  const [shipping, setShipping] = useState<QueueRow | null>(null);
 
-  const fulfillmentQueue = useMemo(() => (
-    orders.flatMap((order) => (order.sellerOrders || []).map((sellerOrder: any) => ({
+  const fulfillmentQueue = useMemo<QueueRow[]>(() => (
+    orders.flatMap((order) => (order.sellerOrders || []).map((sellerOrder: QueueRow) => ({
       ...sellerOrder,
       parentOrderId: order.id,
       customerEmail: order.customerEmail,
       totalAmount: order.totalAmount,
       currency: order.currency,
-    }))).filter((sellerOrder) => ['PROCESSING', 'READY_TO_SHIP'].includes(sellerOrder.status))
+    }))).filter((sellerOrder: QueueRow) => ['PROCESSING', 'READY_TO_SHIP'].includes(sellerOrder.status))
   ), [orders]);
 
   const loadOperations = async () => {
@@ -55,8 +107,8 @@ export default function OperationsCommandCenterPage() {
       const ticketsData = await ticketsRes.json();
       setOrders(Array.isArray(ordersData) ? ordersData : []);
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-    } catch (err: any) {
-      setError(err?.message || 'Could not load operations data.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not load operations data.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +118,8 @@ export default function OperationsCommandCenterPage() {
     loadOperations();
   }, []);
 
-  const handleTriggerSync = async () => {
+  const handleTriggerSync = async (event: FormEvent) => {
+    event.preventDefault();
     if (!storeId.trim()) {
       setError('Store ID is required.');
       return;
@@ -92,18 +145,18 @@ export default function OperationsCommandCenterPage() {
       setResult(data);
       setHistory((prev) => [data, ...prev].slice(0, 10));
       await loadOperations();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to queue sync job.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to queue sync job.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const updateSellerOrder = async (sellerOrderId: string) => {
-    const trackingNumber = window.prompt('Tracking number');
-    if (!trackingNumber) return;
-    const carrier = window.prompt('Carrier') || undefined;
-
+  const updateSellerOrder = async (
+    sellerOrderId: string,
+    trackingNumber: string,
+    carrier?: string,
+  ) => {
     await fetch(`${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -128,146 +181,308 @@ export default function OperationsCommandCenterPage() {
     recentOrderCount: 0,
   };
 
-  return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-amber-700 uppercase tracking-wide">Operator Workspace</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Operations command center</h1>
-          <p className="text-slate-600 mt-1">
-            Monitor checkout flow, seller upload exceptions, customer support, and fulfilment readiness from one place.
+  const queueColumns: Column<QueueRow>[] = [
+    {
+      key: 'order',
+      header: 'Order',
+      priority: 'primary',
+      cell: (row) => (
+        <div className="min-w-0">
+          <p className="part-number break-anywhere text-graphite-700">{row.parentOrderId}</p>
+          <p className="mt-0.5 break-anywhere text-xs text-graphite-600">
+            {row.customerEmail || 'Customer email missing'}
           </p>
         </div>
-        <button onClick={loadOperations} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-          Refresh operations
-        </button>
-      </header>
+      ),
+    },
+    {
+      key: 'seller',
+      header: 'Seller',
+      cell: (row) => <span className="font-medium text-slate-900">{row.seller?.name || 'Seller'}</span>,
+    },
+    { key: 'items', header: 'Items', align: 'right', cell: (row) => row.items?.length || 0 },
+    {
+      key: 'status',
+      header: 'Status',
+      priority: 'secondary',
+      cell: (row) => <Badge tone="warning" size="sm">{row.status}</Badge>,
+    },
+  ];
 
-      {error && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+  return (
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
+      <PageHeader
+        eyebrow="Operator workspace"
+        title="Operations command center"
+        description="Monitor checkout flow, seller upload exceptions, customer support, and fulfilment readiness from one place."
+        actions={
+          <Button variant="outline" onClick={loadOperations} loading={loading}>
+            Refresh operations
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard label="Open support tickets" value={loading ? '...' : metrics.openTickets} tone="text-amber-700" />
-        <MetricCard label="Uploads needing ops" value={loading ? '...' : metrics.uploadJobs} tone="text-blue-700" />
-        <MetricCard label="Seller orders pending" value={loading ? '...' : metrics.pendingSellerOrders} tone="text-emerald-700" />
-        <MetricCard label="Recent orders" value={loading ? '...' : metrics.recentOrderCount} tone="text-slate-950" />
-      </div>
+      {error && (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          <AlertCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="break-anywhere">{error}</span>
+        </p>
+      )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Fulfilment queue</h2>
-            <span className="text-xs font-semibold text-slate-500">{fulfillmentQueue.length} pending</span>
+      <StatGrid>
+        <StatCard label="Open support tickets" value={loading ? '—' : metrics.openTickets} tone="warning" loading={loading} />
+        <StatCard label="Uploads needing ops" value={loading ? '—' : metrics.uploadJobs} loading={loading} />
+        <StatCard label="Seller orders pending" value={loading ? '—' : metrics.pendingSellerOrders} tone="success" loading={loading} />
+        <StatCard label="Recent orders" value={loading ? '—' : metrics.recentOrderCount} loading={loading} />
+      </StatGrid>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section className="min-w-0 xl:col-span-2" aria-labelledby="queue-heading">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="queue-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+              Fulfilment queue
+            </h2>
+            <span className="text-xs font-semibold text-graphite-600">
+              {fulfillmentQueue.length} pending
+            </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white border-b border-slate-200 text-slate-500">
-                <tr>
-                  <th className="px-6 py-4 font-semibold">Order</th>
-                  <th className="px-6 py-4 font-semibold">Seller</th>
-                  <th className="px-6 py-4 font-semibold">Items</th>
-                  <th className="px-6 py-4 font-semibold">Status</th>
-                  <th className="px-6 py-4 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {fulfillmentQueue.map((sellerOrder) => (
-                  <tr key={sellerOrder.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <p className="font-mono text-xs text-slate-600">{sellerOrder.parentOrderId}</p>
-                      <p className="text-xs text-slate-500">{sellerOrder.customerEmail || 'Customer email missing'}</p>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-950">{sellerOrder.seller?.name || 'Seller'}</td>
-                    <td className="px-6 py-4 text-slate-700">{sellerOrder.items?.length || 0}</td>
-                    <td className="px-6 py-4">
-                      <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{sellerOrder.status}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button onClick={() => updateSellerOrder(sellerOrder.id)} className="text-sm font-semibold text-emerald-700 hover:text-emerald-600">
-                        Mark shipped
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {fulfillmentQueue.length === 0 && (
-                  <tr><td colSpan={5} className="px-6 py-10 text-center text-slate-500">No seller orders waiting on fulfilment.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            caption="Seller orders awaiting fulfilment"
+            rows={fulfillmentQueue}
+            columns={queueColumns}
+            getRowKey={(row) => row.id}
+            tableFrom="lg"
+            actions={(row) => (
+              <Button size="sm" variant="secondary" onClick={() => setShipping(row)}>
+                Mark shipped
+              </Button>
+            )}
+            empty={
+              <EmptyState
+                title="Nothing waiting on fulfilment"
+                description="Seller orders in PROCESSING or READY_TO_SHIP will appear here."
+              />
+            }
+          />
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-          <div>
-            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">RealTrack catalogue sync</h2>
-            <p className="mt-1 text-xs text-slate-500">Queue an ingestion job for a source store without leaving operations.</p>
-          </div>
-          <input value={storeId} onChange={(e) => setStoreId(e.target.value)} placeholder="Store ID" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          <input type="number" min={1} value={page} onChange={(e) => setPage(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          <button onClick={handleTriggerSync} disabled={submitting} className="w-full px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg disabled:opacity-50 transition-colors">
-            {submitting ? 'Queuing job...' : 'Trigger sync'}
-          </button>
-          {result && <p className="text-sm text-emerald-700">Queued job <span className="font-mono">{result.jobId}</span>.</p>}
+        <section
+          className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-card"
+          aria-labelledby="sync-heading"
+        >
+          <h2 id="sync-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            RealTrack catalogue sync
+          </h2>
+          <p className="mt-1 text-xs text-graphite-600">
+            Queue an ingestion job for a source store without leaving operations.
+          </p>
+          <form onSubmit={handleTriggerSync} className="mt-4 space-y-3.5">
+            <Input
+              label="Store ID"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              placeholder="e.g. rt-4821"
+              autoComplete="off"
+              // Store IDs are alphanumeric; the plain keyboard is correct, but
+              // autocapitalise/autocorrect would mangle them on iOS.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+            />
+            <Input
+              label="Start page"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={page}
+              onChange={(e) => setPage(e.target.value)}
+              hint="Ingestion resumes from this page of the source feed."
+            />
+            <Button type="submit" fullWidth loading={submitting}>
+              {submitting ? 'Queuing job…' : 'Trigger sync'}
+            </Button>
+          </form>
+          {result && (
+            <p className="mt-3 text-sm text-emerald-700" role="status">
+              Queued job <span className="part-number break-anywhere">{result.jobId}</span>.
+            </p>
+          )}
           {history.length > 0 && (
-            <ul className="space-y-2 pt-2">
+            <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
               {history.slice(0, 3).map((item, idx) => (
-                <li key={`${item.jobId}-${idx}`} className="text-xs text-slate-500">Store {item.storeId}: <span className="font-mono">{item.jobId}</span></li>
+                <li key={`${item.jobId}-${idx}`} className="break-anywhere text-xs text-graphite-600">
+                  Store {item.storeId}: <span className="part-number">{item.jobId}</span>
+                </li>
               ))}
             </ul>
           )}
         </section>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Support tickets</h2>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <section
+          className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card"
+          aria-labelledby="tickets-heading"
+        >
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+            <h2 id="tickets-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+              Support tickets
+            </h2>
           </div>
           <ul className="divide-y divide-slate-100">
             {tickets.slice(0, 8).map((ticket) => (
-              <li key={ticket.id} className="px-6 py-4 flex items-start justify-between gap-4 hover:bg-slate-50 transition-colors">
-                <div>
-                  <p className="font-semibold text-slate-950">{ticket.subject}</p>
-                  <p className="mt-1 text-xs text-slate-500">{ticket.category} / {ticket.priority} / {ticket.customerEmail}</p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button onClick={() => updateTicket(ticket.id, 'IN_PROGRESS')} className="text-xs font-semibold text-blue-700 hover:text-blue-600">Start</button>
-                  <button onClick={() => updateTicket(ticket.id, 'RESOLVED')} className="text-xs font-semibold text-emerald-700 hover:text-emerald-600">Resolve</button>
+              <li key={ticket.id} className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5">
+                {/* Stacks on phones: side-by-side text + actions squeezed the
+                    subject to two characters per line at 320px. */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900">{ticket.subject}</p>
+                    <p className="mt-1 break-anywhere text-xs text-graphite-600">
+                      {ticket.category} / {ticket.priority} / {ticket.customerEmail}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" variant="outline" onClick={() => updateTicket(ticket.id, 'IN_PROGRESS')}>
+                      Start
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => updateTicket(ticket.id, 'RESOLVED')}>
+                      Resolve
+                    </Button>
+                  </div>
                 </div>
               </li>
             ))}
-            {tickets.length === 0 && <li className="px-6 py-10 text-center text-slate-500 text-sm">No support tickets yet.</li>}
+            {tickets.length === 0 && (
+              <li className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">
+                No support tickets yet.
+              </li>
+            )}
           </ul>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-            <h2 className="font-semibold text-sm text-slate-600 uppercase tracking-wider">Seller upload exceptions</h2>
+        <section
+          className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card"
+          aria-labelledby="uploads-heading"
+        >
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+            <h2 id="uploads-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+              Seller upload exceptions
+            </h2>
           </div>
           <ul className="divide-y divide-slate-100">
-            {(dashboard?.recentUploads || []).map((job: any) => (
-              <li key={job.id} className="px-6 py-4 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-950 truncate">{job.fileName}</p>
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{job.status}</span>
+            {(dashboard?.recentUploads || []).map((job) => (
+              <li key={job.id} className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5">
+                <div className="flex items-start justify-between gap-3">
+                  {/* break-anywhere, not truncate: an operator needs the whole
+                      filename to find the upload, and it is often 60+ chars. */}
+                  <p className="min-w-0 break-anywhere font-semibold text-slate-900">{job.fileName}</p>
+                  <Badge size="sm" className="shrink-0">{job.status}</Badge>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {job.seller?.name || 'Seller'}: {job.insertedRows} imported, {job.reviewRows} review, {job.invalidRows} invalid
+                <p className="mt-1 text-xs text-graphite-600">
+                  {job.seller?.name || 'Seller'}: {job.insertedRows} imported, {job.reviewRows} review,{' '}
+                  {job.invalidRows} invalid
                 </p>
               </li>
             ))}
-            {(dashboard?.recentUploads || []).length === 0 && <li className="px-6 py-10 text-center text-slate-500 text-sm">No upload jobs yet.</li>}
+            {(dashboard?.recentUploads || []).length === 0 && (
+              <li className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">No upload jobs yet.</li>
+            )}
           </ul>
         </section>
       </div>
-    </div>
+
+      <ShipmentSheet
+        row={shipping}
+        onClose={() => setShipping(null)}
+        onSubmit={updateSellerOrder}
+      />
+    </PageBody>
   );
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: number | string; tone: string }) {
+/**
+ * Bottom sheet on phones, centred dialog from `sm` up. Both fields are in one
+ * form so the operator fills them in a single pass, rather than answering two
+ * blocking prompts back to back.
+ */
+function ShipmentSheet({
+  row,
+  onClose,
+  onSubmit,
+}: {
+  row: QueueRow | null;
+  onClose: () => void;
+  onSubmit: (id: string, trackingNumber: string, carrier?: string) => Promise<void>;
+}) {
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [carrier, setCarrier] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Reset between orders so a previous tracking number can't be submitted
+  // against the next one.
+  useEffect(() => {
+    setTrackingNumber('');
+    setCarrier('');
+  }, [row?.id]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!row || !trackingNumber.trim()) return;
+    setSaving(true);
+    try {
+      await onSubmit(row.id, trackingNumber.trim(), carrier.trim() || undefined);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-medium text-slate-500">{label}</h3>
-      <div className={`text-4xl font-bold mt-2 ${tone}`}>{value}</div>
-    </div>
+    <Sheet
+      open={Boolean(row)}
+      onClose={onClose}
+      title="Mark shipped"
+      description={row ? `Order ${row.parentOrderId}` : undefined}
+      size="sm"
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} fullWidth className="sm:w-auto">
+            Cancel
+          </Button>
+          <Button
+            form="shipment-form"
+            type="submit"
+            loading={saving}
+            disabled={!trackingNumber.trim()}
+            fullWidth
+            className="sm:w-auto"
+          >
+            Mark shipped
+          </Button>
+        </div>
+      }
+    >
+      <form id="shipment-form" onSubmit={submit} className="space-y-4">
+        <Input
+          label="Tracking number"
+          value={trackingNumber}
+          onChange={(e) => setTrackingNumber(e.target.value)}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
+        <Input
+          label="Carrier"
+          value={carrier}
+          onChange={(e) => setCarrier(e.target.value)}
+          hint="Optional."
+        />
+      </form>
+    </Sheet>
   );
 }

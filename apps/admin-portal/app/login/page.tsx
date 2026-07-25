@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { Button } from "@repo/ui/button";
+import { Input } from "@repo/ui/field";
 import { useAdminAuth } from "@/lib/auth-context";
 
 export default function AdminLoginPage() {
@@ -31,52 +33,53 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+    /*
+      `min-h-dvh` with `items-center` centres on tall screens but lets the card
+      scroll normally on short/landscape ones. The vertical padding is what
+      keeps the card off the notch when the virtual keyboard shrinks the
+      viewport; `justify-center` alone would clip its top edge.
+    */
+    <main
+      id="main-content"
+      className="flex min-h-dvh flex-col items-center justify-center bg-slate-100 gutter py-10"
+    >
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-card sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Admin console</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Sign in</h1>
+        <p className="mt-2 text-sm text-graphite-600">
           Use the seeded admin account from marketplace seed (
-          <span className="font-medium text-slate-800">admin@partsbazar360.com</span>).
+          <span className="break-anywhere font-medium text-slate-800">admin@partsbazar360.com</span>).
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <label className="block text-sm font-medium text-slate-700">
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </label>
-          {error && (
-            <p className="text-sm font-medium text-red-600" role="alert">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-          >
+          <Input
+            label="Email"
+            type="email"
+            // inputMode/autocapitalize keep the on-screen keyboard on the
+            // e-mail layout and stop iOS capitalising the local part.
+            inputMode="email"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Input
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={error ?? undefined}
+          />
+          <Button type="submit" fullWidth size="lg" loading={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
-          </button>
+          </Button>
         </form>
       </div>
-    </div>
+    </main>
   );
 }

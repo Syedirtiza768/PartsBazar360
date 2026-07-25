@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { GarageService } from './garage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -23,7 +31,10 @@ export class GarageController {
   }
 
   @Delete(':id')
-  async removeVehicle(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  async removeVehicle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.garageService.removeVehicleFromGarage(user.userId, id);
   }
 }

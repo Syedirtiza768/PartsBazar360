@@ -4,6 +4,8 @@ const nextConfig = {
   trailingSlash: true,
   basePath: "/workshop",
   assetPrefix: "/workshop",
+  // The shared UI package ships TypeScript source, so Next has to compile it.
+  transpilePackages: ["@repo/ui"],
 };
 
 export default nextConfig;

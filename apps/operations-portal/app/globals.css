@@ -2,8 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * App-specific styling only. Responsive foundations, focus rings, print rules
+ * and typography helpers come from the shared preset
+ * (packages/ui/tailwind-preset.cjs).
+ */
+
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-950 antialiased;
+    @apply bg-slate-50 text-graphite-700 antialiased;
   }
 }

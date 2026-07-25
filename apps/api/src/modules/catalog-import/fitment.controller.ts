@@ -6,7 +6,10 @@ export class FitmentController {
   constructor(private readonly fitmentCheck: FitmentCheckService) {}
 
   @Get('check')
-  async checkGet(@Query('partId') partId: string, @Query('vehicleConfigId') vehicleConfigId?: string) {
+  async checkGet(
+    @Query('partId') partId: string,
+    @Query('vehicleConfigId') vehicleConfigId?: string,
+  ) {
     return this.fitmentCheck.check(partId, vehicleConfigId);
   }
 
@@ -16,7 +19,10 @@ export class FitmentController {
   }
 
   @Get('parts/:partId')
-  async checkPart(@Param('partId') partId: string, @Query('vehicleConfigId') vehicleConfigId?: string) {
+  async checkPart(
+    @Param('partId') partId: string,
+    @Query('vehicleConfigId') vehicleConfigId?: string,
+  ) {
     return this.fitmentCheck.check(partId, vehicleConfigId);
   }
 }

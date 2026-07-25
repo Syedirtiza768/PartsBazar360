@@ -14,7 +14,12 @@ import { PricingOperationsController } from './pricing.controller';
     }),
     PricingModule,
   ],
-  controllers: [OperationsController, SupportController, SellerOperationsController, PricingOperationsController],
+  controllers: [
+    OperationsController,
+    SupportController,
+    SellerOperationsController,
+    PricingOperationsController,
+  ],
   providers: [SupportService],
 })
 export class OperationsModule {}

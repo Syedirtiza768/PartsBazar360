@@ -31,7 +31,9 @@ export async function activateSuperiorInStockOffers(prisma: PrismaService) {
   });
 
   const inStockIds = offers
-    .filter((o) => o.inventory.reduce((sum, row) => sum + (row.quantity || 0), 0) > 0)
+    .filter(
+      (o) => o.inventory.reduce((sum, row) => sum + (row.quantity || 0), 0) > 0,
+    )
     .map((o) => o.id);
 
   let activated = 0;
@@ -63,5 +65,10 @@ export async function activateSuperiorInStockOffers(prisma: PrismaService) {
     data: { status: 'COMPLETED' },
   });
 
-  return { sellerId: superior.id, sellerName: superior.name, activated, leftReview };
+  return {
+    sellerId: superior.id,
+    sellerName: superior.name,
+    activated,
+    leftReview,
+  };
 }

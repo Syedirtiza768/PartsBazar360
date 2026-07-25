@@ -30,7 +30,10 @@ export const MARKETPLACE_ORG = {
   name: 'PartsBazar Marketplace',
 } as const;
 
-export const MARKETPLACE_SELLERS: Record<MarketplaceSellerKey, MarketplaceSellerConfig> = {
+export const MARKETPLACE_SELLERS: Record<
+  MarketplaceSellerKey,
+  MarketplaceSellerConfig
+> = {
   salvage: {
     key: 'salvage',
     id: 'seller-salvage-auto-parts',
@@ -67,9 +70,13 @@ export const REALTRACK_MARKETPLACE_SELLERS = [
   MARKETPLACE_SELLERS.blackline,
 ] as const;
 
-export function findMarketplaceSellerByStoreId(storeId: string | null | undefined) {
+export function findMarketplaceSellerByStoreId(
+  storeId: string | null | undefined,
+) {
   if (!storeId) return null;
-  return REALTRACK_MARKETPLACE_SELLERS.find((s) => s.storeId === storeId) ?? null;
+  return (
+    REALTRACK_MARKETPLACE_SELLERS.find((s) => s.storeId === storeId) ?? null
+  );
 }
 
 export function findMarketplaceSellerBySlug(slug: string | null | undefined) {
@@ -104,7 +111,9 @@ export function resolveRealTrackSyncTarget(input: {
   if (input.storeId) {
     const byId = findMarketplaceSellerByStoreId(input.storeId);
     if (byId) return byId;
-    throw new Error(`Store ${input.storeId} is not a marketplace RealTrack seller`);
+    throw new Error(
+      `Store ${input.storeId} is not a marketplace RealTrack seller`,
+    );
   }
   if (input.storeSlug) {
     const bySlug = findMarketplaceSellerBySlug(input.storeSlug);

@@ -4,12 +4,12 @@ import { SearchIcon } from "@repo/ui/icons";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-24 text-center sm:py-32">
+    <div className="mx-auto max-w-2xl gutter py-20 text-center sm:py-32">
       <p className="part-number text-sm font-semibold text-brand-600">Error 404</p>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      <h1 className="mt-3 text-balance text-display-sm font-bold tracking-tight text-slate-900">
         That part isn&apos;t on the shelf
       </h1>
-      <p className="mx-auto mt-3 max-w-md text-graphite-600">
+      <p className="mx-auto mt-3 max-w-md text-pretty text-graphite-600">
         The page or listing may have been sold, removed, or the link is incorrect. Salvage
         inventory moves fast — the search usually finds an equivalent.
       </p>
@@ -29,7 +29,7 @@ export default function NotFound() {
           />
           <button
             type="submit"
-            className="absolute right-1.5 top-1/2 h-9 -translate-y-1/2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+            className="absolute right-1.5 top-1/2 flex h-9 -translate-y-1/2 items-center rounded-md bg-brand-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 sm:px-4"
           >
             Search
           </button>

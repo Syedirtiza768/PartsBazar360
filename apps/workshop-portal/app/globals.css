@@ -2,8 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * App-specific styling only. Responsive foundations, focus rings, print rules
+ * and typography helpers come from the shared preset
+ * (packages/ui/tailwind-preset.cjs).
+ */
+
 @layer base {
   body {
-    @apply bg-zinc-950 text-white antialiased;
+    @apply bg-zinc-950 text-zinc-100 antialiased;
+  }
+
+  /* The shared focus ring assumes a light ground; on the dark shell the inner
+     white halo is what makes it visible, so keep it but swap the base ring to
+     the portal accent. */
+  :focus-visible {
+    box-shadow:
+      0 0 0 2px theme("colors.zinc.950"),
+      0 0 0 4px theme("colors.purple.400");
   }
 }

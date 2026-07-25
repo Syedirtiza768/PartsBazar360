@@ -1,9 +1,18 @@
-import { Controller, Get, Param, Query, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  NotFoundException,
+} from '@nestjs/common';
 import { OpenSearchService } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
 import { sanitizeSearchItems } from './buyer-visible-offers.util';
-import { normalizeMvlToken, modelLookupVariants } from '../ingestion/mvl-match.util';
+import {
+  normalizeMvlToken,
+  modelLookupVariants,
+} from '../ingestion/mvl-match.util';
 
 type CompatRow = {
   year: number | string;
@@ -47,12 +56,17 @@ export class SearchController {
     if (vehicleConfigId) {
       const pageNum = page ? parseInt(page, 10) : 1;
       const limitNum = limit ? Math.min(parseInt(limit, 10), 200) : 24;
-      const result = await this.searchService.searchCompatibleParts(vehicleConfigId, q, {
-        page: pageNum,
-        limit: limitNum,
-      });
+      const result = await this.searchService.searchCompatibleParts(
+        vehicleConfigId,
+        q,
+        {
+          page: pageNum,
+          limit: limitNum,
+        },
+      );
       const visible = sanitizeSearchItems(result.items);
-      const enriched = await this.febestWebsite.attachImagesToSearchItems(visible);
+      const enriched =
+        await this.febestWebsite.attachImagesToSearchItems(visible);
       return {
         items: enriched,
         total: result.total,
@@ -93,15 +107,25 @@ export class SearchController {
     const seen = new Set<string>();
 
     const parsed = rows.map((row) => {
-      const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
-      if (!Number.isFinite(year) || !row.make || !row.model || row.make === '-' || row.model === '-') {
+      const year =
+        typeof row.year === 'number'
+          ? row.year
+          : parseInt(String(row.year), 10);
+      if (
+        !Number.isFinite(year) ||
+        !row.make ||
+        !row.model ||
+        row.make === '-' ||
+        row.model === '-'
+      ) {
         return { row, year: NaN, nMake: '', variants: [] as string[] };
       }
       const nMake = normalizeMvlToken(row.make);
-      if (!nMake) return { row, year: NaN, nMake: '', variants: [] as string[] };
+      if (!nMake)
+        return { row, year: NaN, nMake: '', variants: [] as string[] };
       const variants = modelLookupVariants(row.model)
         .map((v) => normalizeMvlToken(v))
-        .filter(Boolean) as string[];
+        .filter(Boolean);
       for (const nModel of variants) {
         const key = `${year}|${nMake}|${nModel}`;
         if (!seen.has(key)) {
@@ -151,7 +175,9 @@ export class SearchController {
       hits.push(...batch);
     }
 
-    const marketRank = new Map<string, number>(MVL_MARKETS.map((m, i) => [m, i]));
+    const marketRank = new Map<string, number>(
+      MVL_MARKETS.map((m, i) => [m, i]),
+    );
     // Best hit per year|make|model by market preference
     const bestByKey = new Map<string, Hit>();
     for (const hit of hits) {
@@ -179,7 +205,8 @@ export class SearchController {
             make: hit.make || row.make,
             model: hit.model || row.model,
             trim: row.trim && row.trim !== '-' ? row.trim : hit.trim || '-',
-            engine: row.engine && row.engine !== '-' ? row.engine : hit.engine || '-',
+            engine:
+              row.engine && row.engine !== '-' ? row.engine : hit.engine || '-',
             mvlVerified: true,
             epid: hit.epid || null,
           };
@@ -207,13 +234,17 @@ export class SearchController {
             seller: { include: { profile: true } },
             inventory: { include: { warehouse: true } },
             prices: true,
-            salvageUnits: { include: { donorVehicle: { include: { make: true } } } },
+            salvageUnits: {
+              include: { donorVehicle: { include: { make: true } } },
+            },
           },
         },
         primaryBrand: true,
         partNumbers: { include: { brand: true, vehicleMake: true } },
         media: { orderBy: { sortOrder: 'asc' } },
-        salvageUnits: { include: { donorVehicle: { include: { make: true } } } },
+        salvageUnits: {
+          include: { donorVehicle: { include: { make: true } } },
+        },
         fitments: {
           include: {
             vehicleConfig: {
@@ -236,10 +267,17 @@ export class SearchController {
     // keep those. Spreadsheet offers carry inventory: hide zero-stock rows.
     // Also drop offers with no usable price so no tile/PDP renders price-less.
     const buyerOffers = part.offers.filter((offer) => {
-      if (offer.price === null || offer.price === undefined || Number(offer.price) <= 0) return false;
+      if (
+        offer.price === null ||
+        offer.price === undefined ||
+        Number(offer.price) <= 0
+      )
+        return false;
       const inv = offer.inventory || [];
       if (inv.length === 0) return true;
-      return inv.some((row) => row.quantity > 0 && row.status !== 'OUT_OF_STOCK');
+      return inv.some(
+        (row) => row.quantity > 0 && row.status !== 'OUT_OF_STOCK',
+      );
     });
     if (buyerOffers.length === 0) {
       throw new NotFoundException(`Part ${id} has no active offers`);
@@ -253,7 +291,10 @@ export class SearchController {
       const gen = f.vehicleConfig.generation;
       const model = gen.model;
       const make = model.make;
-      const years = gen.startYear === gen.endYear ? `${gen.startYear}` : `${gen.startYear}-${gen.endYear}`;
+      const years =
+        gen.startYear === gen.endYear
+          ? `${gen.startYear}`
+          : `${gen.startYear}-${gen.endYear}`;
       return {
         label: `${years} ${make.name} ${model.name}`,
         make: make.name,
@@ -270,7 +311,10 @@ export class SearchController {
     // FEBEST parts override this with a live febest.de lookup (not persisted).
     let compatibilityTable: CompatRow[] = [];
 
-    if (Array.isArray(partWithOffers.compatibility) && partWithOffers.compatibility.length > 0) {
+    if (
+      Array.isArray(partWithOffers.compatibility) &&
+      partWithOffers.compatibility.length > 0
+    ) {
       compatibilityTable = partWithOffers.compatibility.map((row: any) => ({
         year: row.year ?? '-',
         make: row.make ?? '-',
@@ -299,8 +343,10 @@ export class SearchController {
 
     // Consolidate every available image: ProductMedia rows + stored imageUrls.
     // Dedupe by URL and upgrade eBay thumbnails to s-l1600 for display.
-    const mediaUrls = (partWithOffers.media || []).map((m) => m.url).filter(Boolean) as string[];
-    const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean) as string[];
+    const mediaUrls = (partWithOffers.media || [])
+      .map((m) => m.url)
+      .filter(Boolean);
+    const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean);
     const seenUrl = new Set<string>();
     const dedupePush = (list: string[]) => {
       for (const u of list) {
@@ -318,12 +364,13 @@ export class SearchController {
     );
 
     let listingUrl = partWithOffers.listingUrl;
-    let oemCrossReferences = partWithOffers.partNumbers
+    const oemCrossReferences = partWithOffers.partNumbers
       .filter((number) => number.numberType === 'OEM_CROSS_REFERENCE')
       .map((number) => ({
         number: number.displayNumber,
         normalizedNumber: number.normalizedNumber,
-        make: number.vehicleMake?.displayName || number.vehicleMake?.name || null,
+        make:
+          number.vehicleMake?.displayName || number.vehicleMake?.name || null,
         verificationStatus: number.verificationStatus,
       }));
     let enrichmentSource: string | null = null;
@@ -348,7 +395,9 @@ export class SearchController {
       }) &&
       partWithOffers.manufacturerPartNumber
     ) {
-      const live = await this.febestWebsite.fetchLiveByMpn(partWithOffers.manufacturerPartNumber);
+      const live = await this.febestWebsite.fetchLiveByMpn(
+        partWithOffers.manufacturerPartNumber,
+      );
       if (live) {
         enrichmentSource = 'febest.de';
         enrichmentLive = true;
@@ -376,9 +425,13 @@ export class SearchController {
           }));
         }
         if (live.oemNumbers.length > 0) {
-          const existing = new Set(oemCrossReferences.map((r) => r.normalizedNumber));
+          const existing = new Set(
+            oemCrossReferences.map((r) => r.normalizedNumber),
+          );
           for (const oem of live.oemNumbers) {
-            const normalizedNumber = oem.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const normalizedNumber = oem
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, '');
             if (!normalizedNumber || existing.has(normalizedNumber)) continue;
             existing.add(normalizedNumber);
             oemCrossReferences.push({
@@ -404,7 +457,10 @@ export class SearchController {
     // to the fitment-derived expansion so the page isn't empty — but mark
     // rows unverified so the frontend can distinguish them.
     if (mvlVerifiedTable.length === 0 && compatibilityTable.length > 0) {
-      mvlVerifiedTable = compatibilityTable.map((r) => ({ ...r, mvlVerified: false }));
+      mvlVerifiedTable = compatibilityTable.map((r) => ({
+        ...r,
+        mvlVerified: false,
+      }));
     }
 
     return {
@@ -435,7 +491,10 @@ export class SearchController {
         identityMethod: unit.identityMethod,
         donorVehicle: unit.donorVehicle
           ? {
-              make: unit.donorVehicle.make?.displayName || unit.donorVehicle.make?.name || null,
+              make:
+                unit.donorVehicle.make?.displayName ||
+                unit.donorVehicle.make?.name ||
+                null,
               model: unit.donorVehicle.model,
               modelYear: unit.donorVehicle.modelYear,
               trim: unit.donorVehicle.trim,

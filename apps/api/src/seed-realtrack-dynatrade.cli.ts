@@ -84,7 +84,8 @@ async function main() {
           {
             defaultPartSource: 'AFTERMARKET',
             defaultQualityTier: 'NEW',
-            defaultCurrency: process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
+            defaultCurrency:
+              process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
           },
         );
         report.spreadsheetSources.push({
@@ -94,7 +95,8 @@ async function main() {
           status: job.status,
           report: job.report,
         });
-        report.activatedSuperiorAfterDynatrade = await activateSuperiorInStockOffers(prisma);
+        report.activatedSuperiorAfterDynatrade =
+          await activateSuperiorInStockOffers(prisma);
       } catch (error) {
         report.errors.push({
           source: 'Dynatrade Stock List',
@@ -112,7 +114,9 @@ async function main() {
     }
   } finally {
     report.completedAt = new Date().toISOString();
-    const reportPath = path.resolve(process.env.SEED_REPORT_PATH || 'seed-realtrack-dynatrade-report.json');
+    const reportPath = path.resolve(
+      process.env.SEED_REPORT_PATH || 'seed-realtrack-dynatrade-report.json',
+    );
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2));
     await app.close();
     console.log(JSON.stringify({ reportPath, ...report }, null, 2));

@@ -10,8 +10,8 @@ function CancelContent() {
   const orderId = params.get("orderId");
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-12 sm:py-16 text-center">
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Payment cancelled</h1>
+    <div className="mx-auto max-w-lg gutter py-12 text-center sm:py-16">
+      <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Payment cancelled</h1>
       <p className="mt-2 text-sm text-graphite-600">
         You left Stripe Checkout before paying. Your cart may already be checked out for this attempt
         {orderId ? (
@@ -36,7 +36,7 @@ function CancelContent() {
 
 export default function CheckoutCancelPage() {
   return (
-    <Suspense fallback={<div className="px-4 py-16 text-center text-sm text-graphite-600">Loading…</div>}>
+    <Suspense fallback={<div className="gutter py-16 text-center text-sm text-graphite-600">Loading…</div>}>
       <CancelContent />
     </Suspense>
   );

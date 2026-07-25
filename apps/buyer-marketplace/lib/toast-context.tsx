@@ -75,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-label="Notifications"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 px-4 pb-4 sm:items-end sm:pb-6 sm:pr-6"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-toast flex flex-col items-center gap-2 gutter pb-[calc(env(safe-area-inset-bottom,0px)+5rem)] sm:items-end sm:pb-6 sm:pr-6"
       >
         {toasts.map((toast) => {
           const tone = TONE_STYLES[toast.tone ?? "info"];
@@ -83,14 +83,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={toast.id}
               role="status"
-              className="pointer-events-auto flex w-full max-w-sm animate-slide-up items-start gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-overlay"
+              className="pointer-events-auto relative flex w-full max-w-sm animate-slide-up items-start gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 pl-5 shadow-overlay"
             >
               <span className={cn("absolute inset-y-0 left-0 w-1", tone.bar)} aria-hidden="true" />
               <span className="shrink-0">{tone.icon}</span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-900">{toast.title}</p>
                 {toast.description && (
-                  <p className="mt-0.5 text-sm text-slate-500">{toast.description}</p>
+                  <p className="mt-0.5 text-pretty text-sm text-graphite-600">{toast.description}</p>
                 )}
                 {toast.action && (
                   <button
@@ -99,7 +99,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                       toast.action?.onClick();
                       dismiss(toast.id);
                     }}
-                    className="mt-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
+                    className="mt-1.5 min-h-touch text-sm font-semibold text-brand-600 hover:text-brand-700"
                   >
                     {toast.action.label}
                   </button>

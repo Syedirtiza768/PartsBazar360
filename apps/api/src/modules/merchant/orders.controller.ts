@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, Query, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
 @Controller('merchant/orders')
@@ -11,10 +19,14 @@ export class OrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    if (!sellerId) throw new NotFoundException('sellerId query parameter is required');
+    if (!sellerId)
+      throw new NotFoundException('sellerId query parameter is required');
 
     const pageNum = Math.max(1, page ? parseInt(page, 10) || 1 : 1);
-    const take = Math.min(Math.max(1, limit ? parseInt(limit, 10) || 50 : 50), 200);
+    const take = Math.min(
+      Math.max(1, limit ? parseInt(limit, 10) || 50 : 50),
+      200,
+    );
     const skip = (pageNum - 1) * take;
     const where = { sellerId };
 
@@ -51,10 +63,10 @@ export class OrdersController {
   async fulfillOrder(
     @Param('sellerOrderId') sellerOrderId: string,
     @Query('sellerId') sellerId: string,
-    @Body() body: { trackingNumber: string, carrier: string }
+    @Body() body: { trackingNumber: string; carrier: string },
   ) {
     const order = await this.prisma.sellerOrder.findFirst({
-      where: { id: sellerOrderId, sellerId }
+      where: { id: sellerOrderId, sellerId },
     });
 
     if (!order) throw new NotFoundException('Order not found');
@@ -64,8 +76,8 @@ export class OrdersController {
       data: {
         status: 'SHIPPED',
         trackingNumber: body.trackingNumber,
-        carrier: body.carrier
-      }
+        carrier: body.carrier,
+      },
     });
   }
 }

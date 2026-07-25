@@ -3,7 +3,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import {
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto';
 import { PrismaService } from '../../prisma.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
@@ -32,7 +37,11 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   private jwtSecret() {
-    return process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET || 'partsbazar-dev-secret-change-me';
+    return (
+      process.env.AUTH_JWT_SECRET ||
+      process.env.JWT_SECRET ||
+      'partsbazar-dev-secret-change-me'
+    );
   }
 
   hashPassword(password: string): string {
@@ -50,27 +59,36 @@ export class AuthService {
     return timingSafeEqual(actual, expected);
   }
 
-  signToken(payload: Omit<AuthTokenPayload, 'iat' | 'exp'>, ttlSeconds = 60 * 60 * 24 * 7): string {
+  signToken(
+    payload: Omit<AuthTokenPayload, 'iat' | 'exp'>,
+    ttlSeconds = 60 * 60 * 24 * 7,
+  ): string {
     const body: AuthTokenPayload = {
       ...payload,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + ttlSeconds,
     };
     const encoded = Buffer.from(JSON.stringify(body)).toString('base64url');
-    const sig = createHmac('sha256', this.jwtSecret()).update(encoded).digest('base64url');
+    const sig = createHmac('sha256', this.jwtSecret())
+      .update(encoded)
+      .digest('base64url');
     return `${encoded}.${sig}`;
   }
 
   verifyToken(token: string): AuthTokenPayload {
     const [encoded, sig] = token.split('.');
     if (!encoded || !sig) throw new UnauthorizedException('Invalid token');
-    const expected = createHmac('sha256', this.jwtSecret()).update(encoded).digest('base64url');
+    const expected = createHmac('sha256', this.jwtSecret())
+      .update(encoded)
+      .digest('base64url');
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
       throw new UnauthorizedException('Invalid token signature');
     }
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as AuthTokenPayload;
+    const payload = JSON.parse(
+      Buffer.from(encoded, 'base64url').toString('utf8'),
+    ) as AuthTokenPayload;
     if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
       throw new UnauthorizedException('Token expired');
     }
@@ -81,7 +99,9 @@ export class AuthService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       include: {
-        memberships: { include: { seller: { select: { id: true, name: true } } } },
+        memberships: {
+          include: { seller: { select: { id: true, name: true } } },
+        },
       },
     });
     return {
@@ -97,14 +117,22 @@ export class AuthService {
     };
   }
 
-  async registerBuyer(input: { email: string; password: string; name?: string }) {
+  async registerBuyer(input: {
+    email: string;
+    password: string;
+    name?: string;
+  }) {
     const email = input.email.trim().toLowerCase();
     if (!email || !input.password || input.password.length < 8) {
-      throw new BadRequestException('Email and password (min 8 chars) are required');
+      throw new BadRequestException(
+        'Email and password (min 8 chars) are required',
+      );
     }
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing?.passwordHash) {
-      throw new BadRequestException('An account with this email already exists');
+      throw new BadRequestException(
+        'An account with this email already exists',
+      );
     }
 
     const user = existing
@@ -143,7 +171,10 @@ export class AuthService {
       where: { email },
       include: { memberships: true },
     });
-    if (!user?.passwordHash || !this.verifyPassword(input.password, user.passwordHash)) {
+    if (
+      !user?.passwordHash ||
+      !this.verifyPassword(input.password, user.passwordHash)
+    ) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -179,7 +210,9 @@ export class AuthService {
     const passwordHash = this.hashPassword(password);
     const created: Array<{ email: string; role: string; seller?: string }> = [];
 
-    const adminEmail = (process.env.SEED_ADMIN_EMAIL || 'admin@partsbazar360.com').toLowerCase();
+    const adminEmail = (
+      process.env.SEED_ADMIN_EMAIL || 'admin@partsbazar360.com'
+    ).toLowerCase();
     await this.prisma.user.upsert({
       where: { email: adminEmail },
       update: { role: 'ADMIN', passwordHash, name: 'Marketplace Admin' },
@@ -192,7 +225,9 @@ export class AuthService {
     });
     created.push({ email: adminEmail, role: 'ADMIN' });
 
-    const buyerEmail = (process.env.SEED_BUYER_EMAIL || 'buyer@partsbazar360.com').toLowerCase();
+    const buyerEmail = (
+      process.env.SEED_BUYER_EMAIL || 'buyer@partsbazar360.com'
+    ).toLowerCase();
     await this.prisma.user.upsert({
       where: { email: buyerEmail },
       update: { role: 'BUYER', passwordHash, name: 'Demo Buyer' },
@@ -217,7 +252,10 @@ export class AuthService {
         },
       });
       if (!seller) {
-        created.push({ email: `(missing seller ${cfg.name})`, role: 'SKIPPED' });
+        created.push({
+          email: `(missing seller ${cfg.name})`,
+          role: 'SKIPPED',
+        });
         continue;
       }
 

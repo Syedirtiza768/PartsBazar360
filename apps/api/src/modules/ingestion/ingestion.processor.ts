@@ -4,7 +4,12 @@ import { Logger } from '@nestjs/common';
 import { RealTrackService } from '../integration/realtrack.service';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
-import { extractCategory, parseVehicleFromTitle, extractOeNumbers, ParsedVehicle } from './listing-parser.util';
+import {
+  extractCategory,
+  parseVehicleFromTitle,
+  extractOeNumbers,
+  ParsedVehicle,
+} from './listing-parser.util';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 import {
   buildCompatibility,
@@ -19,7 +24,10 @@ import {
   MARKETPLACE_CURRENCY,
   stockQuantityForImport,
 } from './listing-eligibility.util';
-import { extractEnglishTitle, looksLikeEnglishTitle } from './listing-title.util';
+import {
+  extractEnglishTitle,
+  looksLikeEnglishTitle,
+} from './listing-title.util';
 import { MvlFitmentService } from './mvl-fitment.service';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
@@ -53,7 +61,11 @@ export class IngestionProcessor extends WorkerHost {
           storeId: job.data.storeId,
           storeSlug: job.data.storeSlug,
         });
-        return this.syncStore(target.storeId!, job.data.page || 1, target.storeSlug || undefined);
+        return this.syncStore(
+          target.storeId!,
+          job.data.page || 1,
+          target.storeSlug || undefined,
+        );
       }
       case 'sync-marketplace':
         return this.syncMarketplace(job.data.marketplaceId, job.data.page || 1);
@@ -66,7 +78,11 @@ export class IngestionProcessor extends WorkerHost {
     }
   }
 
-  async syncStoreComplete(storeId: string, listingLimit?: number, storeSlug?: string) {
+  async syncStoreComplete(
+    storeId: string,
+    listingLimit?: number,
+    storeSlug?: string,
+  ) {
     const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
     const canonicalStoreId = target.storeId!;
     let page = 1;
@@ -88,17 +104,30 @@ export class IngestionProcessor extends WorkerHost {
       discovered += result.items.length;
       for (const summary of result.items) {
         try {
-          const detail = await this.realTrackService.fetchListingDetail(canonicalStoreId, summary.id);
-          const outcome = await this.processListing({ ...summary, ...detail }, canonicalStoreId);
+          const detail = await this.realTrackService.fetchListingDetail(
+            canonicalStoreId,
+            summary.id,
+          );
+          const outcome = await this.processListing(
+            { ...summary, ...detail },
+            canonicalStoreId,
+          );
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
-          else if (outcome === 'skipped_inactive_or_zero_stock') skippedInactiveOrZero++;
+          else if (outcome === 'skipped_inactive_or_zero_stock')
+            skippedInactiveOrZero++;
           else if (outcome === 'imported') imported++;
         } catch (error) {
-          errors.push({ listingId: summary.id, message: error instanceof Error ? error.message : String(error) });
-          this.logger.warn(`Listing ${summary.id} failed without stopping store sync`);
+          errors.push({
+            listingId: summary.id,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          this.logger.warn(
+            `Listing ${summary.id} failed without stopping store sync`,
+          );
         }
       }
-      if (discovered >= result.total || result.items.length < result.limit) break;
+      if (discovered >= result.total || result.items.length < result.limit)
+        break;
       page++;
     }
     return {
@@ -113,7 +142,11 @@ export class IngestionProcessor extends WorkerHost {
     };
   }
 
-  private async syncStore(storeId: string, startPage: number, storeSlug?: string) {
+  private async syncStore(
+    storeId: string,
+    startPage: number,
+    storeSlug?: string,
+  ) {
     const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
     const canonicalStoreId = target.storeId!;
     try {
@@ -124,8 +157,15 @@ export class IngestionProcessor extends WorkerHost {
       });
 
       if (result.items.length === 0) {
-        this.logger.log(`No more listings for ${target.name} (${canonicalStoreId}) at page ${startPage}`);
-        return { status: 'completed', storeId: canonicalStoreId, seller: target.name, pagesProcessed: startPage };
+        this.logger.log(
+          `No more listings for ${target.name} (${canonicalStoreId}) at page ${startPage}`,
+        );
+        return {
+          status: 'completed',
+          storeId: canonicalStoreId,
+          seller: target.name,
+          pagesProcessed: startPage,
+        };
       }
 
       let imported = 0;
@@ -133,10 +173,17 @@ export class IngestionProcessor extends WorkerHost {
       let skippedInactiveOrZero = 0;
       for (const summary of result.items) {
         try {
-          const detail = await this.realTrackService.fetchListingDetail(canonicalStoreId, summary.id);
-          const outcome = await this.processListing({ ...summary, ...detail }, canonicalStoreId);
+          const detail = await this.realTrackService.fetchListingDetail(
+            canonicalStoreId,
+            summary.id,
+          );
+          const outcome = await this.processListing(
+            { ...summary, ...detail },
+            canonicalStoreId,
+          );
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
-          else if (outcome === 'skipped_inactive_or_zero_stock') skippedInactiveOrZero++;
+          else if (outcome === 'skipped_inactive_or_zero_stock')
+            skippedInactiveOrZero++;
           else if (outcome === 'imported') imported++;
         } catch (error) {
           this.logger.warn(
@@ -159,14 +206,18 @@ export class IngestionProcessor extends WorkerHost {
         total: result.total,
       };
     } catch (error) {
-      this.logger.error(`Error syncing store ${canonicalStoreId}: ${error.message}`);
+      this.logger.error(
+        `Error syncing store ${canonicalStoreId}: ${error.message}`,
+      );
       throw error;
     }
   }
 
   private async syncMarketplace(marketplaceId: string, startPage: number) {
     try {
-      const allowedStoreIds = new Set(REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!));
+      const allowedStoreIds = new Set(
+        REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!),
+      );
       const result = await this.realTrackService.fetchListings({
         page: startPage,
         limit: 200,
@@ -174,8 +225,14 @@ export class IngestionProcessor extends WorkerHost {
       });
 
       if (result.items.length === 0) {
-        this.logger.log(`No more listings for marketplace ${marketplaceId} at page ${startPage}`);
-        return { status: 'completed', marketplaceId, pagesProcessed: startPage };
+        this.logger.log(
+          `No more listings for marketplace ${marketplaceId} at page ${startPage}`,
+        );
+        return {
+          status: 'completed',
+          marketplaceId,
+          pagesProcessed: startPage,
+        };
       }
 
       let imported = 0;
@@ -202,18 +259,30 @@ export class IngestionProcessor extends WorkerHost {
         total: result.total,
       };
     } catch (error) {
-      this.logger.error(`Error syncing marketplace ${marketplaceId}: ${error.message}`);
+      this.logger.error(
+        `Error syncing marketplace ${marketplaceId}: ${error.message}`,
+      );
       throw error;
     }
   }
 
   /** Sync only the two RealTrack marketplace sellers, each to its own storeId. */
   private async syncMarketplaceRealTrackStores() {
-    this.logger.log('Starting marketplace RealTrack sync (Salvage + Blackline only)...');
-    const results: Array<Awaited<ReturnType<IngestionProcessor['syncStoreComplete']>>> = [];
+    this.logger.log(
+      'Starting marketplace RealTrack sync (Salvage + Blackline only)...',
+    );
+    const results: Array<
+      Awaited<ReturnType<IngestionProcessor['syncStoreComplete']>>
+    > = [];
     for (const store of REALTRACK_MARKETPLACE_SELLERS) {
       this.logger.log(`Syncing ${store.name} ← storeId ${store.storeId}`);
-      results.push(await this.syncStoreComplete(store.storeId!, undefined, store.storeSlug || undefined));
+      results.push(
+        await this.syncStoreComplete(
+          store.storeId!,
+          undefined,
+          store.storeSlug || undefined,
+        ),
+      );
     }
     return { status: 'completed', results };
   }
@@ -259,7 +328,8 @@ export class IngestionProcessor extends WorkerHost {
     const brand = extractListingBrand(listing) || parsedVehicle?.make || null;
     const mpn =
       (typeof listing.mpn === 'string' && listing.mpn.trim()) ||
-      (typeof listing.manufacturerPartNumber === 'string' && listing.manufacturerPartNumber.trim()) ||
+      (typeof listing.manufacturerPartNumber === 'string' &&
+        listing.manufacturerPartNumber.trim()) ||
       oeNumbers[0] ||
       null;
     let compatibility = buildCompatibility(listing, parsedVehicle);
@@ -278,7 +348,10 @@ export class IngestionProcessor extends WorkerHost {
         listingUrl: listing.listingUrl,
         imageUrls,
         healthFlags: listing.healthFlags || null,
-        compatibility: compatibility.length > 0 ? compatibility : listing.compatibility || null,
+        compatibility:
+          compatibility.length > 0
+            ? compatibility
+            : listing.compatibility || null,
         rawPayload: listing,
         updatedAt: new Date(),
       },
@@ -298,7 +371,10 @@ export class IngestionProcessor extends WorkerHost {
         listingUrl: listing.listingUrl,
         imageUrls,
         healthFlags: listing.healthFlags || null,
-        compatibility: compatibility.length > 0 ? compatibility : listing.compatibility || null,
+        compatibility:
+          compatibility.length > 0
+            ? compatibility
+            : listing.compatibility || null,
         rawPayload: listing,
       },
     });
@@ -309,7 +385,9 @@ export class IngestionProcessor extends WorkerHost {
     });
 
     if (!seller) {
-      this.logger.warn(`Seller for store ${expectedStoreId} not found, skipping normalization.`);
+      this.logger.warn(
+        `Seller for store ${expectedStoreId} not found, skipping normalization.`,
+      );
       return 'skipped_no_seller';
     }
 
@@ -326,11 +404,16 @@ export class IngestionProcessor extends WorkerHost {
     }
 
     let canonicalPart = listing.ebayItemId
-      ? await this.prisma.canonicalPart.findFirst({ where: { ebayItemId: listing.ebayItemId } })
+      ? await this.prisma.canonicalPart.findFirst({
+          where: { ebayItemId: listing.ebayItemId },
+        })
       : null;
 
     if (canonicalPart) {
-      const combinedImages = prioritizeEbayImages([...(canonicalPart.imageUrls || []), ...mergedImages]);
+      const combinedImages = prioritizeEbayImages([
+        ...(canonicalPart.imageUrls || []),
+        ...mergedImages,
+      ]);
       canonicalPart = await this.prisma.canonicalPart.update({
         where: { id: canonicalPart.id },
         data: {
@@ -342,11 +425,12 @@ export class IngestionProcessor extends WorkerHost {
           description: description || canonicalPart.description,
           imageUrls: combinedImages,
           listingUrl: listing.listingUrl || canonicalPart.listingUrl,
-          compatibility: compatibility.length > 0
-            ? compatibility as unknown as Prisma.InputJsonValue
-            : canonicalPart.compatibility === null
-              ? Prisma.JsonNull
-              : canonicalPart.compatibility as Prisma.InputJsonValue,
+          compatibility:
+            compatibility.length > 0
+              ? (compatibility as unknown as Prisma.InputJsonValue)
+              : canonicalPart.compatibility === null
+                ? Prisma.JsonNull
+                : (canonicalPart.compatibility as Prisma.InputJsonValue),
         },
       });
     } else {
@@ -362,14 +446,19 @@ export class IngestionProcessor extends WorkerHost {
           imageUrls: mergedImages,
           listingUrl: listing.listingUrl || null,
           ebayItemId: listing.ebayItemId || null,
-          compatibility: compatibility.length > 0 ? compatibility as unknown as Prisma.InputJsonValue : Prisma.JsonNull,
+          compatibility:
+            compatibility.length > 0
+              ? (compatibility as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
         },
       });
     }
 
     const sourceKey = `rt:${expectedStoreId}:${listing.id}`;
     let offer =
-      (await this.prisma.sellerOffer.findFirst({ where: { externalOfferId: listing.id } })) ||
+      (await this.prisma.sellerOffer.findFirst({
+        where: { externalOfferId: listing.id },
+      })) ||
       (await this.prisma.sellerOffer.findFirst({ where: { sourceKey } }));
     // No-duplicate: same ebay item already offered by this seller → update that offer.
     if (!offer && listing.ebayItemId) {
@@ -383,8 +472,12 @@ export class IngestionProcessor extends WorkerHost {
     }
     const sellerBasePrice = listing.price
       ? parseFloat(listing.price)
-      : offer?.sellerBasePrice ?? offer?.price ?? 0;
-    const priceQuote = await this.pricing.quote(seller.id, canonicalPart.category, sellerBasePrice);
+      : (offer?.sellerBasePrice ?? offer?.price ?? 0);
+    const priceQuote = await this.pricing.quote(
+      seller.id,
+      canonicalPart.category,
+      sellerBasePrice,
+    );
 
     if (offer) {
       offer = await this.prisma.sellerOffer.update({
@@ -459,8 +552,12 @@ export class IngestionProcessor extends WorkerHost {
       source?: string;
     }> = [];
     for (const row of compatibility) {
-      if (!row.make || row.make === '-' || !row.model || row.model === '-') continue;
-      const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+      if (!row.make || row.make === '-' || !row.model || row.model === '-')
+        continue;
+      const year =
+        typeof row.year === 'number'
+          ? row.year
+          : parseInt(String(row.year), 10);
       if (!Number.isFinite(year)) continue;
       ymmCandidates.push({
         year,
@@ -472,7 +569,11 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
     if (parsedVehicle && ymmCandidates.length === 0) {
-      for (let year = parsedVehicle.startYear; year <= parsedVehicle.endYear; year++) {
+      for (
+        let year = parsedVehicle.startYear;
+        year <= parsedVehicle.endYear;
+        year++
+      ) {
         ymmCandidates.push({
           year,
           make: parsedVehicle.make,
@@ -482,16 +583,22 @@ export class IngestionProcessor extends WorkerHost {
       }
     }
 
-    let fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
+    let fitments: {
+      vehicleConfigId: string;
+      evidenceLevel: string;
+      confidence: number;
+    }[] = [];
     const mvlVerified = await this.mvlFitment.verifyCandidates(ymmCandidates);
     if (mvlVerified.configs.length > 0) {
       fitments = await this.mvlFitment.upsertVerifiedFitments({
         canonicalPartId: canonicalPart.id,
         configs: mvlVerified.configs,
-        source: compatibility.some((r) => r.source === 'ebay') ? 'EBAY_MVL' : 'TITLE_MVL',
+        source: compatibility.some((r) => r.source === 'ebay')
+          ? 'EBAY_MVL'
+          : 'TITLE_MVL',
         reviewer: 'Auto (US MVL verified)',
       });
-      compatibility = this.mvlFitment.mergeCompatJson(null, mvlVerified.rows) as any;
+      compatibility = this.mvlFitment.mergeCompatJson(null, mvlVerified.rows);
       canonicalPart = await this.prisma.canonicalPart.update({
         where: { id: canonicalPart.id },
         data: {
@@ -508,9 +615,12 @@ export class IngestionProcessor extends WorkerHost {
       const hasCatalogCompat = compatibility.some((r) => r.source === 'ebay');
       const evidenceLevel = hasCatalogCompat ? 'C' : 'D';
       const confidence = hasCatalogCompat ? 0.6 : 0.4;
-      const reviewer = hasCatalogCompat ? 'Auto (eBay catalog, MVL miss)' : 'Auto (title-inferred, MVL miss)';
+      const reviewer = hasCatalogCompat
+        ? 'Auto (eBay catalog, MVL miss)'
+        : 'Auto (title-inferred, MVL miss)';
       if (parsedVehicle) {
-        const vehicleConfig = await this.findOrCreateVehicleConfig(parsedVehicle);
+        const vehicleConfig =
+          await this.findOrCreateVehicleConfig(parsedVehicle);
         const fitment = await this.prisma.fitment.upsert({
           where: {
             canonicalPartId_vehicleConfigId: {
@@ -518,7 +628,12 @@ export class IngestionProcessor extends WorkerHost {
               vehicleConfigId: vehicleConfig.id,
             },
           },
-          update: { evidenceLevel, confidence, reviewer, verificationStatus: 'UNVERIFIED' },
+          update: {
+            evidenceLevel,
+            confidence,
+            reviewer,
+            verificationStatus: 'UNVERIFIED',
+          },
           create: {
             canonicalPartId: canonicalPart.id,
             vehicleConfigId: vehicleConfig.id,
@@ -528,14 +643,21 @@ export class IngestionProcessor extends WorkerHost {
             verificationStatus: 'UNVERIFIED',
           },
         });
-        fitments = [{ vehicleConfigId: fitment.vehicleConfigId, evidenceLevel, confidence }];
+        fitments = [
+          {
+            vehicleConfigId: fitment.vehicleConfigId,
+            evidenceLevel,
+            confidence,
+          },
+        ];
       }
       canonicalPart = await this.prisma.canonicalPart.update({
         where: { id: canonicalPart.id },
         data: {
-          compatibility: compatibility.length > 0
-            ? compatibility as unknown as Prisma.InputJsonValue
-            : Prisma.JsonNull,
+          compatibility:
+            compatibility.length > 0
+              ? (compatibility as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
           fitmentStatus: 'NOT_VERIFIED',
           fitmentConfidence: confidence,
         },
@@ -565,13 +687,15 @@ export class IngestionProcessor extends WorkerHost {
       compatibility: canonicalPart.compatibility,
       createdAt: canonicalPart.createdAt,
       fitments,
-      offers: [{
-        id: offer.id,
-        price: offer.price,
-        condition: offer.condition,
-        sellerId: offer.sellerId,
-        sellerName: seller.name,
-      }],
+      offers: [
+        {
+          id: offer.id,
+          price: offer.price,
+          condition: offer.condition,
+          sellerId: offer.sellerId,
+          sellerName: seller.name,
+        },
+      ],
     });
 
     await this.prisma.rawStagingListing.update({
@@ -609,9 +733,10 @@ export class IngestionProcessor extends WorkerHost {
       generation = await this.prisma.vehicleGeneration.create({
         data: {
           modelId: model.id,
-          name: vehicle.startYear === vehicle.endYear
-            ? `${vehicle.startYear}`
-            : `${vehicle.startYear}-${vehicle.endYear}`,
+          name:
+            vehicle.startYear === vehicle.endYear
+              ? `${vehicle.startYear}`
+              : `${vehicle.startYear}-${vehicle.endYear}`,
           startYear: vehicle.startYear,
           endYear: vehicle.endYear,
         },

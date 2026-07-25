@@ -8,12 +8,56 @@
  */
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  Engine: ['engine', 'motor', 'cylinder', 'piston', 'crankshaft', 'camshaft', 'intake manifold'],
-  Transmission: ['trans ', 'transmission', 'gearbox', 'differential', 'clutch', 'torque converter', 'getriebe'],
+  Engine: [
+    'engine',
+    'motor',
+    'cylinder',
+    'piston',
+    'crankshaft',
+    'camshaft',
+    'intake manifold',
+  ],
+  Transmission: [
+    'trans ',
+    'transmission',
+    'gearbox',
+    'differential',
+    'clutch',
+    'torque converter',
+    'getriebe',
+  ],
   Brakes: ['brake', 'caliper', 'rotor', 'brake pad'],
-  Suspension: ['suspension', 'shock', 'strut', 'spring', 'control arm', 'sway bar'],
-  Electrical: ['ecu', 'module', 'sensor', 'wiring', 'harness', 'alternator', 'battery', 'fuse box'],
-  Body: ['bumper', 'fender', 'door ', 'hood', 'mirror', 'grille', 'panel', 'trunk', 'tailgate', 'stoßstange', 'parachoques'],
+  Suspension: [
+    'suspension',
+    'shock',
+    'strut',
+    'spring',
+    'control arm',
+    'sway bar',
+  ],
+  Electrical: [
+    'ecu',
+    'module',
+    'sensor',
+    'wiring',
+    'harness',
+    'alternator',
+    'battery',
+    'fuse box',
+  ],
+  Body: [
+    'bumper',
+    'fender',
+    'door ',
+    'hood',
+    'mirror',
+    'grille',
+    'panel',
+    'trunk',
+    'tailgate',
+    'stoßstange',
+    'parachoques',
+  ],
   Interior: ['seat', 'dashboard', 'console', 'airbag', 'steering wheel'],
   Wheels: ['wheel', 'rim ', 'tire', 'hubcap'],
   Cooling: ['radiator', 'cooling fan', 'water pump'],
@@ -43,7 +87,10 @@ export interface ParsedVehicle {
 const MAKE_ALIASES: Array<{ canonical: string; aliases: string[] }> = [
   { canonical: 'Land Rover', aliases: ['Land Rover'] },
   { canonical: 'Range Rover', aliases: ['Range Rover'] },
-  { canonical: 'Mercedes-Benz', aliases: ['Mercedes-Benz', 'Mercedes Benz', 'Mercedes'] },
+  {
+    canonical: 'Mercedes-Benz',
+    aliases: ['Mercedes-Benz', 'Mercedes Benz', 'Mercedes'],
+  },
   { canonical: 'Alfa Romeo', aliases: ['Alfa Romeo'] },
   { canonical: 'Aston Martin', aliases: ['Aston Martin'] },
   { canonical: 'Rolls-Royce', aliases: ['Rolls-Royce', 'Rolls Royce'] },
@@ -101,20 +148,108 @@ const MAKE_ALIASES: Array<{ canonical: string; aliases: string[] }> = [
 // languages seen in the source titles (English/German/French/Spanish).
 const MODEL_STOPWORDS = new Set(
   [
-    'used', 'new', 'oem', 'oe', 'gebraucht', 'bj', 'occasion', "d'occasion",
-    'front', 'rear', 'right', 'left', 'upper', 'lower', 'inner', 'outer',
-    'inside', 'outside', 'complete', 'assembly', 'set', 'kit', 'pair',
-    'genuine', 'original', 'aftermarket', 'replacement', 'für', 'with',
-    'ohne', 'mit', 'and', 'the', 'a', 'an', 'of', 'for', 'to', 'from',
-    'element', 'de', 'trasera', 'delantero', 'delantera', 'derecha',
-    'izquierda', 'droit', 'gauche', 'avant', 'arrière', 'hinten', 'vorne',
-    'links', 'innen', 'alignment', 'heavy', 'duty', 'truck', 'guard',
-    'cover', 'clip', 'bolt', 'nut', 'screw', 'cable', 'hose', 'pipe',
-    'tube', 'gasket', 'filter', 'pump', 'valve', 'relay', 'connector',
-    'plug', 'socket', 'bezel', 'molding', 'moulding', 'garnish', 'spoiler',
-    'visor', 'emblem', 'badge', 'mat', 'liner', 'tray', 'box', 'holder',
-    'cluster', 'unit', 'control', 'remote', 'player', 'radio',
-    'navigation', 'navigationssystem', 'gps', 'dvd', 'cd', 'system', 'head',
+    'used',
+    'new',
+    'oem',
+    'oe',
+    'gebraucht',
+    'bj',
+    'occasion',
+    "d'occasion",
+    'front',
+    'rear',
+    'right',
+    'left',
+    'upper',
+    'lower',
+    'inner',
+    'outer',
+    'inside',
+    'outside',
+    'complete',
+    'assembly',
+    'set',
+    'kit',
+    'pair',
+    'genuine',
+    'original',
+    'aftermarket',
+    'replacement',
+    'für',
+    'with',
+    'ohne',
+    'mit',
+    'and',
+    'the',
+    'a',
+    'an',
+    'of',
+    'for',
+    'to',
+    'from',
+    'element',
+    'de',
+    'trasera',
+    'delantero',
+    'delantera',
+    'derecha',
+    'izquierda',
+    'droit',
+    'gauche',
+    'avant',
+    'arrière',
+    'hinten',
+    'vorne',
+    'links',
+    'innen',
+    'alignment',
+    'heavy',
+    'duty',
+    'truck',
+    'guard',
+    'cover',
+    'clip',
+    'bolt',
+    'nut',
+    'screw',
+    'cable',
+    'hose',
+    'pipe',
+    'tube',
+    'gasket',
+    'filter',
+    'pump',
+    'valve',
+    'relay',
+    'connector',
+    'plug',
+    'socket',
+    'bezel',
+    'molding',
+    'moulding',
+    'garnish',
+    'spoiler',
+    'visor',
+    'emblem',
+    'badge',
+    'mat',
+    'liner',
+    'tray',
+    'box',
+    'holder',
+    'cluster',
+    'unit',
+    'control',
+    'remote',
+    'player',
+    'radio',
+    'navigation',
+    'navigationssystem',
+    'gps',
+    'dvd',
+    'cd',
+    'system',
+    'head',
     ...Object.values(CATEGORY_KEYWORDS)
       .flat()
       .flatMap((kw) => kw.trim().split(/\s+/)),
@@ -130,10 +265,13 @@ const TWO_WORD_MODEL_CONTINUATIONS: Record<string, string> = {
   land: 'cruiser',
 };
 
-const YEAR_RANGE_PATTERN = /\b(19[5-9]\d|20[0-4]\d)\s*[-–—]\s*(19[5-9]\d|20[0-4]\d)\b/;
+const YEAR_RANGE_PATTERN =
+  /\b(19[5-9]\d|20[0-4]\d)\s*[-–—]\s*(19[5-9]\d|20[0-4]\d)\b/;
 const YEAR_SINGLE_PATTERN = /\b(19[5-9]\d|20[0-4]\d)\b/;
 
-function findYearRange(title: string): { startYear: number; endYear: number } | null {
+function findYearRange(
+  title: string,
+): { startYear: number; endYear: number } | null {
   const rangeMatch = title.match(YEAR_RANGE_PATTERN);
   if (rangeMatch) {
     const a = parseInt(rangeMatch[1], 10);
@@ -148,7 +286,9 @@ function findYearRange(title: string): { startYear: number; endYear: number } | 
   return null;
 }
 
-function findMake(title: string): { canonical: string; index: number; length: number } | null {
+function findMake(
+  title: string,
+): { canonical: string; index: number; length: number } | null {
   let best: { canonical: string; index: number; length: number } | null = null;
   for (const { canonical, aliases } of MAKE_ALIASES) {
     for (const alias of aliases) {
@@ -186,7 +326,11 @@ function isDisqualifiedModelToken(cleaned: string): boolean {
 // model, expanded to a known two-word model name when recognized. This
 // trades a little recall for much higher precision, since every fitment
 // produced here is auto-inferred and unverified (evidenceLevel 'D').
-function extractModel(title: string, makeIndex: number, makeLength: number): string | null {
+function extractModel(
+  title: string,
+  makeIndex: number,
+  makeLength: number,
+): string | null {
   const rest = title.slice(makeIndex + makeLength);
   const tokens = rest.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return null;
@@ -227,7 +371,8 @@ export function parseVehicleFromTitle(title: string): ParsedVehicle | null {
 
 // Matches an explicit "OEM <code>" / "OE# <code>" annotation, which is the
 // highest-confidence signal for an OE part number in these titles.
-const OEM_PREFIXED_PATTERN = /\bOEM?\.?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9-]{3,16})\b/gi;
+const OEM_PREFIXED_PATTERN =
+  /\bOEM?\.?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9-]{3,16})\b/gi;
 const GENERIC_CODE_PATTERN = /\b[A-Za-z0-9][A-Za-z0-9-]{4,15}[A-Za-z0-9]\b/g;
 
 export function extractOeNumbers(title: string): string[] {

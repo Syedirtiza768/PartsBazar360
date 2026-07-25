@@ -6,4 +6,3 @@ import { PricingService } from './pricing.service';
   exports: [PricingService],
 })
 export class PricingModule {}
-

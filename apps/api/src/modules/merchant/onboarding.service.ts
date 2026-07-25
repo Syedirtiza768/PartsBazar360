@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 
@@ -51,8 +55,11 @@ export class SellerOnboardingService {
     const mutable = this.profileData(body);
     await this.prisma.sellerProfile.upsert({
       where: { sellerId },
-      update: mutable as Prisma.SellerProfileUpdateInput,
-      create: { sellerId, ...mutable } as Prisma.SellerProfileUncheckedCreateInput,
+      update: mutable,
+      create: {
+        sellerId,
+        ...mutable,
+      },
     });
     return this.getSellerOnboarding(sellerId);
   }
@@ -63,7 +70,9 @@ export class SellerOnboardingService {
   ) {
     const seller = await this.getSellerOnboarding(sellerId);
     if (!['DRAFT', 'NEEDS_INFORMATION'].includes(seller.onboardingStatus)) {
-      throw new BadRequestException(`Seller cannot submit from ${seller.onboardingStatus}`);
+      throw new BadRequestException(
+        `Seller cannot submit from ${seller.onboardingStatus}`,
+      );
     }
 
     const profile = seller.profile;
@@ -73,8 +82,12 @@ export class SellerOnboardingService {
       !profile?.phone && 'phone',
       !profile?.supportEmail && 'supportEmail',
     ].filter(Boolean);
-    if (missing.length) throw new BadRequestException(`Missing required fields: ${missing.join(', ')}`);
-    if (!body.acceptedByEmail?.trim()) throw new BadRequestException('acceptedByEmail is required');
+    if (missing.length)
+      throw new BadRequestException(
+        `Missing required fields: ${missing.join(', ')}`,
+      );
+    if (!body.acceptedByEmail?.trim())
+      throw new BadRequestException('acceptedByEmail is required');
 
     const agreementVersion = body.agreementVersion || '2026-07';
     await this.prisma.$transaction([
@@ -86,7 +99,10 @@ export class SellerOnboardingService {
             agreementVersion,
           },
         },
-        update: { acceptedByEmail: body.acceptedByEmail, acceptedAt: new Date() },
+        update: {
+          acceptedByEmail: body.acceptedByEmail,
+          acceptedAt: new Date(),
+        },
         create: {
           sellerId,
           agreementType: 'MARKETPLACE_SELLER_TERMS',
@@ -94,7 +110,10 @@ export class SellerOnboardingService {
           acceptedByEmail: body.acceptedByEmail,
         },
       }),
-      this.prisma.sellerProfile.update({ where: { sellerId }, data: { submittedAt: new Date() } }),
+      this.prisma.sellerProfile.update({
+        where: { sellerId },
+        data: { submittedAt: new Date() },
+      }),
       this.prisma.seller.update({
         where: { id: sellerId },
         data: { onboardingStatus: 'SUBMITTED', onboardingNotes: null },
@@ -106,14 +125,16 @@ export class SellerOnboardingService {
 
   private async assertSeller(sellerId: string) {
     if (!sellerId) throw new BadRequestException('sellerId is required');
-    const seller = await this.prisma.seller.findUnique({ where: { id: sellerId }, select: { id: true } });
+    const seller = await this.prisma.seller.findUnique({
+      where: { id: sellerId },
+      select: { id: true },
+    });
     if (!seller) throw new NotFoundException('Seller not found');
   }
 
   private profileData(body: SellerProfileInput) {
-    const number = (value: number | undefined, fallback: number) => (
-      value === undefined ? undefined : Math.max(fallback, Math.floor(value))
-    );
+    const number = (value: number | undefined, fallback: number) =>
+      value === undefined ? undefined : Math.max(fallback, Math.floor(value));
     return {
       accountType: body.accountType,
       legalName: body.legalName?.trim() || undefined,
@@ -124,7 +145,10 @@ export class SellerOnboardingService {
       phone: body.phone?.trim() || undefined,
       supportEmail: body.supportEmail?.trim() || undefined,
       country: body.country?.trim() || undefined,
-      address: body.address === null ? Prisma.JsonNull : body.address as Prisma.InputJsonValue | undefined,
+      address:
+        body.address === null
+          ? Prisma.JsonNull
+          : (body.address as Prisma.InputJsonValue | undefined),
       fulfillmentSlaHours: number(body.fulfillmentSlaHours, 1),
       returnWindowDays: number(body.returnWindowDays, 0),
       acceptsReturns: body.acceptsReturns,

@@ -24,7 +24,13 @@ export async function deactivateLegacySellers(prisma: PrismaService) {
       OR: [
         { id: { in: [...keepIds] } },
         { name: { in: [...keepNames] } },
-        { storeId: { in: Object.values(MARKETPLACE_SELLERS).map((s) => s.storeId!).filter(Boolean) } },
+        {
+          storeId: {
+            in: Object.values(MARKETPLACE_SELLERS)
+              .map((s) => s.storeId!)
+              .filter(Boolean),
+          },
+        },
       ],
     },
     select: { id: true, name: true, storeId: true },
@@ -46,7 +52,8 @@ export async function deactivateLegacySellers(prisma: PrismaService) {
     where: { id: { in: legacyIds } },
     data: {
       onboardingStatus: 'SUSPENDED',
-      onboardingNotes: 'Deactivated: not part of initial 3-store marketplace (Salvage, Blackline, Superior)',
+      onboardingNotes:
+        'Deactivated: not part of initial 3-store marketplace (Salvage, Blackline, Superior)',
     },
   });
 
@@ -61,7 +68,11 @@ export async function deactivateLegacySellers(prisma: PrismaService) {
   // Ensure the three live sellers are ACTIVE
   await prisma.seller.updateMany({
     where: { id: { in: [...keepSellerIds] } },
-    data: { onboardingStatus: 'ACTIVE', activatedAt: new Date(), onboardingNotes: null },
+    data: {
+      onboardingStatus: 'ACTIVE',
+      activatedAt: new Date(),
+      onboardingNotes: null,
+    },
   });
 
   return {

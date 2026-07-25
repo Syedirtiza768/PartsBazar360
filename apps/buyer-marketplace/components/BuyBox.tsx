@@ -48,9 +48,9 @@ function PartNumberChip({ value }: { value: string }) {
         }
       }}
       title="Copy part number"
-      className="group inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 transition-colors hover:border-slate-300 hover:bg-white"
+      className="group inline-flex min-h-touch items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 transition-colors hover:border-slate-300 hover:bg-white sm:min-h-0"
     >
-      <span className="part-number text-slate-800">{value}</span>
+      <span className="part-number break-anywhere text-left text-slate-800">{value}</span>
       {copied ? (
         <CheckIcon className="h-3.5 w-3.5 text-emerald-600" />
       ) : (
@@ -85,7 +85,7 @@ function FitmentChecker({ part }: { part: Part }) {
         </p>
         <Link
           href="/garage"
-          className="mt-2.5 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          className="mt-1.5 inline-flex min-h-touch items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
         >
           Select your vehicle →
         </Link>
@@ -113,7 +113,7 @@ function FitmentChecker({ part }: { part: Part }) {
         <button
           type="button"
           onClick={() => setSwitching((v) => !v)}
-          className="shrink-0 text-xs font-semibold text-graphite-600 underline-offset-2 hover:text-slate-700 hover:underline"
+          className="-my-1.5 shrink-0 px-1 py-1.5 text-xs font-semibold text-graphite-600 underline-offset-2 hover:text-graphite-800 hover:underline touch-halo"
         >
           {switching ? "Close" : "Change vehicle"}
         </button>
@@ -143,7 +143,7 @@ function FitmentChecker({ part }: { part: Part }) {
           ))}
           <Link
             href="/garage"
-            className="block rounded-md px-2.5 py-2 text-sm font-medium text-brand-600 hover:bg-slate-50"
+            className="flex min-h-touch items-center rounded-md px-2.5 py-2 text-sm font-medium text-brand-600 hover:bg-slate-50"
           >
             + Add another vehicle
           </Link>
@@ -153,7 +153,7 @@ function FitmentChecker({ part }: { part: Part }) {
       {(state === "check" || state === "unknown") && (
         <Link
           href={`/support?partId=${part.id}&subject=${encodeURIComponent(`Fitment check: ${part.title}`)}`}
-          className="mt-2.5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          className="mt-1.5 inline-flex min-h-touch items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
         >
           <MessageIcon className="h-4 w-4" />
           Ask us to verify before you order
@@ -249,7 +249,7 @@ function OfferRow({
             <SourceBadge partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
           </div>
         </div>
-        <p className="price shrink-0 text-xl">{formatPrice(offer.price, offer.currency)}</p>
+        <p className="price shrink-0 text-lg sm:text-xl">{formatPrice(offer.price, offer.currency)}</p>
       </div>
 
       {offer.inventory && offer.inventory.length > 0 && (
@@ -295,7 +295,7 @@ function OfferRow({
         </ul>
       )}
 
-      <div className="mt-3.5 grid grid-cols-2 gap-2">
+      <div className="mt-3.5 grid grid-cols-1 gap-2 xs:grid-cols-2">
         <Button variant="outline" fullWidth onClick={handleAdd} loading={adding} disabled={loading && !adding}>
           Add to cart
         </Button>
@@ -305,7 +305,7 @@ function OfferRow({
       </div>
       <Link
         href={`/support?partId=${part.id}&category=GENERAL&subject=${encodeURIComponent(`Question for ${sellerName}: ${part.title}`)}`}
-        className="mt-3 flex min-h-10 items-center justify-center gap-2 border border-stone-300 text-sm font-semibold text-slate-700 hover:border-slate-500 hover:text-slate-950"
+        className="mt-3 flex min-h-touch items-center justify-center gap-2 border border-stone-300 text-sm font-semibold text-graphite-700 hover:border-slate-500 hover:text-graphite-950"
       >
         <MessageIcon className="h-4 w-4" /> Contact seller
       </Link>
@@ -343,13 +343,19 @@ export function BuyBox({ part }: { part: Part }) {
           <SourceBadge partSource={part.partSource || best?.partSource} />
           {part.category && <Badge tone="neutral">{part.category}</Badge>}
         </div>
-        <h1 className="mt-2.5 text-xl font-bold leading-snug tracking-tight text-slate-900 sm:text-2xl">
+        <h1 className="mt-2.5 text-balance text-xl font-bold leading-snug tracking-tight text-slate-900 sm:text-2xl">
           {part.title}
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-graphite-600">
           {part.brand && (
             <span>
-              {identityLabel}: <span className="font-medium text-slate-700">{part.brand}</span>
+              {identityLabel}:{" "}
+              <Link
+                href={`/search?brand=${encodeURIComponent(part.brand)}`}
+                className="font-medium text-brand-700 underline-offset-2 hover:underline"
+              >
+                {part.brand}
+              </Link>
             </span>
           )}
           {part.manufacturer && part.manufacturer !== part.brand && (
@@ -388,7 +394,7 @@ export function BuyBox({ part }: { part: Part }) {
           </p>
           <Link
             href={`/support?partId=${part.id}&subject=${encodeURIComponent(`Sourcing request: ${part.title}`)}`}
-            className="mt-3 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700"
+            className="mt-2 inline-flex min-h-touch items-center text-sm font-semibold text-brand-600 hover:text-brand-700"
           >
             Request this part →
           </Link>
@@ -464,8 +470,10 @@ export function StickyMobileBar({ part }: { part: Part }) {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-top-bar backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-lg items-center justify-between gap-4">
+    /* pb-safe-b-3 rather than a flat py-3: on a notched iPhone the bar sat
+       under the home indicator and "Add to cart" was only half tappable. */
+    <div className="fixed inset-x-0 bottom-0 z-sticky border-t border-slate-200 bg-white/95 gutter pb-safe-b-3 pt-3 shadow-top-bar backdrop-blur lg:hidden">
+      <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="price text-lg leading-tight">{formatPrice(best.price, best.currency)}</p>
           <p className="truncate text-xs text-graphite-600">

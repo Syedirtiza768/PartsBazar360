@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { buttonClasses } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
 import { Badge } from "@repo/ui/badge";
 import { ChevronRightIcon, TruckIcon, UploadIcon, BoxIcon, CheckCircleIcon } from "@repo/ui/icons";
 import { API_BASE_URL } from "@/lib/api";
@@ -55,7 +56,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Seller workspace"
         title="Store overview"
@@ -78,8 +79,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+      {/* Revenue spans the full row on phones — an AED figure with thousands
+          separators does not fit a half-width tile at 320px. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
+          className="col-span-2 sm:col-span-1"
           label="Total revenue"
           value={stats ? `AED ${stats.totalRevenue?.toLocaleString()}` : "—"}
           helper="Gross marketplace sales"
@@ -102,15 +106,15 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6 xl:col-span-2">
-          <div className="flex items-center justify-between gap-4">
-            <div>
+        <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6 xl:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold text-slate-900">Today&apos;s priorities</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-graphite-600">
                 Keep fulfillment, compatibility, and stock health moving.
               </p>
             </div>
-            <Badge tone="brand">Live marketplace</Badge>
+            <Badge tone="brand" className="shrink-0">Live marketplace</Badge>
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -124,7 +128,7 @@ export default function DashboardPage() {
                   {p.icon}
                 </span>
                 <h3 className="mt-3 text-sm font-semibold text-slate-900">{p.title}</h3>
-                <p className="mt-1 flex-1 text-[13px] leading-relaxed text-slate-500">{p.detail}</p>
+                <p className="mt-1 flex-1 text-pretty text-[13px] leading-relaxed text-graphite-600">{p.detail}</p>
                 <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
                   {p.cta}
                   <ChevronRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -134,9 +138,9 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+        <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Listing quality model</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-graphite-600">
             What complete, high-converting listings include.
           </p>
           <ul className="mt-5 space-y-3.5">
@@ -147,16 +151,16 @@ export default function DashboardPage() {
               { label: "Quality tier", value: "New, used, refurbished" },
             ].map((row) => (
               <li key={row.label} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3.5 last:border-0 last:pb-0">
-                <span className="flex items-center gap-2 text-sm text-slate-600">
+                <span className="flex min-w-0 items-center gap-2 text-sm text-graphite-600">
                   <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-500" />
                   {row.label}
                 </span>
-                <span className="text-sm font-semibold text-slate-900">{row.value}</span>
+                <span className="shrink-0 text-right text-sm font-semibold text-slate-900">{row.value}</span>
               </li>
             ))}
           </ul>
         </section>
       </div>
-    </div>
+    </PageBody>
   );
 }

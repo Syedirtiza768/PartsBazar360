@@ -31,13 +31,23 @@ export class ReviewTaskService {
         sellerId: input.sellerId,
         uploadJobId: input.uploadJobId,
         canonicalPartId: input.canonicalPartId,
-        payload: input.payload === undefined ? undefined : (input.payload as Prisma.InputJsonValue),
+        payload:
+          input.payload === undefined
+            ? undefined
+            : (input.payload as Prisma.InputJsonValue),
         confidence: input.confidence,
       },
     });
   }
 
-  async list(filters: { queueType?: string; status?: string; sellerId?: string; limit?: number } = {}) {
+  async list(
+    filters: {
+      queueType?: string;
+      status?: string;
+      sellerId?: string;
+      limit?: number;
+    } = {},
+  ) {
     return this.prisma.reviewTask.findMany({
       where: {
         queueType: filters.queueType || undefined,
@@ -49,12 +59,23 @@ export class ReviewTaskService {
       include: {
         seller: true,
         uploadJob: true,
-        canonicalPart: { select: { id: true, title: true, partType: true, brand: true, manufacturerPartNumber: true } },
+        canonicalPart: {
+          select: {
+            id: true,
+            title: true,
+            partType: true,
+            brand: true,
+            manufacturerPartNumber: true,
+          },
+        },
       },
     });
   }
 
-  async resolve(taskId: string, body: { status: string; resolution?: string; resolvedBy?: string }) {
+  async resolve(
+    taskId: string,
+    body: { status: string; resolution?: string; resolvedBy?: string },
+  ) {
     return this.prisma.reviewTask.update({
       where: { id: taskId },
       data: {
@@ -72,6 +93,9 @@ export class ReviewTaskService {
       where: { status: 'OPEN' },
       _count: { _all: true },
     });
-    return rows.map((row) => ({ queueType: row.queueType, count: row._count._all }));
+    return rows.map((row) => ({
+      queueType: row.queueType,
+      count: row._count._all,
+    }));
   }
 }

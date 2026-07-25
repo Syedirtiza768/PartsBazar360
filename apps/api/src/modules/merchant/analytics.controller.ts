@@ -7,7 +7,8 @@ export class AnalyticsController {
 
   @Get('summary')
   async getSummary(@Query('sellerId') sellerId: string) {
-    if (!sellerId) throw new NotFoundException('sellerId query parameter is required');
+    if (!sellerId)
+      throw new NotFoundException('sellerId query parameter is required');
 
     const [activeOffers, pendingOrders, aggregates] = await Promise.all([
       this.prisma.sellerOffer.count({

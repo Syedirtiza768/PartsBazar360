@@ -33,10 +33,16 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "bg-signal-500 text-graphite-950 hover:bg-signal-600 active:bg-signal-600 active:ring-2 active:ring-inset active:ring-graphite-950/30 disabled:bg-slate-300 disabled:text-slate-50",
 };
 
+/*
+ * Every size clears a 44px touch target on phones and relaxes to a denser
+ * desktop height from `sm` up. A 36px "small" button is fine under a mouse and
+ * a coin-flip under a thumb, so the compact heights are opt-in by viewport
+ * rather than by the caller remembering.
+ */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-9 px-3.5 text-sm gap-1.5",
-  md: "h-10 px-4 text-sm gap-2",
-  lg: "h-12 px-6 text-base gap-2",
+  sm: "min-h-touch sm:min-h-9 px-3.5 py-1.5 text-sm gap-1.5",
+  md: "min-h-touch sm:min-h-10 px-4 py-2 text-sm gap-2",
+  lg: "min-h-touch sm:min-h-12 px-5 py-2.5 sm:px-6 text-base gap-2",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -99,7 +105,13 @@ export function buttonClasses({
   return cn(
     "inline-flex items-center justify-center rounded-lg font-semibold transition-colors duration-150",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
-    "disabled:cursor-not-allowed select-none whitespace-nowrap",
+    "disabled:cursor-not-allowed select-none",
+    // `touch-manipulation` drops the 300ms tap delay and suppresses
+    // double-tap-to-zoom on the control itself, so buttons feel native.
+    "touch-manipulation",
+    // Labels wrap instead of overflowing their container at 320px; the button
+    // grows taller rather than pushing the layout sideways.
+    "text-center [text-wrap:balance]",
     VARIANTS[variant],
     SIZES[size],
     fullWidth && "w-full",

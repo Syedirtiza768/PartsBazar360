@@ -1,5 +1,8 @@
 import { PrismaService } from '../../prisma.service';
-import { MARKETPLACE_SELLERS, REALTRACK_MARKETPLACE_SELLERS } from './marketplace-sellers.config';
+import {
+  MARKETPLACE_SELLERS,
+  REALTRACK_MARKETPLACE_SELLERS,
+} from './marketplace-sellers.config';
 
 /**
  * Wipe all offers/inventory for Salvage, Blackline, and Superior so a fresh
@@ -13,7 +16,9 @@ export async function wipeMarketplaceSellerInventory(prisma: PrismaService) {
         { name: { in: Object.values(MARKETPLACE_SELLERS).map((s) => s.name) } },
         {
           storeId: {
-            in: REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!).filter(Boolean),
+            in: REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!).filter(
+              Boolean,
+            ),
           },
         },
       ],
@@ -23,7 +28,12 @@ export async function wipeMarketplaceSellerInventory(prisma: PrismaService) {
 
   const sellerIds = sellers.map((s) => s.id);
   if (sellerIds.length === 0) {
-    return { sellers: [], deletedOffers: 0, deletedStaging: 0, deletedUploadJobs: 0 };
+    return {
+      sellers: [],
+      deletedOffers: 0,
+      deletedStaging: 0,
+      deletedUploadJobs: 0,
+    };
   }
 
   const offers = await prisma.sellerOffer.findMany({
@@ -33,11 +43,19 @@ export async function wipeMarketplaceSellerInventory(prisma: PrismaService) {
   const offerIds = offers.map((o) => o.id);
 
   if (offerIds.length > 0) {
-    await prisma.cartItem.deleteMany({ where: { sellerOfferId: { in: offerIds } } });
-    await prisma.orderItem.deleteMany({ where: { sellerOfferId: { in: offerIds } } });
-    await prisma.salvageUnit.deleteMany({ where: { sellerOfferId: { in: offerIds } } });
+    await prisma.cartItem.deleteMany({
+      where: { sellerOfferId: { in: offerIds } },
+    });
+    await prisma.orderItem.deleteMany({
+      where: { sellerOfferId: { in: offerIds } },
+    });
+    await prisma.salvageUnit.deleteMany({
+      where: { sellerOfferId: { in: offerIds } },
+    });
     await prisma.inventory.deleteMany({ where: { offerId: { in: offerIds } } });
-    await prisma.offerPrice.deleteMany({ where: { offerId: { in: offerIds } } });
+    await prisma.offerPrice.deleteMany({
+      where: { offerId: { in: offerIds } },
+    });
     await prisma.sellerUploadRow.updateMany({
       where: { sellerOfferId: { in: offerIds } },
       data: { sellerOfferId: null },
@@ -62,10 +80,14 @@ export async function wipeMarketplaceSellerInventory(prisma: PrismaService) {
   });
 
   // Superior spreadsheet jobs (rows cascade)
-  const superior = sellers.find((s) => s.name === MARKETPLACE_SELLERS.superior.name);
+  const superior = sellers.find(
+    (s) => s.name === MARKETPLACE_SELLERS.superior.name,
+  );
   let deletedUploadJobs = 0;
   if (superior) {
-    const jobs = await prisma.sellerUploadJob.deleteMany({ where: { sellerId: superior.id } });
+    const jobs = await prisma.sellerUploadJob.deleteMany({
+      where: { sellerId: superior.id },
+    });
     deletedUploadJobs = jobs.count;
   }
 

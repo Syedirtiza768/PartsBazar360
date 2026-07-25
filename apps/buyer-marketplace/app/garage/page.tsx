@@ -69,7 +69,7 @@ function VehicleCard({ vehicle }: { vehicle: SavedVehicle }) {
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-base font-semibold text-slate-900">
+              <h3 className="line-clamp-2 text-base font-semibold text-slate-900">
                 {vehicleShortLabel(vehicle)}
               </h3>
               {isActive && (
@@ -102,7 +102,7 @@ function VehicleCard({ vehicle }: { vehicle: SavedVehicle }) {
       </div>
 
       {confirmingRemove && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <p className="text-sm font-medium text-red-800">Remove this vehicle?</p>
           <div className="flex gap-2">
             <Button size="sm" variant="danger" onClick={() => removeVehicle(vehicle.id)}>
@@ -169,9 +169,9 @@ export default function GaragePage() {
   const { vehicles, ready } = useGarage();
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+    <div className="mx-auto max-w-wide gutter py-8 sm:py-12">
       <header className="max-w-2xl">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Garage</h1>
+        <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Garage</h1>
         <p className="mt-2 text-sm leading-relaxed text-graphite-600 sm:text-base">
           Save the vehicles you maintain. Your active vehicle follows you through search and
           product pages, so every listing tells you whether it fits.
@@ -182,7 +182,7 @@ export default function GaragePage() {
         </p>
       </header>
 
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_420px]">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_420px]">
         <section aria-label="Saved vehicles" className="space-y-4">
           {!ready ? (
             <>
@@ -202,7 +202,7 @@ export default function GaragePage() {
         </section>
 
         <aside aria-label="Add a vehicle">
-          <div className="lg:sticky lg:top-40">
+          <div className="lg:sticky lg:top-28">
             <VehiclePicker />
           </div>
         </aside>

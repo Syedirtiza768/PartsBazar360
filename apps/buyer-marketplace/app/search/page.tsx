@@ -3,7 +3,8 @@ import Link from "next/link";
 import { buttonClasses } from "@repo/ui/button";
 import { EmptyState } from "@repo/ui/empty-state";
 import { SearchIcon, CarIcon } from "@repo/ui/icons";
-import { INTERNAL_API_URL, SITE_URL } from "@/lib/api";
+import { INTERNAL_API_URL } from "@/lib/api";
+import { NOINDEX_ROBOTS, searchCanonical } from "@/lib/seo";
 import { ProductCard } from "@/components/ProductCard";
 import { SortSelect } from "@/components/SortSelect";
 import { Pagination } from "@/components/Pagination";
@@ -83,23 +84,59 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   if (params.brand) parts.push(params.brand);
   if (params.category) parts.push(params.category);
   if (params.q) parts.push(`"${params.q}"`);
-  const title =
-    parts.length > 0 ? `${parts.join(" ")} Parts | PartsBazar360` : "Shop All Auto Parts | PartsBazar360";
+
+  const isHub = Boolean(params.category || params.brand) && !params.q && !params.vehicleConfigId;
+  const isAllParts = !params.category && !params.brand && !params.q && !params.vehicleConfigId;
+  const pageNum = Math.max(1, params.page ? parseInt(params.page, 10) || 1 : 1);
+
+  // Index category/brand hubs and the main catalog. Keep vehicle fitment,
+  // free-text search, sort variants, multi-filter combos, and deep pagination
+  // out of the index to protect crawl budget.
+  const shouldNoIndex =
+    Boolean(params.vehicleConfigId) ||
+    Boolean(params.q) ||
+    Boolean(params.sort && params.sort !== "newest") ||
+    Boolean(params.partType) ||
+    Boolean(params.includeInterchange === "false") ||
+    (Boolean(params.category) && Boolean(params.brand)) ||
+    pageNum > 1;
+
+  const title = isAllParts
+    ? "Shop All Auto Parts | PartsBazar360"
+    : isHub && params.brand && params.category
+      ? `${params.brand} ${params.category} Parts | PartsBazar360`
+      : isHub && params.brand
+        ? `${params.brand} Auto Parts | PartsBazar360`
+        : isHub && params.category
+          ? `${params.category} Parts | PartsBazar360`
+          : parts.length > 0
+            ? `${parts.join(" ")} Parts | PartsBazar360`
+            : "Shop All Auto Parts | PartsBazar360";
+
   const description = params.vehicleConfigId
     ? "Browse fitment-verified parts for your exact vehicle configuration."
-    : "Browse thousands of live, fitment-checked used and OEM auto parts from verified marketplace sellers.";
+    : params.brand && params.category
+      ? `Shop ${params.brand} ${params.category.toLowerCase()} parts with visible fitment evidence, condition, and seller terms on PartsBazar360.`
+      : params.brand
+        ? `Browse ${params.brand} automotive parts from marketplace sellers. Compare condition, OE numbers, and seller shipping before you buy.`
+        : params.category
+          ? `Shop ${params.category.toLowerCase()} parts with fitment evidence and seller-visible terms. New, used, and OEM inventory updated daily.`
+          : params.q
+            ? `Search results for ${params.q} across live marketplace inventory.`
+            : "Browse live used and OEM auto parts from marketplace sellers. Filter by category, brand, or OE number with fitment evidence on every listing.";
 
-  const canonicalParams = new URLSearchParams();
-  if (params.vehicleConfigId) canonicalParams.set("vehicleConfigId", params.vehicleConfigId);
-  if (params.category) canonicalParams.set("category", params.category);
-  if (params.brand) canonicalParams.set("brand", params.brand);
-  if (params.q) canonicalParams.set("q", params.q);
-  const canonicalQs = canonicalParams.toString();
+  const canonical = searchCanonical({
+    category: params.category,
+    brand: params.brand,
+    // Free-text and vehicle searches canonicalize to the hub without q/vehicle.
+    q: shouldNoIndex ? undefined : params.q,
+  });
 
   return {
     title,
     description,
-    alternates: { canonical: `${SITE_URL}/search${canonicalQs ? `?${canonicalQs}` : ""}` },
+    alternates: { canonical },
+    robots: shouldNoIndex ? NOINDEX_ROBOTS : undefined,
   };
 }
 
@@ -112,7 +149,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const [resultsRaw, facets] = await Promise.all([getResults(params), getFacets()]);
 
   // Both browse and fitment search are server-paginated via the API.
-  let results = resultsRaw;
+  const results = resultsRaw;
   let totalPages = 1;
   if (resultsRaw) {
     totalPages = Math.max(1, Math.ceil(resultsRaw.total / (resultsRaw.limit || PAGE_SIZE)));
@@ -143,12 +180,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           : "Shop all parts";
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
       {/* Toolbar */}
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{heading}</h1>
+          <div className="min-w-0">
+            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{heading}</h1>
             <p className="mt-1 text-sm text-graphite-600">
               {results === null ? (
                 "Results unavailable"
@@ -162,7 +199,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex w-full items-center gap-2.5 sm:w-auto">
             {showFilters && (
               <FilterDrawer activeCount={activeFilterCount}>
                 <FilterSections facets={facets} params={paramsShape} />
@@ -183,7 +220,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <div className="flex flex-col gap-8 pt-6 lg:flex-row">
         {/* Filters sidebar — plain links so filtering works without JS and is fully crawlable */}
         {showFilters && (
-          <aside className="hidden w-60 shrink-0 lg:block" aria-label="Filters">
+          <aside className="hidden w-60 shrink-0 self-start lg:sticky lg:top-28 lg:block" aria-label="Filters">
             <FilterSections facets={facets} params={paramsShape} />
           </aside>
         )}
@@ -250,7 +287,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             </EmptyState>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5">
                 {results.items.map((part) => (
                   <ProductCard
                     key={part.id}

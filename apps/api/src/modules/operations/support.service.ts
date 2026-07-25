@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
 @Injectable()
@@ -16,11 +20,17 @@ export class SupportService {
     subject: string;
     message: string;
   }) {
-    if (!body.customerEmail?.trim()) throw new BadRequestException('customerEmail is required');
-    if (!body.subject?.trim()) throw new BadRequestException('subject is required');
-    if (!body.message?.trim()) throw new BadRequestException('message is required');
+    if (!body.customerEmail?.trim())
+      throw new BadRequestException('customerEmail is required');
+    if (!body.subject?.trim())
+      throw new BadRequestException('subject is required');
+    if (!body.message?.trim())
+      throw new BadRequestException('message is required');
 
-    const priority = body.category === 'FITMENT' || body.category === 'ORDER_ISSUE' ? 'HIGH' : 'NORMAL';
+    const priority =
+      body.category === 'FITMENT' || body.category === 'ORDER_ISSUE'
+        ? 'HIGH'
+        : 'NORMAL';
     return this.prisma.supportTicket.create({
       data: {
         orderId: body.orderId || null,
@@ -34,11 +44,20 @@ export class SupportService {
         message: body.message,
         priority,
       },
-      include: { order: true, sellerOrder: true, canonicalPart: true, sellerOffer: true },
+      include: {
+        order: true,
+        sellerOrder: true,
+        canonicalPart: true,
+        sellerOffer: true,
+      },
     });
   }
 
-  async listTickets(query: { status?: string; orderId?: string; category?: string }) {
+  async listTickets(query: {
+    status?: string;
+    orderId?: string;
+    category?: string;
+  }) {
     return this.prisma.supportTicket.findMany({
       where: {
         status: query.status || undefined,
@@ -55,8 +74,13 @@ export class SupportService {
     });
   }
 
-  async updateTicket(id: string, body: { status?: string; priority?: string; internalNotes?: string }) {
-    const ticket = await this.prisma.supportTicket.findUnique({ where: { id } });
+  async updateTicket(
+    id: string,
+    body: { status?: string; priority?: string; internalNotes?: string },
+  ) {
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+    });
     if (!ticket) throw new NotFoundException('Support ticket not found');
     return this.prisma.supportTicket.update({
       where: { id },

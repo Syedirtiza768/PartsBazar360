@@ -12,7 +12,10 @@ export class SellerOnboardingController {
   }
 
   @Patch('profile')
-  saveProfile(@Query('sellerId') sellerId: string, @Body() body: SellerProfileInput) {
+  saveProfile(
+    @Query('sellerId') sellerId: string,
+    @Body() body: SellerProfileInput,
+  ) {
     return this.onboarding.saveProfile(sellerId, body);
   }
 

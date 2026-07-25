@@ -35,8 +35,8 @@ export function WatchlistButton({
         });
       }}
       className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 border text-sm font-semibold transition-colors",
-        compact ? "h-10 w-10 border-stone-300 bg-white" : "px-4 py-2.5",
+        "inline-flex min-h-touch items-center justify-center gap-2 border text-sm font-semibold transition-colors",
+        compact ? "h-11 w-11 border-stone-300 bg-white" : "px-4 py-2.5",
         watched
           ? "border-orange-300 bg-orange-50 text-orange-800"
           : "border-stone-300 bg-white text-slate-700 hover:border-slate-500 hover:text-slate-950",

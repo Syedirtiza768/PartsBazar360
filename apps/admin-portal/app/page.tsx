@@ -1,3 +1,9 @@
+import Link from "next/link";
+import { buttonClasses } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
+import { PageHeader } from "@repo/ui/page-header";
+import { ArrowRightIcon } from "@repo/ui/icons";
+
 const PORTALS = [
   {
     name: 'Buyer Marketplace',
@@ -27,68 +33,81 @@ const PORTALS = [
 
 const HEALTH_ITEMS = [
   { label: 'Marketplace status', value: 'Online', tone: 'text-emerald-700' },
-  { label: 'Catalogue model', value: 'OEM + aftermarket', tone: 'text-slate-950' },
+  { label: 'Catalogue model', value: 'OEM + aftermarket', tone: 'text-slate-900' },
   { label: 'Seller intake', value: 'CSV pipeline live', tone: 'text-blue-700' },
   { label: 'Support routing', value: 'Operations desk', tone: 'text-amber-700' },
 ];
 
 export default function Home() {
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Platform Admin</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Marketplace control center</h1>
-          <p className="text-slate-600 mt-1">Govern portals, catalogue quality, seller readiness, and operational health.</p>
-        </div>
-        <a href="/catalog" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors">
-          Open catalog queues
-        </a>
-      </header>
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
+      <PageHeader
+        eyebrow="Platform admin"
+        title="Marketplace control center"
+        description="Govern portals, catalogue quality, seller readiness, and operational health."
+        actions={
+          <Link href="/catalog" className={buttonClasses()}>
+            Open catalog queues
+          </Link>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Two columns at the smallest sizes: a single column of four status
+          tiles pushed the portal grid entirely below the fold on a phone. */}
+      <dl className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {HEALTH_ITEMS.map((item) => (
-          <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-slate-500">{item.label}</h3>
-            <p className={`mt-2 text-xl font-bold ${item.tone}`}>{item.value}</p>
+          <div key={item.label} className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
+            <dt className="text-sm font-medium text-graphite-600">{item.label}</dt>
+            <dd className={`mt-1.5 text-balance text-base font-bold sm:text-xl ${item.tone}`}>
+              {item.value}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">Portal access</h2>
-              <p className="mt-1 text-sm text-slate-500">Jump into the customer, seller, operations, or workshop experience.</p>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section
+          className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6 xl:col-span-2"
+          aria-labelledby="portals-heading"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="portals-heading" className="text-lg font-semibold text-slate-900">Portal access</h2>
+              <p className="mt-1 text-sm text-graphite-600">
+                Jump into the customer, seller, operations, or workshop experience.
+              </p>
             </div>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+            <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-graphite-600">
               4 portals
             </span>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
             {PORTALS.map((portal) => (
               <a
                 key={portal.href}
                 href={portal.href}
-                className="group rounded-lg border border-slate-200 bg-slate-50 p-5 hover:bg-white hover:border-blue-200 transition-colors"
+                className="group flex min-w-0 flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 transition-colors hover:border-blue-200 hover:bg-white sm:p-5"
               >
-                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${portal.accent}`}>
+                <span className={`inline-flex self-start rounded-full border px-2.5 py-1 text-xs font-semibold ${portal.accent}`}>
                   {portal.name}
                 </span>
-                <p className="text-sm text-slate-600 mt-3">{portal.description}</p>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 mt-4 group-hover:text-blue-600">
+                <p className="mt-3 flex-1 text-pretty text-sm text-graphite-600">{portal.description}</p>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 group-hover:text-blue-600">
                   Open portal
+                  <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </span>
               </a>
             ))}
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-950">Admin checklist</h2>
-          <div className="mt-5 space-y-4">
+        <section
+          className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6"
+          aria-labelledby="checklist-heading"
+        >
+          <h2 id="checklist-heading" className="text-lg font-semibold text-slate-900">Admin checklist</h2>
+          <div className="mt-4 space-y-4">
             <ChecklistItem title="Catalogue governance" detail="Open Catalog queues to clear classification, OEM parse, and authenticity reviews." />
             <ChecklistItem title="Seller readiness" detail="Use upload review counts to identify sellers needing support." />
             <ChecklistItem title="Customer support" detail="Watch fitment and order tickets for escalation patterns." />
@@ -96,15 +115,15 @@ export default function Home() {
           </div>
         </section>
       </div>
-    </div>
+    </PageBody>
   );
 }
 
 function ChecklistItem({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
-      <p className="font-semibold text-slate-950">{title}</p>
-      <p className="mt-1 text-sm text-slate-600">{detail}</p>
+      <p className="font-semibold text-slate-900">{title}</p>
+      <p className="mt-1 text-pretty text-sm text-graphite-600">{detail}</p>
     </div>
   );
 }

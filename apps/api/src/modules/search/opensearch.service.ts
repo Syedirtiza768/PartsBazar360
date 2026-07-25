@@ -22,7 +22,8 @@ export class OpenSearchService implements OnModuleInit {
         if (!o) return false;
         if (o.sellerId === 'seed-febest-inventory-supplier') return false;
         if (o.status && o.status !== 'ACTIVE') return false;
-        const sellerStatus = o.seller?.onboardingStatus || o.sellerOnboardingStatus;
+        const sellerStatus =
+          o.seller?.onboardingStatus || o.sellerOnboardingStatus;
         if (sellerStatus && sellerStatus !== 'ACTIVE') return false;
         const sellerName = o.sellerName || o.seller?.name || '';
         if (/febest\s+inventory\s+supplier/i.test(sellerName)) return false;
@@ -35,7 +36,9 @@ export class OpenSearchService implements OnModuleInit {
         } catch {
           /* ignore missing */
         }
-        this.logger.debug(`Removed part ${part.id} from OpenSearch (no buyer-visible offers)`);
+        this.logger.debug(
+          `Removed part ${part.id} from OpenSearch (no buyer-visible offers)`,
+        );
         return;
       }
 
@@ -56,7 +59,9 @@ export class OpenSearchService implements OnModuleInit {
           // distinct from an "interchange" match so the toggle can exclude the
           // latter and results can be labelled by how they matched.
           normalizedPartNumbers: (part.partNumbers || [])
-            .filter((number: any) => number.numberType !== 'OEM_CROSS_REFERENCE')
+            .filter(
+              (number: any) => number.numberType !== 'OEM_CROSS_REFERENCE',
+            )
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           category: part.category,
@@ -68,7 +73,9 @@ export class OpenSearchService implements OnModuleInit {
           // own field so they can be included or excluded per query and, when
           // they match, labelled as an interchange hit rather than an exact one.
           interchangePartNumbers: (part.partNumbers || [])
-            .filter((number: any) => number.numberType === 'OEM_CROSS_REFERENCE')
+            .filter(
+              (number: any) => number.numberType === 'OEM_CROSS_REFERENCE',
+            )
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           imageUrls: part.imageUrls || [],
@@ -85,7 +92,11 @@ export class OpenSearchService implements OnModuleInit {
           // result. Title-inferred D-level matches remain available on the PDP
           // as advisory compatibility and never enter guaranteed-fit search.
           fitments: (part.fitments || [])
-            .filter((f: any) => ['A', 'B'].includes(f.evidenceLevel) && Number(f.confidence) >= 0.8)
+            .filter(
+              (f: any) =>
+                ['A', 'B'].includes(f.evidenceLevel) &&
+                Number(f.confidence) >= 0.8,
+            )
             .map((f: any) => f.vehicleConfigId),
           offers: offers.map((o: any) => ({
             id: o.id,
@@ -118,15 +129,33 @@ export class OpenSearchService implements OnModuleInit {
       const limit = Math.min(Math.max(1, opts?.limit || 24), 200);
       const from = (page - 1) * limit;
 
-      const must: any[] = [
-        { term: { 'fitments.keyword': vehicleConfigId } }
-      ];
+      const must: any[] = [{ term: { 'fitments.keyword': vehicleConfigId } }];
 
       if (query) {
-        must.push({ bool: { should: [
-          { multi_match: { query, fields: ['title', 'brand', 'category', 'manufacturerPartNumber', 'oeNumbers'] } },
-          { term: { 'normalizedPartNumbers.keyword': normalizePartNumber(query) } },
-        ], minimum_should_match: 1 } });
+        must.push({
+          bool: {
+            should: [
+              {
+                multi_match: {
+                  query,
+                  fields: [
+                    'title',
+                    'brand',
+                    'category',
+                    'manufacturerPartNumber',
+                    'oeNumbers',
+                  ],
+                },
+              },
+              {
+                term: {
+                  'normalizedPartNumbers.keyword': normalizePartNumber(query),
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          },
+        });
       }
 
       const response = await this.client.search({
@@ -137,8 +166,8 @@ export class OpenSearchService implements OnModuleInit {
           track_total_hits: true,
           query: {
             bool: {
-              must
-            }
+              must,
+            },
           },
           sort: [{ minPrice: { order: 'asc', missing: '_last' } }],
         } as any,
@@ -154,7 +183,10 @@ export class OpenSearchService implements OnModuleInit {
 
       return { items, total, page, limit };
     } catch (error) {
-      this.logger.error(`Search failed for vehicleConfigId ${vehicleConfigId}`, error.stack);
+      this.logger.error(
+        `Search failed for vehicleConfigId ${vehicleConfigId}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -180,15 +212,43 @@ export class OpenSearchService implements OnModuleInit {
      */
     includeInterchange?: boolean;
   }) {
-    const { q, category, brand, partType, sort = 'newest', page = 1, limit = 24, includeInterchange = true } = opts;
+    const {
+      q,
+      category,
+      brand,
+      partType,
+      sort = 'newest',
+      page = 1,
+      limit = 24,
+      includeInterchange = true,
+    } = opts;
 
     // Named clauses (`_name`) so each hit reports *how* it matched via
     // `matched_queries`: a hit found only through an interchange number is
     // labelled as such rather than passed off as an exact match.
     const should: any[] = q
       ? [
-          { multi_match: { query: q, fields: ['title^2', 'brand', 'category', 'manufacturerPartNumber^2', 'oeNumbers'], _name: 'primary' } },
-          { term: { 'normalizedPartNumbers.keyword': { value: normalizePartNumber(q), _name: 'primary' } } },
+          {
+            multi_match: {
+              query: q,
+              fields: [
+                'title^2',
+                'brand',
+                'category',
+                'manufacturerPartNumber^2',
+                'oeNumbers',
+              ],
+              _name: 'primary',
+            },
+          },
+          {
+            term: {
+              'normalizedPartNumbers.keyword': {
+                value: normalizePartNumber(q),
+                _name: 'primary',
+              },
+            },
+          },
         ]
       : [];
 
@@ -197,7 +257,14 @@ export class OpenSearchService implements OnModuleInit {
     // is safe to ship ahead of a reindex (no behaviour change until the field
     // is populated).
     if (q && includeInterchange) {
-      should.push({ term: { 'interchangePartNumbers.keyword': { value: normalizePartNumber(q), _name: 'interchange' } } });
+      should.push({
+        term: {
+          'interchangePartNumbers.keyword': {
+            value: normalizePartNumber(q),
+            _name: 'interchange',
+          },
+        },
+      });
     }
 
     const must: any[] = q
@@ -213,9 +280,11 @@ export class OpenSearchService implements OnModuleInit {
     if (partType) filter.push({ term: { 'partType.keyword': partType } });
 
     const sortClause: any[] =
-      sort === 'price_asc' ? [{ minPrice: { order: 'asc', missing: '_last' } }] :
-      sort === 'price_desc' ? [{ minPrice: { order: 'desc', missing: '_last' } }] :
-      [{ createdAt: { order: 'desc' } }];
+      sort === 'price_asc'
+        ? [{ minPrice: { order: 'asc', missing: '_last' } }]
+        : sort === 'price_desc'
+          ? [{ minPrice: { order: 'desc', missing: '_last' } }]
+          : [{ createdAt: { order: 'desc' } }];
 
     try {
       const response = await this.client.search({
@@ -225,7 +294,7 @@ export class OpenSearchService implements OnModuleInit {
           size: limit,
           query: { bool: { must, filter } },
           sort: sortClause,
-        } as any,
+        },
       });
 
       const totalRaw: any = response.body.hits.total;
@@ -237,11 +306,14 @@ export class OpenSearchService implements OnModuleInit {
           // found via a cross-reference — tell the buyer so, and echo back the
           // number they searched so the card can name it.
           const matched: string[] = hit.matched_queries || [];
-          const viaInterchange = matched.includes('interchange') && !matched.includes('primary');
+          const viaInterchange =
+            matched.includes('interchange') && !matched.includes('primary');
           return {
             id: hit._id,
             ...(hit._source as object),
-            ...(viaInterchange ? { matchedVia: 'interchange', matchedNumber: q } : {}),
+            ...(viaInterchange
+              ? { matchedVia: 'interchange', matchedNumber: q }
+              : {}),
           };
         }),
         total,
@@ -270,8 +342,14 @@ export class OpenSearchService implements OnModuleInit {
 
       const aggs: any = response.body.aggregations;
       return {
-        brands: (aggs?.brands?.buckets || []).map((b: any) => ({ name: b.key, count: b.doc_count })),
-        categories: (aggs?.categories?.buckets || []).map((b: any) => ({ name: b.key, count: b.doc_count })),
+        brands: (aggs?.brands?.buckets || []).map((b: any) => ({
+          name: b.key,
+          count: b.doc_count,
+        })),
+        categories: (aggs?.categories?.buckets || []).map((b: any) => ({
+          name: b.key,
+          count: b.doc_count,
+        })),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);

@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, INestApplication } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  INestApplication,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -9,7 +14,10 @@ import { Pool } from 'pg';
  * exhaust PostgreSQL max_connections on the co-located Docker Postgres.
  */
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly pool: Pool;
 
   constructor() {
@@ -19,10 +27,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       connectionString,
       max,
       idleTimeoutMillis: Number(process.env.DATABASE_POOL_IDLE_MS || 30_000),
-      connectionTimeoutMillis: Number(process.env.DATABASE_POOL_CONNECT_MS || 10_000),
+      connectionTimeoutMillis: Number(
+        process.env.DATABASE_POOL_CONNECT_MS || 10_000,
+      ),
     });
     const adapter = new PrismaPg(pool);
-    super({ adapter } as any);
+    super({ adapter });
     this.pool = pool;
   }
 

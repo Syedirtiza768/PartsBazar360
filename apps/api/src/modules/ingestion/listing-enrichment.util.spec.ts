@@ -24,8 +24,12 @@ describe('prioritizeEbayImages', () => {
   });
 
   it('detects ebay image hosts', () => {
-    expect(isEbayImageUrl('https://i.ebayimg.com/images/g/x/s-l1600.jpg')).toBe(true);
-    expect(isEbayImageUrl('https://static.febest.de/images/big/x.jpg')).toBe(false);
+    expect(isEbayImageUrl('https://i.ebayimg.com/images/g/x/s-l1600.jpg')).toBe(
+      true,
+    );
+    expect(isEbayImageUrl('https://static.febest.de/images/big/x.jpg')).toBe(
+      false,
+    );
   });
 });
 
@@ -45,7 +49,11 @@ describe('extractListingImages', () => {
     const urls = extractListingImages({
       images: [
         { url: 'https://cdn.other.com/1.jpg', sortOrder: 2, source: 'gridx' },
-        { url: 'https://i.ebayimg.com/images/g/x/s-l140.jpg', sortOrder: 1, source: 'ebay' },
+        {
+          url: 'https://i.ebayimg.com/images/g/x/s-l140.jpg',
+          sortOrder: 1,
+          source: 'ebay',
+        },
       ],
     });
     expect(urls[0]).toContain('ebay');
@@ -78,6 +86,8 @@ describe('extractListingDescription / brand / oeNumbers', () => {
 
   it('reads brand from listing or specifics', () => {
     expect(extractListingBrand({ brand: 'Audi' })).toBe('Audi');
-    expect(extractListingBrand({ itemSpecifics: { Brand: 'BMW' } })).toBe('BMW');
+    expect(extractListingBrand({ itemSpecifics: { Brand: 'BMW' } })).toBe(
+      'BMW',
+    );
   });
 });

@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Badge } from '@repo/ui/badge';
+import { Button } from '@repo/ui/button';
+import { PageBody } from '@repo/ui/container';
+import { EmptyState } from '@repo/ui/empty-state';
+import { Input, Select } from '@repo/ui/field';
+import { PageHeader } from '@repo/ui/page-header';
+import { StoreIcon } from '@repo/ui/icons';
 import { API_BASE_URL } from '@/lib/api';
 
 const MODES = ['COMMISSION_ON_SELLING_PRICE', 'COST_PLUS_MARKUP', 'TARGET_MARGIN', 'FIXED_FEE', 'HYBRID_PERCENT_PLUS_FIXED'];
 
 export default function SellerOnboardingOperationsPage() {
-  const [sellers, setSellers] = useState<any[]>([]);
-  const [policies, setPolicies] = useState<any[]>([]);
+  // The onboarding endpoints return wide, evolving operational records;
+  // model them permissively rather than duplicating the API schema here.
+  type OpsRecord = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [sellers, setSellers] = useState<OpsRecord[]>([]);
+  const [policies, setPolicies] = useState<OpsRecord[]>([]);
   const [selectedPolicy, setSelectedPolicy] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ code: 'STANDARD_30', name: 'Standard 30% commission', mode: MODES[0], percentRate: 30, fixedFee: 0, currency: 'USD' });
 
   const load = async () => {
@@ -22,6 +34,7 @@ export default function SellerOnboardingOperationsPage() {
       setSellers(await sellerResponse.json());
       setPolicies(await policyResponse.json());
     } catch { setError('Could not load seller operations.'); }
+    finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
@@ -33,12 +46,16 @@ export default function SellerOnboardingOperationsPage() {
     return data;
   };
 
-  const createPolicy = async () => {
-    const data = await request(`${API_BASE_URL}/operations/pricing-policies`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, percentRate: Number(form.percentRate) / 100, fixedFee: Number(form.fixedFee), status: 'DRAFT', createdBy: 'Operations Portal' }),
-    });
-    if (data) { setMessage(`Created ${data.name} version ${data.version}. Activate it before assignment.`); await load(); }
+  const createPolicy = async (event: FormEvent) => {
+    event.preventDefault();
+    setCreating(true);
+    try {
+      const data = await request(`${API_BASE_URL}/operations/pricing-policies`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, percentRate: Number(form.percentRate) / 100, fixedFee: Number(form.fixedFee), status: 'DRAFT', createdBy: 'Operations Portal' }),
+      });
+      if (data) { setMessage(`Created ${data.name} version ${data.version}. Activate it before assignment.`); await load(); }
+    } finally { setCreating(false); }
   };
 
   const activatePolicy = async (policyId: string) => {
@@ -65,53 +82,193 @@ export default function SellerOnboardingOperationsPage() {
     if (data) { setMessage(`Seller moved to ${status.replace(/_/g, ' ')}.`); await load(); }
   };
 
+  const activePolicies = policies.filter((policy) => policy.status === 'ACTIVE');
+
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <header><p className="text-sm font-semibold text-amber-700 uppercase tracking-wide">Marketplace Governance</p><h1 className="mt-2 text-3xl font-bold text-slate-950">Seller onboarding and pricing</h1><p className="mt-1 text-slate-600">Review seller readiness, approve compliance, and assign versioned commercial terms.</p></header>
-      {(error || message) && <div className={`rounded-lg border px-4 py-3 text-sm ${error ? 'border-red-100 bg-red-50 text-red-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700'}`}>{error || message}</div>}
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
+      <PageHeader
+        eyebrow="Marketplace governance"
+        title="Seller onboarding and pricing"
+        description="Review seller readiness, approve compliance, and assign versioned commercial terms."
+      />
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
-        <div><h2 className="text-lg font-semibold text-slate-950">Create a pricing-policy version</h2><p className="mt-1 text-sm text-slate-500">Thirty percent is stored as 0.30 and interpreted according to the selected mode.</p></div>
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Policy code" className={inputClass} />
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Policy name" className={inputClass} />
-          <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className={inputClass}>{MODES.map((mode) => <option key={mode}>{mode}</option>)}</select>
-          <input type="number" min={0} max={99.99} step="0.01" value={form.percentRate} onChange={(e) => setForm({ ...form, percentRate: Number(e.target.value) })} placeholder="Percent" className={inputClass} />
-          <input type="number" min={0} step="0.01" value={form.fixedFee} onChange={(e) => setForm({ ...form, fixedFee: Number(e.target.value) })} placeholder="Fixed fee" className={inputClass} />
-          <button onClick={createPolicy} className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950">Create draft</button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {policies.map((policy) => <div key={policy.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs"><span className="font-semibold text-slate-800">{policy.name} v{policy.version}</span><span className="ml-2 text-slate-500">{(policy.percentRate * 100).toFixed(2)}% · {policy.status}</span>{policy.status === 'DRAFT' && <button onClick={() => activatePolicy(policy.id)} className="ml-3 font-semibold text-blue-700">Activate</button>}</div>)}
-        </div>
+      {(error || message) && (
+        <p
+          role={error ? 'alert' : 'status'}
+          className={`break-anywhere rounded-lg border px-4 py-3 text-sm ${
+            error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          }`}
+        >
+          {error || message}
+        </p>
+      )}
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6" aria-labelledby="policy-heading">
+        <h2 id="policy-heading" className="text-lg font-semibold text-slate-900">
+          Create a pricing-policy version
+        </h2>
+        <p className="mt-1 text-sm text-graphite-600">
+          Thirty percent is stored as 0.30 and interpreted according to the selected mode.
+        </p>
+
+        {/* One column on phones, two on tablets, four on desktop. The submit
+            button is outside the grid so it never gets stretched into a cell
+            the width of a numeric field. */}
+        <form onSubmit={createPolicy} className="mt-4">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 xl:grid-cols-4">
+            <Input
+              label="Policy code"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+            />
+            <Input
+              label="Policy name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+            <Select
+              label="Mode"
+              value={form.mode}
+              onChange={(e) => setForm({ ...form, mode: e.target.value })}
+              className="sm:col-span-2 xl:col-span-1"
+            >
+              {MODES.map((mode) => <option key={mode}>{mode}</option>)}
+            </Select>
+            <div className="grid grid-cols-2 gap-x-4">
+              <Input
+                label="Percent"
+                type="number"
+                min={0}
+                max={99.99}
+                step="0.01"
+                inputMode="decimal"
+                value={form.percentRate}
+                onChange={(e) => setForm({ ...form, percentRate: Number(e.target.value) })}
+              />
+              <Input
+                label="Fixed fee"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={form.fixedFee}
+                onChange={(e) => setForm({ ...form, fixedFee: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <Button type="submit" loading={creating} fullWidth className="sm:w-auto">
+              Create draft
+            </Button>
+          </div>
+        </form>
+
+        {policies.length > 0 && (
+          <ul className="mt-5 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:flex-wrap">
+            {policies.map((policy) => (
+              <li
+                key={policy.id}
+                className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+              >
+                <span className="font-semibold text-slate-800">{policy.name} v{policy.version}</span>
+                <span className="text-graphite-600">
+                  {(policy.percentRate * 100).toFixed(2)}% · {policy.status}
+                </span>
+                {policy.status === 'DRAFT' && (
+                  <Button size="sm" variant="ghost" onClick={() => activatePolicy(policy.id)} className="ml-auto">
+                    Activate
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex justify-between"><h2 className="font-semibold text-slate-950">Seller applications</h2><span className="text-xs font-semibold text-slate-500">{sellers.length} sellers</span></div>
-        <div className="divide-y divide-slate-100">
-          {sellers.map((seller) => (
-            <article key={seller.id} className="p-6 space-y-4">
-              <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-                <div><div className="flex items-center gap-3"><h3 className="text-lg font-semibold text-slate-950">{seller.name}</h3><Status status={seller.onboardingStatus} /></div><p className="mt-1 text-sm text-slate-500">{seller.profile?.legalName || 'Legal profile incomplete'} · {seller.profile?.country || 'country missing'} · {seller._count?.offers || 0} offers</p><p className="mt-1 text-xs text-slate-500">Compliance: {seller.profile?.complianceStatus || 'NOT_STARTED'} · Payout: {seller.profile?.payoutStatus || 'NOT_STARTED'} · Terms: {seller.agreementAcceptances?.length ? 'accepted' : 'missing'}</p></div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => updateSeller(seller.id, 'IDENTITY_REVIEW')} className={secondaryButton}>Identity review</button>
-                  <button onClick={() => updateSeller(seller.id, 'COMMERCIAL_REVIEW', true)} className={secondaryButton}>Verify compliance & payout</button>
-                  <button onClick={() => updateSeller(seller.id, 'ACTIVE')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Activate</button>
-                  <button onClick={() => updateSeller(seller.id, 'NEEDS_INFORMATION')} className={secondaryButton}>Request info</button>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card" aria-labelledby="sellers-heading">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6 sm:py-4">
+          <h2 id="sellers-heading" className="font-semibold text-slate-900">Seller applications</h2>
+          <span className="text-xs font-semibold text-graphite-600">{sellers.length} sellers</span>
+        </div>
+
+        {sellers.length === 0 ? (
+          <div className="p-4 sm:p-6">
+            <EmptyState
+              icon={<StoreIcon />}
+              title={loading ? 'Loading sellers…' : 'No seller applications yet'}
+              description={loading ? undefined : 'Applications appear here as sellers complete signup.'}
+            />
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {sellers.map((seller) => (
+              <article key={seller.id} className="space-y-4 p-4 sm:p-6">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <h3 className="text-base font-semibold text-slate-900 sm:text-lg">{seller.name}</h3>
+                      <Badge tone="warning" size="sm">{seller.onboardingStatus.replace(/_/g, ' ')}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-graphite-600">
+                      {seller.profile?.legalName || 'Legal profile incomplete'} · {seller.profile?.country || 'country missing'} · {seller._count?.offers || 0} offers
+                    </p>
+                    <p className="mt-1 text-xs text-graphite-600">
+                      Compliance: {seller.profile?.complianceStatus || 'NOT_STARTED'} · Payout: {seller.profile?.payoutStatus || 'NOT_STARTED'} · Terms: {seller.agreementAcceptances?.length ? 'accepted' : 'missing'}
+                    </p>
+                  </div>
+                  {/* Actions wrap into a full-width block on phones so each one
+                      keeps a 44px target instead of shrinking to fit one row. */}
+                  <div className="flex flex-wrap gap-2 xl:shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => updateSeller(seller.id, 'IDENTITY_REVIEW')}>
+                      Identity review
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => updateSeller(seller.id, 'COMMERCIAL_REVIEW', true)}>
+                      Verify compliance &amp; payout
+                    </Button>
+                    <Button size="sm" onClick={() => updateSeller(seller.id, 'ACTIVE')}>
+                      Activate
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => updateSeller(seller.id, 'NEEDS_INFORMATION')}>
+                      Request info
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-col md:flex-row gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <select value={selectedPolicy[seller.id] || ''} onChange={(event) => setSelectedPolicy({ ...selectedPolicy, [seller.id]: event.target.value })} className={`${inputClass} md:max-w-md`}><option value="">Select active pricing policy</option>{policies.filter((policy) => policy.status === 'ACTIVE').map((policy) => <option key={policy.id} value={policy.id}>{policy.name} v{policy.version} · {(policy.percentRate * 100).toFixed(2)}%</option>)}</select>
-                <button onClick={() => assignPolicy(seller.id)} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white">Assign and reprice</button>
-                <p className="self-center text-xs text-slate-500">Current: {seller.pricingAssignments?.map((item: any) => item.pricingPolicy.name).join(', ') || 'none'}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <Select
+                      label="Pricing policy"
+                      value={selectedPolicy[seller.id] || ''}
+                      onChange={(event) => setSelectedPolicy({ ...selectedPolicy, [seller.id]: event.target.value })}
+                      className="md:max-w-md"
+                    >
+                      <option value="">Select active pricing policy</option>
+                      {activePolicies.map((policy) => (
+                        <option key={policy.id} value={policy.id}>
+                          {policy.name} v{policy.version} · {(policy.percentRate * 100).toFixed(2)}%
+                        </option>
+                      ))}
+                    </Select>
+                    <Button variant="dark" onClick={() => assignPolicy(seller.id)} className="md:shrink-0">
+                      Assign and reprice
+                    </Button>
+                  </div>
+                  <p className="mt-2.5 text-xs text-graphite-600">
+                    {activePolicies.length === 0
+                      ? 'No active policies — activate a draft above before assigning.'
+                      : `Current: ${seller.pricingAssignments?.map((item: OpsRecord) => item.pricingPolicy.name).join(', ') || 'none'}`}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
-    </div>
+    </PageBody>
   );
 }
-
-const inputClass = 'rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500';
-const secondaryButton = 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50';
-function Status({ status }: { status: string }) { return <span className="rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">{status.replace(/_/g, ' ')}</span>; }

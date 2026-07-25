@@ -2,10 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
 import { Input, Select } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
+import { Sheet } from "@repo/ui/sheet";
 import { Skeleton } from "@repo/ui/skeleton";
-import { TruckIcon, XIcon, RefreshIcon, CheckCircleIcon, ClockIcon } from "@repo/ui/icons";
+import { TruckIcon, RefreshIcon, CheckCircleIcon, ClockIcon } from "@repo/ui/icons";
 import { API_BASE_URL } from "@/lib/api";
 import { DEMO_SELLER_ID } from "@/lib/config";
 import { PartThumbnail } from "@/components/PartThumbnail";
@@ -31,7 +33,13 @@ interface SellerOrder {
 
 const CARRIERS = ["DHL", "FedEx", "UPS", "Aramex", "DPD", "Royal Mail", "Other"];
 
-/** Modal replacing the old window.prompt() tracking flow. */
+/**
+ * Shipment confirmation. Built on the shared Sheet, so it is a bottom sheet on
+ * phones and a centred dialog from `sm` up, and it inherits the focus trap,
+ * iOS-safe scroll lock, dynamic-viewport height cap and safe-area footer that
+ * the hand-rolled version lacked — the old one could put "Confirm shipment"
+ * under the home indicator on a landscape phone with no way to scroll to it.
+ */
 function ShipDialog({
   order,
   onClose,
@@ -45,18 +53,6 @@ function ShipDialog({
   const [carrier, setCarrier] = useState("DHL");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -87,59 +83,53 @@ function ShipDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label="Mark order as shipped">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-graphite-950/50 backdrop-blur-[2px] animate-fade-in" />
-      <div className="relative w-full max-w-md rounded-t-2xl bg-white p-6 shadow-overlay animate-slide-up sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Mark as shipped</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Order <span className="part-number">#{order.id.split("-")[0]}</span> · {order.items.length} item
-              {order.items.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-          >
-            <XIcon className="h-5 w-5" />
-          </button>
+    <Sheet
+      open
+      onClose={onClose}
+      title="Mark as shipped"
+      description={`Order #${order.id.split("-")[0]} · ${order.items.length} item${
+        order.items.length === 1 ? "" : "s"
+      }`}
+      size="sm"
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={onClose} fullWidth className="sm:w-auto">
+            Cancel
+          </Button>
+          <Button form="ship-form" type="submit" loading={submitting} fullWidth className="sm:w-auto">
+            <TruckIcon className="h-4 w-4" />
+            Confirm shipment
+          </Button>
         </div>
-
-        <form onSubmit={submit} className="mt-5 space-y-4">
-          <Select label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)}>
-            {CARRIERS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-          <Input
-            label="Tracking number"
-            required
-            value={tracking}
-            onChange={(e) => {
-              setTracking(e.target.value);
-              setError(null);
-            }}
-            placeholder="e.g. JD014600003GB"
-            error={error ?? undefined}
-            hint="The buyer receives this immediately — double-check it matches the label."
-          />
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={submitting}>
-              <TruckIcon className="h-4 w-4" />
-              Confirm shipment
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+      }
+    >
+      <form id="ship-form" onSubmit={submit} className="space-y-4">
+        <Select label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)}>
+          {CARRIERS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
+        <Input
+          label="Tracking number"
+          required
+          value={tracking}
+          onChange={(e) => {
+            setTracking(e.target.value);
+            setError(null);
+          }}
+          placeholder="e.g. JD014600003GB"
+          // Tracking numbers are case-insensitive but always shown uppercase;
+          // autocorrect would otherwise "fix" them into words on iOS.
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          error={error ?? undefined}
+          hint="The buyer receives this immediately — double-check it matches the label."
+        />
+      </form>
+    </Sheet>
   );
 }
 
@@ -172,7 +162,7 @@ export default function OrdersPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Fulfillment"
         title="Order queue"
@@ -192,7 +182,7 @@ export default function OrdersPage() {
       ) : loading ? (
         <div className="space-y-4" aria-busy="true">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-44 w-full rounded-xl" />
+            <Skeleton key={i} className="h-64 w-full rounded-xl sm:h-44" />
           ))}
         </div>
       ) : orders!.length === 0 ? (
@@ -205,25 +195,29 @@ export default function OrdersPage() {
       ) : (
         <div className="space-y-4">
           {orders!.map((order) => (
-            <section key={order.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6" aria-label={`Order ${order.id.split("-")[0]}`}>
+            <section
+              key={order.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6"
+              aria-label={`Order ${order.id.split("-")[0]}`}
+            >
               <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="part-number text-slate-500">#{order.id.split("-")[0]}</span>
+                    <span className="part-number text-graphite-600">#{order.id.split("-")[0]}</span>
                     <StatusBadge status={order.status} size="sm" />
                   </div>
-                  <p className="text-lg font-semibold text-slate-900">
+                  <p className="text-balance text-base font-semibold text-slate-900 sm:text-lg">
                     {order.items.length} item{order.items.length === 1 ? "" : "s"} ·{" "}
                     <span className="price">AED {(order.subTotal + order.shippingTotal).toLocaleString()}</span>
                   </p>
-                  <p className="flex items-center gap-1.5 text-sm text-slate-500">
-                    <ClockIcon className="h-4 w-4" />
+                  <p className="flex items-center gap-1.5 text-sm text-graphite-600">
+                    <ClockIcon className="h-4 w-4 shrink-0" />
                     Placed {new Date(order.createdAt).toLocaleString()}
                   </p>
                 </div>
 
-                <div className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-4 xl:w-auto xl:min-w-[360px]">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4 xl:w-auto xl:min-w-[340px] xl:max-w-[420px]">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-graphite-600">
                     Items to ship
                   </h3>
                   <ul className="mt-3 space-y-2.5">
@@ -234,7 +228,9 @@ export default function OrdersPage() {
                           alt=""
                           size={36}
                         />
-                        <span className="min-w-0 truncate">
+                        {/* line-clamp, not truncate: a picker needs enough of
+                            the part name to find it on the shelf. */}
+                        <span className="line-clamp-2 min-w-0">
                           <span className="font-semibold">{item.quantity}×</span>{" "}
                           {item.sellerOffer.canonicalPart?.title || "Part"}
                         </span>
@@ -243,20 +239,20 @@ export default function OrdersPage() {
                   </ul>
                 </div>
 
-                <div className="flex shrink-0 items-start justify-between gap-2 xl:flex-col xl:items-end">
+                <div className="flex shrink-0 flex-col gap-2 xl:items-end">
                   {order.status === "PROCESSING" ? (
-                    <Button onClick={() => setShipping(order)}>
+                    <Button onClick={() => setShipping(order)} fullWidth className="sm:w-auto">
                       <TruckIcon className="h-4 w-4" />
                       Mark as shipped
                     </Button>
                   ) : order.status === "SHIPPED" ? (
                     <div className="xl:text-right">
                       <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 xl:justify-end">
-                        <CheckCircleIcon className="h-4 w-4" />
+                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
                         Shipped
                       </p>
                       {order.trackingNumber && (
-                        <p className="part-number mt-1 text-slate-500">
+                        <p className="part-number mt-1 break-anywhere text-graphite-600">
                           {order.carrier} {order.trackingNumber}
                         </p>
                       )}
@@ -264,7 +260,7 @@ export default function OrdersPage() {
                   ) : (
                     <div className="xl:text-right">
                       <p className="text-sm font-semibold text-amber-700">Awaiting payment</p>
-                      <p className="mt-1 max-w-[220px] text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-graphite-600 xl:max-w-[220px]">
                         Fulfilment unlocks after payment confirmation.
                       </p>
                     </div>
@@ -286,6 +282,6 @@ export default function OrdersPage() {
           }}
         />
       )}
-    </div>
+    </PageBody>
   );
 }

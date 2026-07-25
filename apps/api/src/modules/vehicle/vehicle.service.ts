@@ -9,7 +9,12 @@ const BUYER_VISIBLE_OFFER = {
   sellerId: { not: 'seed-febest-inventory-supplier' },
   seller: {
     onboardingStatus: 'ACTIVE',
-    NOT: { name: { contains: 'febest inventory supplier', mode: 'insensitive' as const } },
+    NOT: {
+      name: {
+        contains: 'febest inventory supplier',
+        mode: 'insensitive' as const,
+      },
+    },
   },
 };
 
@@ -36,7 +41,9 @@ export class VehicleService {
           some: {
             generations: {
               some: {
-                configurations: { some: { fitments: { some: SEARCH_GRADE_FITMENT } } },
+                configurations: {
+                  some: { fitments: { some: SEARCH_GRADE_FITMENT } },
+                },
               },
             },
           },
@@ -51,7 +58,11 @@ export class VehicleService {
       where: {
         makeId,
         generations: {
-          some: { configurations: { some: { fitments: { some: SEARCH_GRADE_FITMENT } } } },
+          some: {
+            configurations: {
+              some: { fitments: { some: SEARCH_GRADE_FITMENT } },
+            },
+          },
         },
       },
       orderBy: { name: 'asc' },

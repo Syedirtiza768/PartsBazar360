@@ -39,7 +39,9 @@ async function main() {
     });
   } finally {
     report.completedAt = new Date().toISOString();
-    const reportPath = path.resolve(process.env.SEED_REPORT_PATH || '/tmp/seed-salvagea-report.json');
+    const reportPath = path.resolve(
+      process.env.SEED_REPORT_PATH || '/tmp/seed-salvagea-report.json',
+    );
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2));
     await app.close();
     console.log(JSON.stringify({ reportPath, ...report }, null, 2));

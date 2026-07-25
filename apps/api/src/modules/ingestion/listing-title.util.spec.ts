@@ -1,7 +1,10 @@
 /**
  * Unit tests for English title extraction.
  */
-import { extractEnglishTitle, looksLikeEnglishTitle } from './listing-title.util';
+import {
+  extractEnglishTitle,
+  looksLikeEnglishTitle,
+} from './listing-title.util';
 
 describe('listing-title.util', () => {
   it('prefers titleEn over title', () => {
@@ -17,7 +20,9 @@ describe('listing-title.util', () => {
   });
 
   it('detects English titles', () => {
-    expect(looksLikeEnglishTitle('Used Steering Column for Porsche Cayenne 2008')).toBe(true);
+    expect(
+      looksLikeEnglishTitle('Used Steering Column for Porsche Cayenne 2008'),
+    ).toBe(true);
     expect(looksLikeEnglishTitle('エンジン トヨタ')).toBe(false);
   });
 });

@@ -119,12 +119,12 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
         <ClockIcon className="h-5 w-5 text-slate-400" />
         Recently viewed
       </h2>
-      <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-2 scrollbar-thin">
+      <div className="scroll-rail -mx-1 mt-4 gap-3 px-1 pb-2">
         {items.map((item) => (
           <Link
             key={item.id}
             href={`/part/${item.id}`}
-            className="w-40 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover"
+            className="w-36 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover sm:w-40"
           >
             <div className="relative aspect-square border-b border-slate-100 bg-slate-50">
               <PartImage src={item.image} alt={item.title} className="object-contain p-2" imageSize={300} />

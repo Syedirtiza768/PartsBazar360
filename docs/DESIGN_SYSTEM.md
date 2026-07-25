@@ -39,13 +39,24 @@ The implementation source is `packages/ui/tailwind-preset.cjs` plus `apps/buyer-
 
 ## Spacing and layout
 
+Responsive rules — breakpoints, containers, safe areas, tables, overlays,
+touch targets — are specified in [RESPONSIVE_SYSTEM.md](./RESPONSIVE_SYSTEM.md)
+and implemented once in the shared preset and `@repo/ui` primitives. This
+section covers only the visual language.
+
 - Base unit: 4px.
-- Main container: `max-w-[1440px]` with 16 / 24 / 32px responsive gutters.
+- Content ladder: `prose` / `narrow` / `content` (1280) / `wide` (1440) via
+  `<Container>`, with the shared 16 / 24 / 32px `gutter`. Do not hand-roll
+  container widths or gutters.
 - Dense transactional page spacing: 24-40px.
 - Editorial home section spacing: 40-64px.
 - Technical relationships use borders, rules, aligned columns, and tables instead of a card around every item.
 - Desktop marketplace navigation is three-tiered: utility, search/actions, then vehicle/category context.
-- Mobile keeps menu, logo, cart, search, selected vehicle, and horizontally scrollable categories available without nesting the primary discovery actions.
+- Mobile keeps menu, logo, cart, search, selected vehicle, and horizontally
+  scrollable categories available without nesting the primary discovery
+  actions. Only the utility strip and the main bar are sticky — the category
+  rail scrolls away, because pinning all three consumed a third of a 320x568
+  viewport on every page.
 
 ## Shape and elevation
 
@@ -114,7 +125,14 @@ Every reusable control supports a relevant subset of default, hover, active, foc
 - Skip link and semantic landmarks
 - Labeled search, filter, checkout, support, and garage controls
 - Keyboard-accessible menus, gallery, filter drawer, and dialogs
-- Minimum 40px action targets; primary mobile actions are 44px or larger
+- 44px minimum action targets on touch viewports (`min-h-touch`), relaxing to
+  denser heights from `sm` up
+- Controls render at 16px on phones so iOS never focus-zooms the viewport
 - Status always includes text or an icon plus text
-- Horizontal technical tables scroll inside their own container rather than the page
-- 320px layouts are verified without document-level horizontal overflow
+- Wide technical tables either become labelled cards (`DataTable`) or scroll
+  inside a keyboard-reachable `role="region"` with a pinned identifier column
+  (`TableScroller`) — never the page
+- Overlays trap focus, restore it to the trigger, close on Escape, and cap
+  against the dynamic viewport
+- Layouts are measured for overflow at 320-2560px, in landscape, and at 200%
+  browser zoom — see [RESPONSIVE_SYSTEM.md](./RESPONSIVE_SYSTEM.md) §12

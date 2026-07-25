@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
+import { DataTable, type Column } from "@repo/ui/data-table";
 import { Select } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
@@ -105,7 +107,8 @@ export default function UploadsPage() {
     loadJobs().then((initial) => {
       if (initial[0]) openJob(initial[0]);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only: loadJobs/openJob are recreated every render, so listing them
+    // would re-fetch the whole pipeline on each keystroke in the upload form.
   }, []);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -183,8 +186,59 @@ export default function UploadsPage() {
     }
   };
 
+  /*
+   * Row columns drive both the table (xl+) and the mobile card list. The
+   * listing title is the card heading, the type/status chips form the meta
+   * line, and Approve stays a full 44px action in both — previously it lived
+   * in a `min-w-[640px]` table that a phone could only reach by sideways
+   * scrolling past four columns.
+   */
+  const rowColumns: Column<UploadRow>[] = [
+    {
+      key: "row",
+      header: "Row",
+      align: "right",
+      cell: (row) => <span className="tabular-nums text-graphite-600">{row.rowNumber}</span>,
+    },
+    {
+      key: "listing",
+      header: "Listing",
+      priority: "primary",
+      className: "max-w-[300px]",
+      cell: (row) => (
+        <div className="min-w-0">
+          <p className="line-clamp-2 font-medium text-slate-900">
+            {row.title || row.sku || "Untitled row"}
+          </p>
+          <p className="mt-0.5 text-pretty text-xs text-graphite-600">
+            {row.message || `${row.quantity || 0} in stock`}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "type",
+      header: "Type",
+      priority: "secondary",
+      cell: (row) => (
+        <span className="text-xs text-graphite-600">
+          {(row.partSource || "OEM") === "OEM" ? "Genuine OEM" : "Aftermarket"} ·{" "}
+          <span className="capitalize">
+            {(row.qualityTier || "USED").replace(/_/g, " ").toLowerCase()}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      priority: "secondary",
+      cell: (row) => <StatusBadge status={row.status} size="sm" />,
+    },
+  ];
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Seller intake"
         title="Listing upload pipeline"
@@ -197,28 +251,35 @@ export default function UploadsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+      {/* Two up on phones (the third wraps full-width), three from sm. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Imported listings" value={stats.imported} tone="success" loading={loading} />
         <StatCard label="Compatibility review" value={stats.review} tone="warning" loading={loading} />
-        <StatCard label="Invalid rows" value={stats.invalid} loading={loading} />
+        <StatCard label="Invalid rows" value={stats.invalid} loading={loading} className="col-span-2 sm:col-span-1" />
       </div>
 
       {/* Upload form */}
-      <form onSubmit={handleUpload} className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+      <form onSubmit={handleUpload} className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">New upload</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-pretty text-sm text-graphite-600">
             Supported: CSV and Excel (.xlsx). DXB-EXW and FEBEST templates are auto-detected.
             Staged mode previews classification and matches before live catalog writes.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="sm:col-span-2">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Inventory file</span>
+            {/*
+              The drop zone is a <label> wrapping a visually hidden file input,
+              so the whole 44px+ area is the tap target and the native picker
+              (which on mobile also offers camera/Files) still opens.
+            */}
             <label
               className={cn(
-                "flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors",
+                "flex min-h-touch cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors",
+                "focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2",
                 file ? "border-emerald-300 bg-emerald-50" : "border-slate-300 bg-slate-50 hover:border-brand-400 hover:bg-brand-50/50",
               )}
             >
@@ -227,14 +288,16 @@ export default function UploadsPage() {
                 <>
                   <FileTextIcon className="h-5 w-5 shrink-0 text-emerald-600" />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-slate-900">{file.name}</span>
-                    <span className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB — click to change</span>
+                    {/* break-anywhere: exported filenames routinely run past
+                        40 characters and must stay identifiable. */}
+                    <span className="block break-anywhere text-sm font-semibold text-slate-900">{file.name}</span>
+                    <span className="text-xs text-graphite-600">{(file.size / 1024).toFixed(1)} KB — tap to change</span>
                   </span>
                 </>
               ) : (
                 <>
                   <UploadIcon className="h-5 w-5 shrink-0 text-slate-400" />
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm text-graphite-600">
                     <span className="font-semibold text-brand-600">Choose a CSV or XLSX file</span> to upload
                   </span>
                 </>
@@ -269,7 +332,7 @@ export default function UploadsPage() {
         )}
 
         <div className="flex justify-end">
-          <Button type="submit" loading={submitting} disabled={!file && !submitting}>
+          <Button type="submit" loading={submitting} disabled={!file && !submitting} fullWidth className="sm:w-auto">
             <UploadIcon className="h-4 w-4" />
             Upload &amp; enrich
           </Button>
@@ -295,7 +358,10 @@ export default function UploadsPage() {
               <EmptyState icon={<UploadIcon />} title="No uploads yet" description="Your first CSV import will appear here." />
             </div>
           ) : (
-            <ul className="max-h-[480px] divide-y divide-slate-100 overflow-y-auto">
+            /* Capped by viewport height rather than a fixed 480px, so on a
+               landscape phone the list scrolls internally instead of pushing
+               the row detail off the page. */
+            <ul className="max-h-[min(30rem,55dvh)] divide-y divide-slate-100 overflow-y-auto overscroll-none-y xl:max-h-[30rem]">
               {jobs!.map((job) => (
                 <li key={job.id}>
                   <button
@@ -303,15 +369,17 @@ export default function UploadsPage() {
                     onClick={() => openJob(job)}
                     aria-current={selectedJob?.id === job.id || undefined}
                     className={cn(
-                      "w-full px-5 py-3.5 text-left transition-colors",
+                      "w-full min-h-touch px-4 py-3.5 text-left transition-colors sm:px-5",
                       selectedJob?.id === job.id ? "bg-brand-50/60" : "hover:bg-slate-50",
                     )}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-semibold text-slate-900">{job.fileName}</p>
-                      <StatusBadge status={job.status} size="sm" />
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 break-anywhere text-sm font-semibold text-slate-900">{job.fileName}</p>
+                      <span className="shrink-0">
+                        <StatusBadge status={job.status} size="sm" />
+                      </span>
                     </div>
-                    <p className="mt-1 text-xs tabular-nums text-slate-500">
+                    <p className="mt-1 text-xs tabular-nums text-graphite-600">
                       {job.insertedRows} imported · {job.reviewRows} review · {job.invalidRows} invalid
                     </p>
                   </button>
@@ -322,11 +390,13 @@ export default function UploadsPage() {
         </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card xl:col-span-2" aria-label="Rows needing attention">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3.5 sm:px-5">
             <h2 className="text-sm font-semibold text-slate-900">Rows needing attention</h2>
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               {selectedJob && (
-                <span className="part-number max-w-[200px] truncate text-slate-400">{selectedJob.fileName}</span>
+                <span className="part-number min-w-0 truncate text-graphite-600 sm:max-w-[200px]">
+                  {selectedJob.fileName}
+                </span>
               )}
               {selectedJob?.status === "PREVIEW_READY" && (
                 <Button size="sm" onClick={handleCommit} loading={committing}>
@@ -337,70 +407,45 @@ export default function UploadsPage() {
           </div>
 
           {!selectedJob ? (
-            <p className="px-5 py-10 text-center text-sm text-slate-500">Select an upload job to inspect its rows.</p>
+            <p className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">
+              Select an upload job to inspect its rows.
+            </p>
           ) : loadingRows ? (
-            <div className="flex justify-center px-5 py-10">
+            <div className="flex justify-center px-4 py-10 sm:px-5">
               <Spinner label="Loading rows…" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3">Row</th>
-                    <th className="px-5 py-3">Listing</th>
-                    <th className="px-5 py-3">Type</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(selectedJob.rows || []).map((row) => (
-                    <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
-                      <td className="px-5 py-3.5 tabular-nums text-slate-500">{row.rowNumber}</td>
-                      <td className="max-w-[300px] px-5 py-3.5">
-                        <p className="truncate font-medium text-slate-900">{row.title || row.sku || "Untitled row"}</p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {row.message || `${row.quantity || 0} in stock`}
-                        </p>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-xs text-slate-600">
-                        {(row.partSource || "OEM") === "OEM" ? "Genuine OEM" : "Aftermarket"} ·{" "}
-                        <span className="capitalize">{(row.qualityTier || "USED").replace(/_/g, " ").toLowerCase()}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <StatusBadge status={row.status} size="sm" />
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        {row.status === "NEEDS_REVIEW" ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleApprove(row)}
-                            loading={approvingRow === row.id}
-                          >
-                            <CheckIcon className="h-3.5 w-3.5" />
-                            Approve
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-slate-400">No action</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {(selectedJob.rows || []).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-10 text-center text-sm text-slate-500">
-                        No rows loaded for this job.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              caption="Upload rows"
+              rows={selectedJob.rows || []}
+              columns={rowColumns}
+              getRowKey={(row) => row.id}
+              tableFrom="xl"
+              className="p-3 xl:p-0 [&_[role=region]]:rounded-none [&_[role=region]]:border-0"
+              actions={(row) =>
+                row.status === "NEEDS_REVIEW" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleApprove(row)}
+                    loading={approvingRow === row.id}
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                    Approve
+                  </Button>
+                ) : (
+                  <span className="text-xs text-graphite-600">No action</span>
+                )
+              }
+              empty={
+                <p className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">
+                  No rows loaded for this job.
+                </p>
+              }
+            />
           )}
         </section>
       </div>
-    </div>
+    </PageBody>
   );
 }

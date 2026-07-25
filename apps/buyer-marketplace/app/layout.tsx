@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { CartProvider } from "@/lib/cart-context";
@@ -8,7 +8,8 @@ import { WatchlistProvider } from "@/lib/watchlist-context";
 import { AuthProvider } from "@/lib/auth-context";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { INTERNAL_API_URL, SITE_URL } from "@/lib/api";
+import { INTERNAL_API_URL } from "@/lib/api";
+import { absoluteUrl, getSiteUrl, INDEX_ROBOTS } from "@/lib/seo";
 import type { FacetsResponse } from "@/lib/types";
 
 /**
@@ -44,20 +45,24 @@ const display = localFont({
   fallback: ["Arial Narrow", "ui-sans-serif", "system-ui", "sans-serif"],
 });
 
+const siteUrl = getSiteUrl();
+
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "PartsBazar360 | Exact-fit parts from marketplace sellers",
     template: "%s",
   },
   description:
     "Search new, used and OEM automotive parts by vehicle, part number or category with visible fitment evidence and seller terms.",
+  alternates: { canonical: absoluteUrl("/") },
   openGraph: {
     siteName: "PartsBazar360",
     type: "website",
+    url: absoluteUrl("/"),
     images: [
       {
-        url: `${SITE_URL}/og.png`,
+        url: absoluteUrl("/og.png"),
         width: 1728,
         height: 906,
         alt: "PartsBazar360 — Find the part. Verify the fit. Know the seller.",
@@ -66,12 +71,30 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    images: [`${SITE_URL}/og.png`],
+    images: [absoluteUrl("/og.png")],
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: INDEX_ROBOTS,
+};
+
+/**
+ * `viewportFit: "cover"` is what makes `env(safe-area-inset-*)` report real
+ * values — without it iOS letterboxes the page and every safe-area utility in
+ * the design system silently resolves to 0, so the sticky buy bar sits under
+ * the home indicator.
+ *
+ * `maximumScale` and `userScalable` are deliberately left at their defaults:
+ * capping zoom is a WCAG 1.4.4 failure, and the iOS focus-zoom problem it is
+ * usually used to paper over is solved properly by the 16px control floor in
+ * the preset.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f2ed" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1519" },
+  ],
 };
 
 // Category facets power the header rail + search dropdown; cached briefly so
@@ -104,7 +127,44 @@ export default async function RootLayout({
       data-scroll-behavior="smooth"
       className={`${sans.variable} ${display.variable}`}
     >
-      <body className="flex min-h-screen flex-col">
+      {/* min-h-dvh, not min-h-screen: `100vh` on mobile Safari is the *largest*
+          viewport, so a min-h-screen column leaves a scroll gap the height of
+          the retracted toolbar under every short page. */}
+      <body className="flex min-h-dvh flex-col">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": `${siteUrl}/#organization`,
+                  name: "PartsBazar360",
+                  url: absoluteUrl("/"),
+                  logo: absoluteUrl("/og.png"),
+                  description:
+                    "Motor parts marketplace focused on fitment evidence, condition disclosure, and seller-visible terms.",
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": `${siteUrl}/#website`,
+                  name: "PartsBazar360",
+                  url: absoluteUrl("/"),
+                  publisher: { "@id": `${siteUrl}/#organization` },
+                  potentialAction: {
+                    "@type": "SearchAction",
+                    target: {
+                      "@type": "EntryPoint",
+                      urlTemplate: `${getSiteUrl()}/search?q={search_term_string}`,
+                    },
+                    "query-input": "required name=search_term_string",
+                  },
+                },
+              ],
+            }),
+          }}
+        />
         <a href="#main-content" className="skip-link">Skip to marketplace content</a>
         <ToastProvider>
           <AuthProvider>

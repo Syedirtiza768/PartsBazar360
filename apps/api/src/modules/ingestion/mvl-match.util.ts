@@ -49,7 +49,11 @@ export function modelLookupVariants(model: string): string[] {
   return [...new Set(variants)];
 }
 
-export function expandYears(startYear: number, endYear: number, maxSpan = 40): number[] {
+export function expandYears(
+  startYear: number,
+  endYear: number,
+  maxSpan = 40,
+): number[] {
   const from = Math.min(startYear, endYear);
   const to = Math.max(startYear, endYear);
   const years: number[] = [];

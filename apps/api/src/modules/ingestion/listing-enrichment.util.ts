@@ -26,7 +26,13 @@ export function isEbayImageUrl(url: string): boolean {
  * eBay-hosted URLs are sorted to the front; order within each group is preserved.
  */
 export function prioritizeEbayImages(urls: string[]): string[] {
-  const unique = [...new Set(urls.map((u) => upgradeImageUrl(String(u).trim())).filter((u) => u.startsWith('http')))];
+  const unique = [
+    ...new Set(
+      urls
+        .map((u) => upgradeImageUrl(String(u).trim()))
+        .filter((u) => u.startsWith('http')),
+    ),
+  ];
   const ebay = unique.filter(isEbayImageUrl);
   const other = unique.filter((u) => !isEbayImageUrl(u));
   return [...ebay, ...other];
@@ -60,10 +66,11 @@ export function extractListingImages(listing: any): string[] {
   push(listing?.rawEbayResponse?.item?.pictureURL);
   push(listing?.rawEbayResponse?.item?.galleryURL);
 
-  const rawPics = listing?.rawEbayResponse?.item?.pictureURLLarge
-    || listing?.rawEbayResponse?.item?.PictureURL
-    || listing?.rawEbayResponse?.item?.pictureUrls
-    || listing?.rawEbayResponse?.item?.imageUrls;
+  const rawPics =
+    listing?.rawEbayResponse?.item?.pictureURLLarge ||
+    listing?.rawEbayResponse?.item?.PictureURL ||
+    listing?.rawEbayResponse?.item?.pictureUrls ||
+    listing?.rawEbayResponse?.item?.imageUrls;
   if (Array.isArray(rawPics)) {
     for (const url of rawPics) push(url);
   } else {
@@ -73,7 +80,8 @@ export function extractListingImages(listing: any): string[] {
   // Deep-scan raw payload for any leftover image URLs
   try {
     const raw = JSON.stringify(listing?.rawEbayResponse || {});
-    const matches = raw.match(/https?:\\?\/\\?\/[^"\\\s]+\.(?:jpg|jpeg|png|webp)/gi) || [];
+    const matches =
+      raw.match(/https?:\\?\/\\?\/[^"\\\s]+\.(?:jpg|jpeg|png|webp)/gi) || [];
     for (const match of matches) {
       push(match.replace(/\\\//g, '/'));
     }
@@ -94,7 +102,8 @@ export function extractListingDescription(listing: any): string | null {
     listing?.rawEbayResponse?.item?.description,
   ];
   for (const value of candidates) {
-    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+    if (typeof value === 'string' && value.trim().length > 0)
+      return value.trim();
   }
   return null;
 }
@@ -104,22 +113,34 @@ export function extractListingBrand(listing: any): string | null {
   const specifics = listing?.itemSpecifics;
   const fromSpecifics =
     specifics && typeof specifics === 'object'
-      ? specifics.Brand || specifics.brand || specifics.Manufacturer || specifics.Make
+      ? specifics.Brand ||
+        specifics.brand ||
+        specifics.Manufacturer ||
+        specifics.Make
       : null;
-  const raw = listing?.brand || fromSpecifics || listing?.rawEbayResponse?.item?.brand || null;
+  const raw =
+    listing?.brand ||
+    fromSpecifics ||
+    listing?.rawEbayResponse?.item?.brand ||
+    null;
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
 /** Merge OE / MPN numbers from RealTrack fields, specifics, and title heuristics. */
-export function extractListingOeNumbers(listing: any, titleOeNumbers: string[] = []): string[] {
+export function extractListingOeNumbers(
+  listing: any,
+  titleOeNumbers: string[] = [],
+): string[] {
   const out: string[] = [];
   const push = (value?: unknown) => {
     if (typeof value !== 'string') return;
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (!out.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) {
+    if (
+      !out.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())
+    ) {
       out.push(trimmed);
     }
   };
@@ -210,7 +231,8 @@ export function normalizeCompatibility(raw: any): CompatibilityRow[] {
       return dedupeCompatibility(rows);
     }
 
-    const list = raw.vehicles || raw.items || raw.compatibleVehicles || raw.list;
+    const list =
+      raw.vehicles || raw.items || raw.compatibleVehicles || raw.list;
     if (Array.isArray(list)) return normalizeCompatibility(list);
   }
 
@@ -252,8 +274,9 @@ export function expandYearRangeCompatibility(input: {
 }
 
 function expandCompatibilityLabel(label: string): CompatibilityRow[] {
-  const match = label.match(/(20\d{2})\s*[-–]\s*(20\d{2})\s+(.+)/)
-    || label.match(/(20\d{2})\s+(.+)/);
+  const match =
+    label.match(/(20\d{2})\s*[-–]\s*(20\d{2})\s+(.+)/) ||
+    label.match(/(20\d{2})\s+(.+)/);
   if (!match) return [];
 
   if (match.length === 4) {
@@ -272,21 +295,24 @@ function expandCompatibilityLabel(label: string): CompatibilityRow[] {
 
   const [, year, rest] = match;
   const parts = rest.trim().split(/\s+/);
-  return [{
-    year: parseInt(year, 10),
-    make: parts[0] || '-',
-    model: parts.slice(1).join(' ') || '-',
-    trim: '-',
-    engine: '-',
-    source: 'label',
-  }];
+  return [
+    {
+      year: parseInt(year, 10),
+      make: parts[0] || '-',
+      model: parts.slice(1).join(' ') || '-',
+      trim: '-',
+      engine: '-',
+      source: 'label',
+    },
+  ];
 }
 
 function dedupeCompatibility(rows: CompatibilityRow[]): CompatibilityRow[] {
   const seen = new Set<string>();
   const out: CompatibilityRow[] = [];
   for (const row of rows) {
-    const key = `${row.year}|${row.make}|${row.model}|${row.trim}|${row.engine}`.toLowerCase();
+    const key =
+      `${row.year}|${row.make}|${row.model}|${row.trim}|${row.engine}`.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(row);
@@ -295,12 +321,15 @@ function dedupeCompatibility(rows: CompatibilityRow[]): CompatibilityRow[] {
 }
 
 /** Merge compatibility from RealTrack + title-inferred vehicle. */
-export function buildCompatibility(listing: any, parsedVehicle?: {
-  startYear: number;
-  endYear: number;
-  make: string;
-  model: string;
-} | null): CompatibilityRow[] {
+export function buildCompatibility(
+  listing: any,
+  parsedVehicle?: {
+    startYear: number;
+    endYear: number;
+    make: string;
+    model: string;
+  } | null,
+): CompatibilityRow[] {
   const fromListing = normalizeCompatibility(listing?.compatibility);
   if (fromListing.length > 0) return fromListing;
 
@@ -324,14 +353,16 @@ export function buildCompatibility(listing: any, parsedVehicle?: {
           source: 'item_specifics',
         });
       }
-      return [{
-        year: yearStr,
-        make: String(make),
-        model: String(model),
-        trim: String(specifics.Trim || specifics.Submodel || '-'),
-        engine: String(specifics.Engine || '-'),
-        source: 'item_specifics',
-      }];
+      return [
+        {
+          year: yearStr,
+          make: String(make),
+          model: String(model),
+          trim: String(specifics.Trim || specifics.Submodel || '-'),
+          engine: String(specifics.Engine || '-'),
+          source: 'item_specifics',
+        },
+      ];
     }
   }
 

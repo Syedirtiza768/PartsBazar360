@@ -43,6 +43,10 @@ export function PartThumbnail({ src, alt, size = 48 }: { src?: string | null; al
 
   return (
     <div style={{ width: size, height: size }} className="relative shrink-0 bg-slate-100 border border-slate-200 rounded-md overflow-hidden">
+      {/* Deliberately a plain <img>: these are seller-CDN URLs behind our
+          own image proxy, which already resizes them; next/image would add a
+          second optimisation hop for a 36–48px thumbnail. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={proxyUrl(src)}
         alt={alt}

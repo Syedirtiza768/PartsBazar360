@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@repo/ui/button";
+import { PageBody } from "@repo/ui/container";
 import { Input, Select, Checkbox } from "@repo/ui/field";
 import { Skeleton } from "@repo/ui/skeleton";
 import { CheckCircleIcon } from "@repo/ui/icons";
@@ -39,7 +40,7 @@ function StepPill({ label, done, index }: { label: string; done: boolean; index:
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 rounded-xl border p-3.5",
+        "flex min-w-0 items-center gap-2.5 rounded-xl border p-3 sm:p-3.5",
         done ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white",
       )}
     >
@@ -52,12 +53,15 @@ function StepPill({ label, done, index }: { label: string; done: boolean; index:
       >
         {done ? "✓" : index}
       </span>
-      <span className={cn("text-sm font-semibold", done ? "text-emerald-800" : "text-slate-600")}>{label}</span>
+      <span className={cn("min-w-0 text-[13px] font-semibold sm:text-sm", done ? "text-emerald-800" : "text-graphite-700")}>{label}</span>
     </div>
   );
 }
 
 export default function OnboardingPage() {
+  // The onboarding endpoint returns a wide, evolving seller record; keep it
+  // permissive rather than duplicating the API schema in the client.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [seller, setSeller] = useState<any>(null);
   const [profile, setProfile] = useState<Profile>(INITIAL_PROFILE);
   const [acceptedByEmail, setAcceptedByEmail] = useState("");
@@ -166,7 +170,7 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8" aria-busy="true">
+      <PageBody className="space-y-6" aria-busy="true">
         <Skeleton className="h-9 w-72" />
         <Skeleton className="h-4 w-96 max-w-full" />
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -175,12 +179,12 @@ export default function OnboardingPage() {
           ))}
         </div>
         <Skeleton className="h-[420px] w-full rounded-xl" />
-      </div>
+      </PageBody>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <PageBody className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Seller readiness"
         title="Business onboarding"
@@ -200,17 +204,17 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4">
         <StepPill index={1} label="Business details" done={completed === 4} />
         <StepPill index={2} label="Terms accepted" done={(seller?.agreementAcceptances || []).length > 0} />
         <StepPill index={3} label="Compliance" done={seller?.profile?.complianceStatus === "VERIFIED"} />
         <StepPill index={4} label="Payout account" done={seller?.profile?.payoutStatus === "VERIFIED"} />
       </div>
 
-      <form onSubmit={save} className="space-y-8 rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-7">
+      <form onSubmit={save} className="space-y-8 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-7">
         <section>
           <h2 className="text-lg font-semibold text-slate-900">Legal business</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-pretty text-sm text-graphite-600">
             Use details that match registration, tax, and payout documents.
           </p>
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -223,15 +227,35 @@ export default function OnboardingPage() {
             <Input label="Registration number" value={profile.registrationNumber} onChange={update("registrationNumber")} />
             <Input label="Tax ID" value={profile.taxId} onChange={update("taxId")} />
             <Input label="Country" required value={profile.country} onChange={update("country")} />
-            <Input label="Phone" required type="tel" value={profile.phone} onChange={update("phone")} />
-            <Input label="Support email" required type="email" value={profile.supportEmail} onChange={update("supportEmail")} />
-            <Input label="Website" value={profile.website} onChange={update("website")} placeholder="https://" />
+            <Input label="Phone" required type="tel" inputMode="tel" autoComplete="tel" value={profile.phone} onChange={update("phone")} />
+            <Input
+              label="Support email"
+              required
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={profile.supportEmail}
+              onChange={update("supportEmail")}
+            />
+            <Input
+              label="Website"
+              type="url"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={profile.website}
+              onChange={update("website")}
+              placeholder="https://"
+            />
           </div>
         </section>
 
         <section className="border-t border-slate-100 pt-7">
           <h2 className="text-lg font-semibold text-slate-900">Operating terms</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-pretty text-sm text-graphite-600">
             Shown to customers on your listings and used by operations.
           </p>
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -239,6 +263,7 @@ export default function OnboardingPage() {
               label="Fulfilment SLA (hours)"
               type="number"
               min={1}
+              inputMode="numeric"
               value={profile.fulfillmentSlaHours}
               onChange={update("fulfillmentSlaHours")}
               hint="Time from paid order to handover"
@@ -247,6 +272,7 @@ export default function OnboardingPage() {
               label="Return window (days)"
               type="number"
               min={0}
+              inputMode="numeric"
               value={profile.returnWindowDays}
               onChange={update("returnWindowDays")}
             />
@@ -254,6 +280,7 @@ export default function OnboardingPage() {
               label="Warranty (days)"
               type="number"
               min={0}
+              inputMode="numeric"
               value={profile.warrantyDays}
               onChange={update("warrantyDays")}
               hint="0 = no seller warranty"
@@ -279,7 +306,7 @@ export default function OnboardingPage() {
               hint="Comma-separated"
             />
           </div>
-          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
+          <div className="mt-5 flex flex-col gap-y-1 sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-3">
             <Checkbox checked={profile.acceptsReturns} onChange={update("acceptsReturns")} label="Accepts returns" />
             <Checkbox
               checked={profile.freightCapable}
@@ -289,24 +316,33 @@ export default function OnboardingPage() {
           </div>
         </section>
 
-        <div className="flex justify-end border-t border-slate-100 pt-5">
-          <Button type="submit" loading={saving}>
+        {/*
+          The form is ~20 fields tall on a phone, so the save action is pinned
+          to the bottom of the viewport there rather than sitting two screens
+          below the fold. It returns to a normal right-aligned button from `sm`.
+        */}
+        <div className="sticky bottom-0 -mx-4 border-t border-slate-100 bg-white/95 px-4 pb-safe-b-3 pt-3 backdrop-blur sm:static sm:mx-0 sm:flex sm:justify-end sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-5 sm:backdrop-blur-none">
+          <Button type="submit" loading={saving} fullWidth className="sm:w-auto">
             Save profile
           </Button>
         </div>
       </form>
 
       {["DRAFT", "NEEDS_INFORMATION"].includes(seller?.onboardingStatus) && (
-        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-7">
+        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-7">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Submit for review</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-pretty text-sm text-graphite-600">
               Your profile becomes review-only after submission. Operations may request more information.
             </p>
           </div>
           <Input
             label="Authorized signatory email"
             type="email"
+            inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={acceptedByEmail}
             onChange={(event) => setAcceptedByEmail(event.target.value)}
           />
@@ -315,17 +351,24 @@ export default function OnboardingPage() {
             onChange={(event) => setAcceptTerms(event.target.checked)}
             label="I am authorized to accept Marketplace Seller Terms version 2026-07 and confirm that the supplied information is accurate."
           />
-          <div className="flex items-center justify-between gap-3">
-            <p className="flex items-center gap-1.5 text-xs text-slate-500">
-              <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-center gap-1.5 text-xs text-graphite-600">
+              <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-500" />
               {completed}/4 required business details completed
             </p>
-            <Button variant="dark" onClick={submit} disabled={saving || completed < 4} loading={saving}>
+            <Button
+              variant="dark"
+              onClick={submit}
+              disabled={saving || completed < 4}
+              loading={saving}
+              fullWidth
+              className="sm:w-auto"
+            >
               Submit application
             </Button>
           </div>
         </section>
       )}
-    </div>
+    </PageBody>
   );
 }

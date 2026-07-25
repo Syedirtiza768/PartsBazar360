@@ -75,7 +75,7 @@ export default function AccountOverviewPage() {
         <div className="mt-3 grid border-l border-t border-stone-300 md:grid-cols-3">
           {tiles.map(({ href, label, value, detail, icon: Icon }) => (
             <Link key={href} href={href} className="group min-h-44 border-b border-r border-stone-300 bg-white p-5 hover:bg-brand-950 hover:text-white">
-              <div className="flex items-start justify-between"><Icon className="h-6 w-6 text-brand-700 group-hover:text-brand-200" /><span className="font-display text-4xl font-black tabular-nums text-slate-950 group-hover:text-white">{value}</span></div>
+              <div className="flex items-start justify-between gap-2"><Icon className="h-6 w-6 shrink-0 text-brand-700 group-hover:text-brand-200" /><span className="font-display text-3xl font-black tabular-nums text-graphite-950 group-hover:text-white sm:text-4xl">{value}</span></div>
               <h2 className="mt-6 font-display text-lg font-black uppercase text-slate-950 group-hover:text-white">{label}</h2>
               <p className="mt-1 text-sm text-graphite-600 group-hover:text-slate-300">{detail}</p>
             </Link>

@@ -2,22 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * App-specific styling only.
+ *
+ * Focus rings, ::selection, tap-highlight, reduced-motion, the overflow-x
+ * guard, iOS input-zoom prevention, print rules, and the .price / .part-number
+ * / .eyebrow / .skip-link / .scrollbar-thin helpers all live in the shared
+ * preset (packages/ui/tailwind-preset.cjs) so all five apps get them. Do not
+ * re-declare them here.
+ */
+
 @layer base {
   html {
     scroll-behavior: smooth;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
   }
 
   /* --font-sans / --font-display are supplied by next/font/local in
@@ -25,8 +22,7 @@
      metrics. Never name a family here that isn't actually loaded — that is
      how the display type silently disappeared on iOS. */
   body {
-    @apply text-slate-700 antialiased;
-    background: #f4f2ed;
+    @apply bg-canvas text-graphite-700 antialiased;
     font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     text-rendering: optimizeLegibility;
   }
@@ -37,40 +33,9 @@
   .font-display {
     font-family: var(--font-display), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
   }
-
-  /* Consistent, visible keyboard focus everywhere. */
-  :focus-visible {
-    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white rounded-sm;
-  }
-
-  ::selection {
-    @apply bg-brand-100 text-brand-900;
-  }
-
-  button,
-  a,
-  input,
-  select,
-  textarea {
-    -webkit-tap-highlight-color: transparent;
-  }
 }
 
 @layer utilities {
-  /* Prices and quantities align vertically in tables and cards. */
-  .price {
-    @apply font-bold tabular-nums tracking-tight text-slate-950;
-  }
-
-  /* Part / OE / VIN / order identifiers. */
-  .part-number {
-    @apply font-mono text-[13px] tracking-wide;
-  }
-
-  .eyebrow {
-    @apply text-[11px] font-black uppercase tracking-[0.18em] text-brand-700;
-  }
-
   .technical-grid {
     background-image:
       linear-gradient(rgb(15 23 42 / 0.055) 1px, transparent 1px),
@@ -78,31 +43,18 @@
     background-size: 28px 28px;
   }
 
+  /* The grid is decoration. At phone widths a 28px cell reads as noise behind
+     the hero copy, so tighten the cell and lighten the rule instead. */
+  @media (max-width: 639.98px) {
+    .technical-grid {
+      background-image:
+        linear-gradient(rgb(15 23 42 / 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgb(15 23 42 / 0.04) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+  }
+
   .section-rule {
-    @apply border-t-2 border-slate-950 pt-4;
+    @apply border-t-2 border-graphite-950 pt-4;
   }
-
-  .skip-link {
-    @apply fixed left-3 top-3 z-[100] -translate-y-20 bg-white px-4 py-3 text-sm font-bold text-slate-950 shadow-overlay transition-transform focus:translate-y-0;
-  }
-
-  .scrollbar-thin {
-    scrollbar-width: thin;
-  }
-  .scrollbar-thin::-webkit-scrollbar {
-    height: 6px;
-    width: 6px;
-  }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-slate-300;
-  }
-}
-
-/* Ensure aspect-ratio utilities survive even if Tailwind purging misses a class */
-.aspect-square {
-  aspect-ratio: 1 / 1;
-}
-
-.aspect-video {
-  aspect-ratio: 16 / 9;
 }

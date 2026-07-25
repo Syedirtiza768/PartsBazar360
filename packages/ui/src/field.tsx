@@ -13,10 +13,17 @@ import { cn } from "./cn";
  * Form primitives with built-in label / hint / error wiring.
  * Every control is labeled (visually or via aria-label) and errors are
  * announced through aria-describedby + aria-invalid.
+ *
+ * Sizing note: controls are 16px on phones and 14px from `sm` up. iOS Safari
+ * zooms the whole viewport whenever a focused control renders below 16px and
+ * never zooms back out, which strands the user mid-form at 1.3× with the rest
+ * of the page off-screen. The preset enforces the same floor defensively, but
+ * the primitives declare it explicitly so the intent is visible at the call
+ * site.
  */
 
 export const inputBaseClasses =
-  "block w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 " +
+  "block w-full min-h-touch rounded-lg border bg-white px-3.5 py-2.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 " +
   "transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 " +
   "disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed";
 
@@ -45,7 +52,7 @@ function FieldShell({
   children,
 }: FieldChrome & { id: string; children: ReactNode }) {
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("w-full min-w-0", className)}>
       {label && (
         <label
           htmlFor={id}
@@ -59,12 +66,17 @@ function FieldShell({
         </label>
       )}
       {children}
+      {/*
+        Validation messages sit in the flow rather than in a tooltip or an
+        absolutely positioned bubble, so they can never be clipped by a drawer
+        or scrolled out of reach on a short viewport.
+      */}
       {error ? (
         <p id={`${id}-error`} className="mt-1.5 text-xs font-medium text-red-600" role="alert">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1.5 text-xs text-slate-500">
+        <p id={`${id}-hint`} className="mt-1.5 text-xs text-graphite-600">
           {hint}
         </p>
       ) : null}
@@ -119,7 +131,9 @@ export function Select({
           required={required}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(id, hint, error)}
-          className={cn(inputBaseClasses, borderFor(error), "appearance-none pr-10")}
+          // `truncate` keeps a long option label (engine + transmission + trim)
+          // from pushing the control wider than its grid cell.
+          className={cn(inputBaseClasses, borderFor(error), "appearance-none truncate pr-10")}
           {...rest}
         >
           {children}
@@ -159,7 +173,7 @@ export function Textarea({
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)}
-        className={cn(inputBaseClasses, borderFor(error), "min-h-[96px] resize-y")}
+        className={cn(inputBaseClasses, borderFor(error), "min-h-[104px] resize-y")}
         {...rest}
       />
     </FieldShell>
@@ -173,20 +187,100 @@ export interface CheckboxProps
   className?: string;
 }
 
+/**
+ * The whole row is the label, so the tap target is the full width of the field
+ * rather than the 16px box — the difference between a checkbox that works with
+ * a thumb and one that does not.
+ */
 export function Checkbox({ label, description, className, ...rest }: CheckboxProps) {
   const id = useId();
   return (
-    <label htmlFor={id} className={cn("flex cursor-pointer items-start gap-3", className)}>
+    <label
+      htmlFor={id}
+      className={cn(
+        "flex min-h-touch cursor-pointer items-start gap-3 py-1.5",
+        "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60",
+        className,
+      )}
+    >
       <input
         id={id}
         type="checkbox"
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+        className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
         {...rest}
       />
-      <span className="text-sm text-slate-700">
+      <span className="min-w-0 text-sm text-slate-700">
         {label}
-        {description && <span className="mt-0.5 block text-xs text-slate-500">{description}</span>}
+        {description && <span className="mt-0.5 block text-xs text-graphite-600">{description}</span>}
       </span>
     </label>
+  );
+}
+
+export interface RadioProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "className" | "type"> {
+  label: ReactNode;
+  description?: string;
+  className?: string;
+}
+
+export function Radio({ label, description, className, ...rest }: RadioProps) {
+  const id = useId();
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        "flex min-h-touch cursor-pointer items-start gap-3 py-1.5",
+        "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60",
+        className,
+      )}
+    >
+      <input
+        id={id}
+        type="radio"
+        className="mt-0.5 h-5 w-5 shrink-0 border-slate-300 text-brand-600 focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+        {...rest}
+      />
+      <span className="min-w-0 text-sm text-slate-700">
+        {label}
+        {description && <span className="mt-0.5 block text-xs text-graphite-600">{description}</span>}
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Groups related controls with a shared legend, and stacks them in one column
+ * on phones. Use for address blocks, payment details, and anything a screen
+ * reader should announce as one unit.
+ */
+export function Fieldset({
+  legend,
+  hint,
+  columns = 2,
+  className,
+  children,
+}: {
+  legend: string;
+  hint?: string;
+  /** Column count from `sm` up; always one column below it. */
+  columns?: 1 | 2 | 3;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className={cn("min-w-0", className)}>
+      <legend className="text-sm font-semibold text-slate-900">{legend}</legend>
+      {hint && <p className="mt-1 text-xs text-graphite-600">{hint}</p>}
+      <div
+        className={cn(
+          "mt-3 grid grid-cols-1 gap-x-4 gap-y-3.5",
+          columns === 2 && "sm:grid-cols-2",
+          columns === 3 && "sm:grid-cols-2 lg:grid-cols-3",
+        )}
+      >
+        {children}
+      </div>
+    </fieldset>
   );
 }

@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -79,7 +83,9 @@ export class StripeService {
       },
     });
 
-    this.logger.log(`Stripe Checkout Session ${session.id} for order ${input.orderId}`);
+    this.logger.log(
+      `Stripe Checkout Session ${session.id} for order ${input.orderId}`,
+    );
     return session;
   }
 

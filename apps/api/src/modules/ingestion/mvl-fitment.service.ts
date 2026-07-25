@@ -26,12 +26,18 @@ export class MvlFitmentService {
   constructor(private readonly prisma: PrismaService) {}
 
   async hasMvlData(): Promise<boolean> {
-    const hit = await this.prisma.mvlVehicle.findFirst({ select: { id: true } });
+    const hit = await this.prisma.mvlVehicle.findFirst({
+      select: { id: true },
+    });
     return Boolean(hit);
   }
 
   /** True when at least one MVL row exists for year+make+model (model variants tried). */
-  async ymmExists(year: number, make: string, model: string): Promise<{
+  async ymmExists(
+    year: number,
+    make: string,
+    model: string,
+  ): Promise<{
     exists: boolean;
     make: string;
     model: string;
@@ -47,7 +53,12 @@ export class MvlFitmentService {
       // Prefer DE/UK for European catalogs, then AU, then US (explicit priority).
       for (const market of ['DE', 'UK', 'AU', 'US'] as const) {
         const hit = await this.prisma.mvlVehicle.findFirst({
-          where: { year, normalizedMake: nMake, normalizedModel: nModel, market },
+          where: {
+            year,
+            normalizedMake: nMake,
+            normalizedModel: nModel,
+            market,
+          },
           select: {
             make: true,
             model: true,
@@ -70,7 +81,15 @@ export class MvlFitmentService {
         }
       }
     }
-    return { exists: false, make, model, epid: null, trim: null, engine: null, market: null };
+    return {
+      exists: false,
+      make,
+      model,
+      epid: null,
+      trim: null,
+      engine: null,
+      market: null,
+    };
   }
 
   /**
@@ -152,14 +171,16 @@ export class MvlFitmentService {
     engine?: string | null;
     source?: string;
   }) {
-    const candidates = expandYears(input.startYear, input.endYear).map((year) => ({
-      year,
-      make: input.make,
-      model: input.model,
-      trim: input.trim,
-      engine: input.engine,
-      source: input.source,
-    }));
+    const candidates = expandYears(input.startYear, input.endYear).map(
+      (year) => ({
+        year,
+        make: input.make,
+        model: input.model,
+        trim: input.trim,
+        engine: input.engine,
+        source: input.source,
+      }),
+    );
     return this.verifyCandidates(candidates);
   }
 
@@ -179,7 +200,11 @@ export class MvlFitmentService {
     const make = await this.prisma.vehicleMake.upsert({
       where: { name: input.make },
       update: {},
-      create: { name: input.make, canonicalName: input.make, displayName: input.make },
+      create: {
+        name: input.make,
+        canonicalName: input.make,
+        displayName: input.make,
+      },
     });
 
     let model = await this.prisma.vehicleModel.findFirst({
@@ -234,7 +259,11 @@ export class MvlFitmentService {
     source: string;
     reviewer: string;
   }) {
-    const fitments: { vehicleConfigId: string; evidenceLevel: string; confidence: number }[] = [];
+    const fitments: {
+      vehicleConfigId: string;
+      evidenceLevel: string;
+      confidence: number;
+    }[] = [];
     for (const c of input.configs) {
       const fitment = await this.prisma.fitment.upsert({
         where: {
@@ -263,18 +292,20 @@ export class MvlFitmentService {
         },
       });
 
-      await this.prisma.fitmentEvidence.create({
-        data: {
-          fitmentId: fitment.id,
-          evidenceType: input.source,
-          evidenceLevel: 'B',
-          confidence: 0.9,
-          source: input.source,
-          verifiedBy: input.reviewer,
-          verifiedAt: new Date(),
-          reason: 'US MVL year/make/model match',
-        },
-      }).catch(() => undefined);
+      await this.prisma.fitmentEvidence
+        .create({
+          data: {
+            fitmentId: fitment.id,
+            evidenceType: input.source,
+            evidenceLevel: 'B',
+            confidence: 0.9,
+            source: input.source,
+            verifiedBy: input.reviewer,
+            verifiedAt: new Date(),
+            reason: 'US MVL year/make/model match',
+          },
+        })
+        .catch(() => undefined);
 
       fitments.push({
         vehicleConfigId: fitment.vehicleConfigId,
@@ -293,7 +324,10 @@ export class MvlFitmentService {
     const seen = new Set<string>();
     const push = (row: any) => {
       if (!row) return;
-      const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+      const year =
+        typeof row.year === 'number'
+          ? row.year
+          : parseInt(String(row.year), 10);
       if (!Number.isFinite(year) || !row.make || !row.model) return;
       const key = `${year}|${String(row.make).toLowerCase()}|${String(row.model).toLowerCase()}|${String(row.trim || '-').toLowerCase()}`;
       if (seen.has(key)) return;

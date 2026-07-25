@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { REVIEW_QUEUE_TYPES, partTypeLabel } from '@repo/catalog-contracts';
+import { Badge } from '@repo/ui/badge';
+import { Button } from '@repo/ui/button';
+import { cn } from '@repo/ui/cn';
+import { PageBody } from '@repo/ui/container';
+import { EmptyState } from '@repo/ui/empty-state';
+import { PageHeader } from '@repo/ui/page-header';
+import { SkeletonText } from '@repo/ui/skeleton';
+import { CheckCircleIcon } from '@repo/ui/icons';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
@@ -81,102 +89,130 @@ export default function CatalogGovernancePage() {
     }
   };
 
+  const countFor = (queueType: string) => queues.find((q) => q.queueType === queueType)?.count || 0;
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-8">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">Catalog governance</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Review queues</h1>
-          <p className="mt-1 text-slate-600">
-            Classification, OEM parsing, authenticity, and match conflicts from seller imports and seed runs.
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Open tasks</p>
-          <p className="text-2xl font-bold text-slate-950">{openTotal}</p>
-        </div>
-      </header>
+    <PageBody size="wide" className="space-y-6 sm:space-y-8">
+      <PageHeader
+        eyebrow="Catalog governance"
+        title="Review queues"
+        description="Classification, OEM parsing, authenticity, and match conflicts from seller imports and seed runs."
+        actions={
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 shadow-card">
+            <p className="text-xs font-semibold uppercase tracking-wide text-graphite-600">Open tasks</p>
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{openTotal}</p>
+          </div>
+        }
+      />
 
       {error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" role="alert">
+        <p className="break-anywhere rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" role="alert">
           {error}
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Queues</h2>
-          <ul className="mt-3 space-y-1">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_minmax(0,1fr)] xl:gap-6">
+        {/*
+          Below xl the queue picker is a horizontal snap rail rather than a
+          stacked list: eight full-width rows would have pushed the tasks
+          themselves two screens down on a phone.
+        */}
+        <nav aria-label="Review queues" className="min-w-0">
+          <h2 className="mb-2 text-sm font-semibold text-slate-900 xl:mb-3">Queues</h2>
+          <ul className="scroll-rail gap-2 pb-1 xl:flex-col xl:gap-1 xl:overflow-visible xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:p-3">
             {REVIEW_QUEUE_TYPES.map((queueType) => {
-              const count = queues.find((q) => q.queueType === queueType)?.count || 0;
+              const active = activeQueue === queueType;
+              const count = countFor(queueType);
               return (
-                <li key={queueType}>
+                <li key={queueType} className="xl:w-full">
                   <button
                     type="button"
                     onClick={() => setActiveQueue(queueType)}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      activeQueue === queueType ? 'bg-blue-50 font-semibold text-blue-800' : 'text-slate-700 hover:bg-slate-50'
-                    }`}
+                    aria-current={active ? 'true' : undefined}
+                    className={cn(
+                      'flex min-h-touch w-full items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                      'xl:justify-between xl:whitespace-normal xl:border-transparent',
+                      active
+                        ? 'border-blue-200 bg-blue-50 font-semibold text-blue-800'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 xl:bg-transparent',
+                    )}
                   >
-                    <span>{queueType.replace(/_/g, ' ')}</span>
-                    <span className="tabular-nums text-xs">{count}</span>
+                    <span className="min-w-0">{queueType.replace(/_/g, ' ')}</span>
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-1.5 text-xs tabular-nums',
+                        active ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-graphite-600',
+                      )}
+                    >
+                      {count}
+                    </span>
                   </button>
                 </li>
               );
             })}
           </ul>
-        </aside>
+        </nav>
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3.5">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold text-slate-900">{activeQueue.replace(/_/g, ' ')}</h2>
           </div>
           {loading ? (
-            <p className="px-5 py-10 text-sm text-slate-500">Loading review tasks…</p>
+            <div className="space-y-4 px-4 py-5 sm:px-5" aria-busy="true">
+              <SkeletonText lines={3} />
+              <SkeletonText lines={3} />
+            </div>
           ) : tasks.length === 0 ? (
-            <p className="px-5 py-10 text-sm text-slate-500">No open tasks in this queue.</p>
+            <div className="p-4 sm:p-5">
+              <EmptyState
+                icon={<CheckCircleIcon />}
+                title="Queue is clear"
+                description="No open tasks in this queue right now."
+              />
+            </div>
           ) : (
             <ul className="divide-y divide-slate-100">
               {tasks.map((task) => (
-                <li key={task.id} className="px-5 py-4">
+                <li key={task.id} className="px-4 py-4 sm:px-5">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                          {task.severity}
-                        </span>
+                        <Badge size="sm" tone="outline">{task.severity}</Badge>
                         {typeof task.confidence === 'number' && (
-                          <span className="text-xs tabular-nums text-slate-500">
+                          <span className="text-xs tabular-nums text-graphite-600">
                             Confidence {(task.confidence * 100).toFixed(0)}%
                           </span>
                         )}
                       </div>
-                      <h3 className="mt-2 text-sm font-semibold text-slate-950">{task.title}</h3>
-                      {task.description && <p className="mt-1 text-sm text-slate-600">{task.description}</p>}
-                      <p className="mt-2 text-xs text-slate-500">
+                      <h3 className="mt-2 text-pretty text-sm font-semibold text-slate-900">{task.title}</h3>
+                      {task.description && (
+                        <p className="mt-1 text-pretty text-sm text-graphite-600">{task.description}</p>
+                      )}
+                      {/* break-anywhere: manufacturer part numbers routinely
+                          exceed the card width on a 320px screen. */}
+                      <p className="mt-2 break-anywhere text-xs text-graphite-600">
                         {task.seller?.name || 'Unknown seller'}
                         {task.canonicalPart
                           ? ` · ${task.canonicalPart.brand || 'No brand'} · ${task.canonicalPart.manufacturerPartNumber || task.canonicalPart.title} · ${partTypeLabel(task.canonicalPart.partType)}`
                           : ''}
                       </p>
                     </div>
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        disabled={resolving === task.id}
+                    <div className="flex flex-wrap gap-2 lg:shrink-0">
+                      <Button
+                        size="sm"
+                        loading={resolving === task.id}
                         onClick={() => resolve(task.id, 'RESOLVED')}
-                        className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
                       >
                         Resolve
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         disabled={resolving === task.id}
                         onClick={() => resolve(task.id, 'DISMISSED')}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                       >
                         Dismiss
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </li>
@@ -185,6 +221,6 @@ export default function CatalogGovernancePage() {
           )}
         </section>
       </div>
-    </div>
+    </PageBody>
   );
 }

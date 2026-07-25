@@ -37,7 +37,9 @@ export class CheckoutController {
   ) {
     const rawBody = req.rawBody;
     if (!rawBody) {
-      throw new BadRequestException('Raw body unavailable for Stripe webhook verification');
+      throw new BadRequestException(
+        'Raw body unavailable for Stripe webhook verification',
+      );
     }
     return this.checkoutService.handleStripeWebhook(rawBody, signature);
   }
@@ -48,7 +50,11 @@ export class CheckoutController {
     @Headers('x-payment-webhook-secret') webhookSecret: string | undefined,
     @Body() body: { status: 'SUCCEEDED' | 'FAILED'; externalId?: string },
   ) {
-    return this.checkoutService.confirmPayment(paymentIntentId, body, webhookSecret);
+    return this.checkoutService.confirmPayment(
+      paymentIntentId,
+      body,
+      webhookSecret,
+    );
   }
 
   /** Authenticated checkout → Stripe hosted Checkout Session. */

@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { PricingService } from '../pricing/pricing.service';
 
 @Controller('merchant/pricing')
@@ -17,6 +24,10 @@ export class MerchantPricingController {
     @Body() body: { category?: string; sellerBasePrice: number },
   ) {
     if (!sellerId) throw new BadRequestException('sellerId is required');
-    return this.pricing.quote(sellerId, body.category, Number(body.sellerBasePrice));
+    return this.pricing.quote(
+      sellerId,
+      body.category,
+      Number(body.sellerBasePrice),
+    );
   }
 }

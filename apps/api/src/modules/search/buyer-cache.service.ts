@@ -17,7 +17,9 @@ export class BuyerCacheService {
       process.env.BUYER_APP_URL ||
       'http://buyer-marketplace:3000/buyer';
     if (!secret) {
-      this.logger.debug('REVALIDATE_SECRET unset — skipping on-demand revalidation');
+      this.logger.debug(
+        'REVALIDATE_SECRET unset — skipping on-demand revalidation',
+      );
       return;
     }
 
@@ -36,7 +38,9 @@ export class BuyerCacheService {
         this.logger.warn(`Revalidate failed for ${partId}: HTTP ${res.status}`);
       }
     } catch (err: any) {
-      this.logger.warn(`Revalidate errored for ${partId}: ${err?.message || err}`);
+      this.logger.warn(
+        `Revalidate errored for ${partId}: ${err?.message || err}`,
+      );
     }
   }
 }

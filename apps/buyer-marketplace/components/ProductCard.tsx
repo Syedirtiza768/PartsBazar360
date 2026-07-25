@@ -67,13 +67,13 @@ export function ProductCard({
           : null;
 
   return (
-    <article className="group relative flex flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover">
+    <article className="group relative flex min-w-0 flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover focus-within:z-10">
       <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
         <Link href={`/part/${part.id}`} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
         <PartImage
           src={image}
           alt={part.title}
-          className="object-contain p-4 transition-transform duration-300 group-hover:scale-[1.035]"
+          className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.035] sm:p-4"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
         <span className="sr-only">View {part.title}</span>
@@ -83,10 +83,10 @@ export function ProductCard({
             {offerCount} offers
           </span>
         )}
-        <WatchlistButton part={part} compact className="absolute right-2 top-2 z-10 bg-white/95" />
+        <WatchlistButton part={part} compact className="absolute right-1.5 top-1.5 z-10 bg-white/95 sm:right-2 sm:top-2" />
       </div>
 
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex min-w-0 flex-1 flex-col p-3 xs:p-3.5 sm:p-4">
         {/* Fitment for the buyer's vehicle — most important signal. */}
         {fitment && (
           <div className="mb-2">
@@ -118,7 +118,7 @@ export function ProductCard({
           </p>
         )}
 
-        <h3 className="min-h-10 text-sm font-semibold leading-snug text-slate-800 group-hover:text-brand-800">
+        <h3 className="min-h-10 text-[13px] font-semibold leading-snug text-slate-800 group-hover:text-brand-800 xs:text-sm">
           <Link href={`/part/${part.id}`} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>
         </h3>
 
@@ -131,12 +131,12 @@ export function ProductCard({
           {identityNumber && (
             <p className="flex items-center gap-1 text-xs text-graphite-600">
               <TagIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="shrink-0">{isAftermarket ? "Brand part no." : "OEM no."}</span>
-              <span className="part-number truncate">{identityNumber}</span>
+              <span className="hidden shrink-0 xs:inline">{isAftermarket ? "Brand part no." : "OEM no."}</span>
+              <span className="part-number min-w-0 truncate">{identityNumber}</span>
             </p>
           )}
           {isAftermarket && referenceMakes.length > 0 && (
-            <p className="truncate text-xs text-graphite-600">Replaces OEM numbers for: {referenceMakes.join(", ")}</p>
+            <p className="line-clamp-2 text-xs text-graphite-600">Replaces OEM numbers for: {referenceMakes.join(", ")}</p>
           )}
           {sellerName && (
             <p className="flex items-center gap-1 text-xs text-graphite-600">
@@ -146,9 +146,9 @@ export function ProductCard({
           )}
         </div>
 
-        <div className="mt-3 flex items-end justify-between gap-3 border-t border-stone-200 pt-3">
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5 border-t border-stone-200 pt-3">
           <Price amount={price} currency={currency} from={offerCount > 1} />
-          <Link href={`/part/${part.id}`} className="text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
+          <Link href={`/part/${part.id}`} className="inline-flex min-h-9 items-center whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
         </div>
       </div>
     </article>

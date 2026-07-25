@@ -42,7 +42,7 @@ function FilterOption({
       rel="nofollow"
       aria-pressed={active}
       className={cn(
-        "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+        "group flex min-h-touch items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors lg:min-h-0",
         active ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
       )}
     >
@@ -57,7 +57,7 @@ function FilterOption({
       >
         {active && <CheckIcon className="h-3 w-3" strokeWidth={3} />}
       </span>
-      <span className="min-w-0 truncate">{label}</span>
+      <span className="min-w-0 text-pretty">{label}</span>
     </Link>
   );
 }
@@ -73,7 +73,7 @@ function FilterGroup({
 }) {
   return (
     <details open={defaultOpen} className="group border-b border-slate-100 pb-4 last:border-0">
-      <summary className="flex cursor-pointer list-none items-center justify-between py-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between gap-2 py-2 text-sm font-semibold text-slate-900 lg:min-h-0 [&::-webkit-details-marker]:hidden">
         {title}
         <svg
           className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
@@ -106,17 +106,17 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
           key={chip.key}
           href={buildHref(params, { [chip.key]: undefined })}
           rel="nofollow"
-          className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-3 pr-2 text-xs font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-100"
+          className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-3 pr-2 text-xs font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-100"
         >
-          {chip.label}
-          <XIcon className="h-3.5 w-3.5" />
+          <span className="min-w-0 truncate">{chip.label}</span>
+          <XIcon className="h-3.5 w-3.5 shrink-0" />
           <span className="sr-only">Remove filter</span>
         </Link>
       ))}
       <Link
         href="/search"
         rel="nofollow"
-        className="text-xs font-medium text-graphite-600 underline-offset-2 hover:text-graphite-950 hover:underline"
+        className="inline-flex min-h-9 items-center px-1 text-xs font-medium text-graphite-600 underline-offset-2 hover:text-graphite-950 hover:underline"
       >
         Clear all
       </Link>
@@ -146,7 +146,7 @@ export function FilterSections({
             rel="nofollow"
             aria-pressed={interchangeOn}
             className={cn(
-              "group flex items-start gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+              "group flex min-h-touch items-start gap-2.5 rounded-md px-2 py-2.5 text-sm transition-colors lg:min-h-0 lg:py-1.5",
               interchangeOn ? "font-semibold text-brand-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
             )}
           >
@@ -228,7 +228,7 @@ export function FilterSections({
           ))}
           {brands.length > 10 && (
             <details>
-              <summary className="cursor-pointer list-none px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 [&::-webkit-details-marker]:hidden">
+              <summary className="flex min-h-touch cursor-pointer list-none items-center px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 lg:min-h-0 [&::-webkit-details-marker]:hidden">
                 Show all {brands.length} brands
               </summary>
               <div className="space-y-0.5">

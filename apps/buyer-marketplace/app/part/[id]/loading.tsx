@@ -2,7 +2,7 @@ import { Skeleton } from "@repo/ui/skeleton";
 
 export default function PartLoading() {
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-8" aria-busy="true">
+    <div className="mx-auto max-w-content gutter pb-16 pt-5" aria-busy="true">
       <Skeleton className="h-4 w-72" />
       <div className="mt-5 grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div>

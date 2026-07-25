@@ -34,7 +34,9 @@ export class FebestWebsiteService {
     string,
     { expiresAt: number; value: FebestLiveEnrichment | null }
   >();
-  private readonly cacheTtlMs = Number(process.env.FEBEST_LIVE_CACHE_TTL_MS || 30 * 60 * 1000);
+  private readonly cacheTtlMs = Number(
+    process.env.FEBEST_LIVE_CACHE_TTL_MS || 30 * 60 * 1000,
+  );
   private readonly searchConcurrency = Math.max(
     1,
     Number(process.env.FEBEST_SEARCH_CONCURRENCY || 6),
@@ -49,7 +51,10 @@ export class FebestWebsiteService {
       canonicalName?: string | null;
     } | null;
     manufacturerPartNumber?: string | null;
-    offers?: Array<{ sellerId?: string | null; seller?: { name?: string | null } | null }>;
+    offers?: Array<{
+      sellerId?: string | null;
+      seller?: { name?: string | null } | null;
+    }>;
   }): boolean {
     const brand = (
       part.brand ||
@@ -74,7 +79,9 @@ export class FebestWebsiteService {
   }
 
   hasFebestImage(part: { imageUrls?: string[] | null }): boolean {
-    return (part.imageUrls || []).some((u) => String(u).includes('static.febest.de'));
+    return (part.imageUrls || []).some((u) =>
+      String(u).includes('static.febest.de'),
+    );
   }
 
   /**
@@ -82,7 +89,9 @@ export class FebestWebsiteService {
    * Does not persist; uses a short in-memory cache so page flips stay fast.
    * Skips compatibility expansion (PDP fetches that live separately).
    */
-  async attachImagesToSearchItems<T extends Record<string, any>>(items: T[]): Promise<T[]> {
+  async attachImagesToSearchItems<T extends Record<string, any>>(
+    items: T[],
+  ): Promise<T[]> {
     if (!items?.length) return items;
 
     const targets = items.filter(
@@ -106,7 +115,9 @@ export class FebestWebsiteService {
 
     const mpns = [...byMpn.keys()];
     await this.mapPool(mpns, this.searchConcurrency, async (mpn) => {
-      const live = await this.fetchLiveByMpn(mpn, { includeCompatibility: false });
+      const live = await this.fetchLiveByMpn(mpn, {
+        includeCompatibility: false,
+      });
       if (!live?.imageUrls?.length) return;
       for (const item of byMpn.get(mpn) || []) {
         item.imageUrls = live.imageUrls;
@@ -140,27 +151,40 @@ export class FebestWebsiteService {
       const catalogUrl = `${BASE}/en/catalog?code=${encodeURIComponent(code)}`;
       const catalogHtml = await this.fetchText(catalogUrl);
       if (!catalogHtml) {
-        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
+        this.cache.set(cacheKey, {
+          expiresAt: Date.now() + 60_000,
+          value: null,
+        });
         return null;
       }
 
       const detailsPath = this.findDetailsPath(catalogHtml, code);
       if (!detailsPath) {
         this.logger.warn(`FEBEST details not found for ${code}`);
-        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
+        this.cache.set(cacheKey, {
+          expiresAt: Date.now() + 60_000,
+          value: null,
+        });
         return null;
       }
 
       const detailsUrl = `${BASE}${detailsPath}`;
       const detailsHtml = await this.fetchText(detailsUrl);
       if (!detailsHtml) {
-        this.cache.set(cacheKey, { expiresAt: Date.now() + 60_000, value: null });
+        this.cache.set(cacheKey, {
+          expiresAt: Date.now() + 60_000,
+          value: null,
+        });
         return null;
       }
 
       const imageUrls = this.parseImages(detailsHtml);
-      const oemNumbers = includeCompatibility ? this.parseOemOptions(detailsHtml) : [];
-      const models = includeCompatibility ? this.parseModelOptions(detailsHtml) : [];
+      const oemNumbers = includeCompatibility
+        ? this.parseOemOptions(detailsHtml)
+        : [];
+      const models = includeCompatibility
+        ? this.parseModelOptions(detailsHtml)
+        : [];
       const compatibility = includeCompatibility
         ? this.buildCompatibilityRows(models)
         : [];
@@ -181,7 +205,9 @@ export class FebestWebsiteService {
       });
       return value;
     } catch (err: any) {
-      this.logger.warn(`FEBEST live fetch failed for ${code}: ${err?.message || err}`);
+      this.logger.warn(
+        `FEBEST live fetch failed for ${code}: ${err?.message || err}`,
+      );
       return null;
     }
   }
@@ -192,12 +218,15 @@ export class FebestWebsiteService {
     worker: (item: T) => Promise<void>,
   ) {
     let cursor = 0;
-    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (cursor < items.length) {
-        const idx = cursor++;
-        await worker(items[idx]);
-      }
-    });
+    const runners = Array.from(
+      { length: Math.min(concurrency, items.length) },
+      async () => {
+        while (cursor < items.length) {
+          const idx = cursor++;
+          await worker(items[idx]);
+        }
+      },
+    );
     await Promise.all(runners);
   }
 
@@ -234,8 +263,12 @@ export class FebestWebsiteService {
     const m = html.match(exact);
     if (m?.[1]) return m[1];
 
-    const all = [...html.matchAll(/href="(\/en\/details\/[^"]+)"/gi)].map((x) => x[1]);
-    return all.find((href) => href.toLowerCase().endsWith(`-${codeSlug}`)) || null;
+    const all = [...html.matchAll(/href="(\/en\/details\/[^"]+)"/gi)].map(
+      (x) => x[1],
+    );
+    return (
+      all.find((href) => href.toLowerCase().endsWith(`-${codeSlug}`)) || null
+    );
   }
 
   private parseOemOptions(html: string): string[] {
@@ -263,13 +296,14 @@ export class FebestWebsiteService {
   }
 
   private parseImages(html: string): string[] {
-    const urls = [...html.matchAll(/https:\/\/static\.febest\.de\/images\/[^"'>\s]+/gi)].map(
-      (m) => m[0].replace(/&amp;/g, '&'),
-    );
+    const urls = [
+      ...html.matchAll(/https:\/\/static\.febest\.de\/images\/[^"'>\s]+/gi),
+    ].map((m) => m[0].replace(/&amp;/g, '&'));
     const unique = [...new Set(urls)];
     const big = unique.filter((u) => /\/images\/big\//i.test(u));
     const photos = unique.filter(
-      (u) => !/\/images\/big\//i.test(u) && /_p\d+\.(jpg|jpeg|png|webp)$/i.test(u),
+      (u) =>
+        !/\/images\/big\//i.test(u) && /_p\d+\.(jpg|jpeg|png|webp)$/i.test(u),
     );
     const rest = unique.filter(
       (u) =>

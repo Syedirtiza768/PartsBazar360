@@ -20,14 +20,14 @@ export function SortSelect({ current }: { current: string }) {
   };
 
   return (
-    <label className="flex items-center gap-2">
+    <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
       <span className="hidden text-sm text-graphite-600 sm:inline">Sort</span>
       <span className="sr-only sm:hidden">Sort results</span>
-      <div className="relative">
+      <div className="relative min-w-0 flex-1 sm:flex-none">
         <select
           value={current}
           onChange={(e) => handleChange(e.target.value)}
-          className="h-10 appearance-none rounded-lg border border-slate-300 bg-white pl-3.5 pr-9 text-sm font-medium text-slate-700 transition-colors hover:border-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60"
+          className="h-11 w-full appearance-none truncate rounded-lg border border-slate-300 bg-white pl-3.5 pr-9 text-base font-medium text-graphite-700 transition-colors hover:border-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60 sm:h-10 sm:w-auto sm:text-sm"
         >
           {OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>

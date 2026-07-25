@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
 import {
@@ -12,7 +16,11 @@ import { createHash } from 'node:crypto';
 import { SpreadsheetParserService } from '../catalog-import/spreadsheet-parser.service';
 import { classifyPart } from '../catalog-import/classification.util';
 import { parseCompoundOemReferences } from '../catalog-import/oem-reference.parser';
-import { deterministicSourceKey, normalizeMasterName, normalizePartNumber } from '../catalog-import/part-normalization.util';
+import {
+  deterministicSourceKey,
+  normalizeMasterName,
+  normalizePartNumber,
+} from '../catalog-import/part-normalization.util';
 import { CatalogMatchService } from '../catalog-import/catalog-match.service';
 import { ReviewTaskService } from '../catalog-import/review-task.service';
 import { CatalogAuditService } from '../catalog-import/catalog-audit.service';
@@ -87,7 +95,8 @@ function normalizePartSource(value?: string | null) {
 function normalizeQualityTier(value?: string | null) {
   const raw = (value || '').toUpperCase();
   if (CONDITION_LABELS[raw]) return CONDITION_LABELS[raw];
-  if (raw.includes('FOR PART') || raw.includes('NOT WORKING')) return 'FOR_PARTS';
+  if (raw.includes('FOR PART') || raw.includes('NOT WORKING'))
+    return 'FOR_PARTS';
   if (raw.includes('REMAN')) return 'REMANUFACTURED';
   if (raw.includes('REFURB')) return 'REFURBISHED';
   if (raw.includes('NEW')) return 'NEW';
@@ -129,7 +138,9 @@ function parseDelimitedFile(buffer: Buffer): ParsedUploadRow[] {
     const cells = parseCsvLine(line);
     const raw: Record<string, string> = {};
     headers.forEach((header, i) => {
-      const mapped = HEADER_MAP[normalizeHeader(header)] || HEADER_MAP[header.toLowerCase().trim()];
+      const mapped =
+        HEADER_MAP[normalizeHeader(header)] ||
+        HEADER_MAP[header.toLowerCase().trim()];
       if (mapped && cells[i]) raw[mapped] = cells[i];
     });
     return { rowNumber: index + 2, raw };
@@ -149,7 +160,8 @@ export class MerchantUploadsService {
   ) {}
 
   async listJobs(sellerId: string) {
-    if (!sellerId) throw new BadRequestException('sellerId query parameter is required');
+    if (!sellerId)
+      throw new BadRequestException('sellerId query parameter is required');
     return this.prisma.sellerUploadJob.findMany({
       where: { sellerId },
       orderBy: { createdAt: 'desc' },
@@ -196,17 +208,21 @@ export class MerchantUploadsService {
     if (!seller) throw new NotFoundException('Seller not found');
 
     const parsedSheets = await this.spreadsheetParser.parse(fileName, buffer);
-    const parsedRows: ParsedUploadRow[] = parsedSheets.flatMap((sheet) => sheet.rows.map((row) => ({
-      ...row,
-      raw: {
-        ...row.raw,
-        __template: sheet.template,
-        __suggestedBrand: sheet.suggestedDefaults.brand || '',
-        __suggestedPartType: sheet.suggestedDefaults.partType || '',
-      },
-    })));
+    const parsedRows: ParsedUploadRow[] = parsedSheets.flatMap((sheet) =>
+      sheet.rows.map((row) => ({
+        ...row,
+        raw: {
+          ...row.raw,
+          __template: sheet.template,
+          __suggestedBrand: sheet.suggestedDefaults.brand || '',
+          __suggestedPartType: sheet.suggestedDefaults.partType || '',
+        },
+      })),
+    );
     if (parsedRows.length === 0) {
-      throw new BadRequestException('Upload file must contain a header row and at least one data row');
+      throw new BadRequestException(
+        'Upload file must contain a header row and at least one data row',
+      );
     }
 
     const defaultPartSource = normalizePartSource(opts.defaultPartSource);
@@ -217,12 +233,18 @@ export class MerchantUploadsService {
       where: { sellerId, fileChecksum },
       include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
-    if (existingJob?.status === 'COMPLETED' || existingJob?.status === 'NEEDS_REVIEW' || existingJob?.status === 'PREVIEW_READY') {
+    if (
+      existingJob?.status === 'COMPLETED' ||
+      existingJob?.status === 'NEEDS_REVIEW' ||
+      existingJob?.status === 'PREVIEW_READY'
+    ) {
       return existingJob;
     }
 
     const sanitizeHeaders = (headers: string[]) =>
-      headers.map((header, index) => (header && header.trim() ? header : `column_${index + 1}`));
+      headers.map((header, index) =>
+        header && header.trim() ? header : `column_${index + 1}`,
+      );
 
     const detection = {
       sheets: parsedSheets.map((sheet) => ({
@@ -244,14 +266,25 @@ export class MerchantUploadsService {
         defaultPartSource,
         defaultQualityTier,
         fileChecksum,
-        mimeType: fileName.toLowerCase().endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
-        sourceSheet: parsedSheets.length === 1 ? parsedSheets[0].sheetName : null,
-        defaultBrand: opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand || null,
+        mimeType: fileName.toLowerCase().endsWith('.xlsx')
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv',
+        sourceSheet:
+          parsedSheets.length === 1 ? parsedSheets[0].sheetName : null,
+        defaultBrand:
+          opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand || null,
         defaultCurrency: opts.defaultCurrency || null,
         defaultWeightUnit: opts.defaultWeightUnit || null,
         defaultDimensionUnit: opts.defaultDimensionUnit || null,
         commitMode,
-        catalogType: opts.catalogType || (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' || parsedSheets[0]?.template === 'DYNATRADE_STOCK' ? 'AFTERMARKET' : parsedSheets[0]?.template === 'DXB_EXW' ? 'MIXED' : null),
+        catalogType:
+          opts.catalogType ||
+          (parsedSheets[0]?.template === 'FEBEST_AVAILABILITY' ||
+          parsedSheets[0]?.template === 'DYNATRADE_STOCK'
+            ? 'AFTERMARKET'
+            : parsedSheets[0]?.template === 'DXB_EXW'
+              ? 'MIXED'
+              : null),
         detection,
         mapping: parsedSheets.map((sheet) => ({
           sheet: sheet.sheetName,
@@ -261,9 +294,15 @@ export class MerchantUploadsService {
       },
     });
 
-    const warehouse = seller.warehouses[0] ?? await this.prisma.warehouse.create({
-      data: { sellerId, name: `${seller.name} Default Warehouse`, location: 'Marketplace intake' },
-    });
+    const warehouse =
+      seller.warehouses[0] ??
+      (await this.prisma.warehouse.create({
+        data: {
+          sellerId,
+          name: `${seller.name} Default Warehouse`,
+          location: 'Marketplace intake',
+        },
+      }));
 
     let insertedRows = 0;
     let reviewRows = 0;
@@ -279,34 +318,45 @@ export class MerchantUploadsService {
     };
 
     for (const row of parsedRows) {
-      const result = await this.processRow(job.id, sellerId, seller.name, seller.onboardingStatus, warehouse.id, row, {
-        defaultPartSource,
-        defaultQualityTier,
-        defaultBrand: opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand,
-        defaultCurrency: opts.defaultCurrency,
-        defaultWeightUnit: opts.defaultWeightUnit,
-        defaultDimensionUnit: opts.defaultDimensionUnit,
-        fileName,
-        fileChecksum,
-        commitMode,
-        preview,
-      });
+      const result = await this.processRow(
+        job.id,
+        sellerId,
+        seller.name,
+        seller.onboardingStatus,
+        warehouse.id,
+        row,
+        {
+          defaultPartSource,
+          defaultQualityTier,
+          defaultBrand:
+            opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand,
+          defaultCurrency: opts.defaultCurrency,
+          defaultWeightUnit: opts.defaultWeightUnit,
+          defaultDimensionUnit: opts.defaultDimensionUnit,
+          fileName,
+          fileChecksum,
+          commitMode,
+          preview,
+        },
+      );
       if (result.status === 'INVALID') invalidRows++;
       else if (result.status === 'NEEDS_REVIEW' || result.status === 'STAGED') {
         if (result.status === 'NEEDS_REVIEW') reviewRows++;
         else if (commitMode === 'STAGED' && result.needsReview) reviewRows++;
         else insertedRows++;
       } else insertedRows++;
-      if (result.message) warnings.push(`Row ${row.rowNumber}: ${result.message}`);
+      if (result.message)
+        warnings.push(`Row ${row.rowNumber}: ${result.message}`);
     }
 
-    const finalStatus = invalidRows === parsedRows.length
-      ? 'FAILED'
-      : commitMode === 'STAGED'
-        ? 'PREVIEW_READY'
-        : reviewRows > 0
-          ? 'NEEDS_REVIEW'
-          : 'COMPLETED';
+    const finalStatus =
+      invalidRows === parsedRows.length
+        ? 'FAILED'
+        : commitMode === 'STAGED'
+          ? 'PREVIEW_READY'
+          : reviewRows > 0
+            ? 'NEEDS_REVIEW'
+            : 'COMPLETED';
 
     return this.prisma.sellerUploadJob.update({
       where: { id: job.id },
@@ -323,7 +373,8 @@ export class MerchantUploadsService {
           sheetsProcessed: parsedSheets.length,
           rowsRead: parsedRows.length,
           rowsImported: commitMode === 'IMMEDIATE' ? insertedRows : 0,
-          rowsStaged: commitMode === 'STAGED' ? parsedRows.length - invalidRows : 0,
+          rowsStaged:
+            commitMode === 'STAGED' ? parsedRows.length - invalidRows : 0,
           rowsReview: reviewRows,
           rowsRejected: invalidRows,
           preview,
@@ -335,14 +386,20 @@ export class MerchantUploadsService {
     });
   }
 
-  async updateMapping(jobId: string, mapping: unknown, defaults?: {
-    defaultBrand?: string;
-    defaultCurrency?: string;
-    defaultWeightUnit?: string;
-    defaultDimensionUnit?: string;
-    catalogType?: string;
-  }) {
-    const job = await this.prisma.sellerUploadJob.findUnique({ where: { id: jobId } });
+  async updateMapping(
+    jobId: string,
+    mapping: unknown,
+    defaults?: {
+      defaultBrand?: string;
+      defaultCurrency?: string;
+      defaultWeightUnit?: string;
+      defaultDimensionUnit?: string;
+      catalogType?: string;
+    },
+  ) {
+    const job = await this.prisma.sellerUploadJob.findUnique({
+      where: { id: jobId },
+    });
     if (!job) throw new NotFoundException('Upload job not found');
     return this.prisma.sellerUploadJob.update({
       where: { id: jobId },
@@ -351,7 +408,8 @@ export class MerchantUploadsService {
         defaultBrand: defaults?.defaultBrand ?? job.defaultBrand,
         defaultCurrency: defaults?.defaultCurrency ?? job.defaultCurrency,
         defaultWeightUnit: defaults?.defaultWeightUnit ?? job.defaultWeightUnit,
-        defaultDimensionUnit: defaults?.defaultDimensionUnit ?? job.defaultDimensionUnit,
+        defaultDimensionUnit:
+          defaults?.defaultDimensionUnit ?? job.defaultDimensionUnit,
         catalogType: defaults?.catalogType ?? job.catalogType,
         status: job.commitMode === 'STAGED' ? 'MAPPING' : job.status,
       },
@@ -361,13 +419,24 @@ export class MerchantUploadsService {
   async commitJob(jobId: string) {
     const job = await this.getJob(jobId);
     if (job.commitMode !== 'STAGED') {
-      throw new BadRequestException('Only STAGED import jobs can be committed explicitly');
+      throw new BadRequestException(
+        'Only STAGED import jobs can be committed explicitly',
+      );
     }
-    if (!['PREVIEW_READY', 'NEEDS_REVIEW', 'MAPPING', 'STAGING'].includes(job.status)) {
-      throw new BadRequestException(`Job status ${job.status} is not committable`);
+    if (
+      !['PREVIEW_READY', 'NEEDS_REVIEW', 'MAPPING', 'STAGING'].includes(
+        job.status,
+      )
+    ) {
+      throw new BadRequestException(
+        `Job status ${job.status} is not committable`,
+      );
     }
 
-    await this.prisma.sellerUploadJob.update({ where: { id: jobId }, data: { status: 'COMMITTING' } });
+    await this.prisma.sellerUploadJob.update({
+      where: { id: jobId },
+      data: { status: 'COMMITTING' },
+    });
 
     const seller = await this.prisma.seller.findUnique({
       where: { id: job.sellerId },
@@ -390,25 +459,36 @@ export class MerchantUploadsService {
         insertedRows++;
         continue;
       }
-      const staged = (row.stagedPayload || row.normalizedData || {}) as Record<string, any>;
+      const staged = (row.stagedPayload || row.normalizedData || {}) as Record<
+        string,
+        any
+      >;
       const raw = (row.rawData || {}) as Record<string, string>;
-      const result = await this.processRow(job.id, seller.id, seller.name, seller.onboardingStatus, warehouse.id, {
-        rowNumber: row.rowNumber,
-        sheetName: job.sourceSheet || undefined,
-        raw: { ...raw, ...(staged.rawOverrides || {}) },
-        original: raw,
-      }, {
-        defaultPartSource: job.defaultPartSource,
-        defaultQualityTier: job.defaultQualityTier,
-        defaultBrand: job.defaultBrand || undefined,
-        defaultCurrency: job.defaultCurrency || undefined,
-        defaultWeightUnit: job.defaultWeightUnit || undefined,
-        defaultDimensionUnit: job.defaultDimensionUnit || undefined,
-        fileName: job.fileName,
-        fileChecksum: job.fileChecksum || job.id,
-        commitMode: 'IMMEDIATE',
-        existingRowId: row.id,
-      });
+      const result = await this.processRow(
+        job.id,
+        seller.id,
+        seller.name,
+        seller.onboardingStatus,
+        warehouse.id,
+        {
+          rowNumber: row.rowNumber,
+          sheetName: job.sourceSheet || undefined,
+          raw: { ...raw, ...(staged.rawOverrides || {}) },
+          original: raw,
+        },
+        {
+          defaultPartSource: job.defaultPartSource,
+          defaultQualityTier: job.defaultQualityTier,
+          defaultBrand: job.defaultBrand || undefined,
+          defaultCurrency: job.defaultCurrency || undefined,
+          defaultWeightUnit: job.defaultWeightUnit || undefined,
+          defaultDimensionUnit: job.defaultDimensionUnit || undefined,
+          fileName: job.fileName,
+          fileChecksum: job.fileChecksum || job.id,
+          commitMode: 'IMMEDIATE',
+          existingRowId: row.id,
+        },
+      );
       if (result.status === 'INVALID') invalidRows++;
       else if (result.status === 'NEEDS_REVIEW') reviewRows++;
       else insertedRows++;
@@ -426,14 +506,21 @@ export class MerchantUploadsService {
     return this.prisma.sellerUploadJob.update({
       where: { id: jobId },
       data: {
-        status: invalidRows === job.rows.length ? 'FAILED' : reviewRows > 0 ? 'NEEDS_REVIEW' : 'COMPLETED',
+        status:
+          invalidRows === job.rows.length
+            ? 'FAILED'
+            : reviewRows > 0
+              ? 'NEEDS_REVIEW'
+              : 'COMPLETED',
         insertedRows,
         reviewRows,
         invalidRows,
         processedRows: job.rows.length,
         completedAt: new Date(),
         report: {
-          ...(typeof job.report === 'object' && job.report ? job.report as object : {}),
+          ...(typeof job.report === 'object' && job.report
+            ? (job.report as object)
+            : {}),
           rowsImported: insertedRows,
           rowsReview: reviewRows,
           rowsRejected: invalidRows,
@@ -472,50 +559,96 @@ export class MerchantUploadsService {
     },
   ) {
     const raw = row.raw;
-    const brand = raw.brand?.trim() || defaults.defaultBrand || raw.__suggestedBrand || undefined;
-    const manufacturerPartNumber = raw.manufacturerPartNumber?.trim() || raw.mpn?.trim();
+    const brand =
+      raw.brand?.trim() ||
+      defaults.defaultBrand ||
+      raw.__suggestedBrand ||
+      undefined;
+    const manufacturerPartNumber =
+      raw.manufacturerPartNumber?.trim() || raw.mpn?.trim();
     const description = raw.description?.trim() || raw.title?.trim();
-    const title = raw.title?.trim()
-      || (description && manufacturerPartNumber ? `${brand ? `${brand} ` : ''}${description} – ${manufacturerPartNumber}` : undefined)
-      || (brand && manufacturerPartNumber ? `${brand} Part – ${manufacturerPartNumber}` : undefined);
+    const title =
+      raw.title?.trim() ||
+      (description && manufacturerPartNumber
+        ? `${brand ? `${brand} ` : ''}${description} – ${manufacturerPartNumber}`
+        : undefined) ||
+      (brand && manufacturerPartNumber
+        ? `${brand} Part – ${manufacturerPartNumber}`
+        : undefined);
     if (!title || !manufacturerPartNumber) {
-      const missing = [!title ? 'Missing title/description and identity fallback' : '', !manufacturerPartNumber ? 'Missing manufacturer/OEM part number' : ''].filter(Boolean);
-      await this.createUploadRow(uploadJobId, row, 'INVALID', missing, {}, defaults.existingRowId);
-      return { status: 'INVALID', message: missing.join('; '), needsReview: false };
+      const missing = [
+        !title ? 'Missing title/description and identity fallback' : '',
+        !manufacturerPartNumber ? 'Missing manufacturer/OEM part number' : '',
+      ].filter(Boolean);
+      await this.createUploadRow(
+        uploadJobId,
+        row,
+        'INVALID',
+        missing,
+        {},
+        defaults.existingRowId,
+      );
+      return {
+        status: 'INVALID',
+        message: missing.join('; '),
+        needsReview: false,
+      };
     }
 
     const preferredCurrency = (defaults.defaultCurrency || '').toUpperCase();
-    const primaryCurrency = preferredCurrency === 'USD' && raw.priceUsd
-      ? 'USD'
-      : preferredCurrency === 'AED' && raw.priceAed
-        ? 'AED'
-        : raw.priceAed && preferredCurrency !== 'USD'
+    const primaryCurrency =
+      preferredCurrency === 'USD' && raw.priceUsd
+        ? 'USD'
+        : preferredCurrency === 'AED' && raw.priceAed
           ? 'AED'
-          : raw.priceUsd
-            ? 'USD'
-            : raw.currency?.trim() || defaults.defaultCurrency || '';
-    const priceText = preferredCurrency === 'USD'
-      ? (raw.priceUsd || raw.price || raw.priceAed || '')
-      : preferredCurrency === 'AED'
-        ? (raw.priceAed || raw.price || raw.priceUsd || '')
-        : (raw.priceAed || raw.priceUsd || raw.price || '');
+          : raw.priceAed && preferredCurrency !== 'USD'
+            ? 'AED'
+            : raw.priceUsd
+              ? 'USD'
+              : raw.currency?.trim() || defaults.defaultCurrency || '';
+    const priceText =
+      preferredCurrency === 'USD'
+        ? raw.priceUsd || raw.price || raw.priceAed || ''
+        : preferredCurrency === 'AED'
+          ? raw.priceAed || raw.price || raw.priceUsd || ''
+          : raw.priceAed || raw.priceUsd || raw.price || '';
     const price = priceText ? Number(priceText.replace(/[$,\s]/g, '')) : 0;
-    const stockSharjah = raw.stockSharjah === undefined || raw.stockSharjah === '' ? null : parseInt(raw.stockSharjah, 10);
-    const stockJebelAli = raw.stockJebelAli === undefined || raw.stockJebelAli === '' ? null : parseInt(raw.stockJebelAli, 10);
-    const quantity = raw.quantity !== undefined && raw.quantity !== ''
-      ? parseInt(raw.quantity, 10)
-      : [stockSharjah, stockJebelAli].some((value) => value !== null)
-        ? (stockSharjah ?? 0) + (stockJebelAli ?? 0)
-        : 0;
+    const stockSharjah =
+      raw.stockSharjah === undefined || raw.stockSharjah === ''
+        ? null
+        : parseInt(raw.stockSharjah, 10);
+    const stockJebelAli =
+      raw.stockJebelAli === undefined || raw.stockJebelAli === ''
+        ? null
+        : parseInt(raw.stockJebelAli, 10);
+    const quantity =
+      raw.quantity !== undefined && raw.quantity !== ''
+        ? parseInt(raw.quantity, 10)
+        : [stockSharjah, stockJebelAli].some((value) => value !== null)
+          ? (stockSharjah ?? 0) + (stockJebelAli ?? 0)
+          : 0;
     if (quantity <= 0) {
-      await this.createUploadRow(uploadJobId, row, 'SKIPPED', ['Zero or missing stock — excluded from live catalog'], {}, defaults.existingRowId);
-      return { status: 'SKIPPED', message: 'Zero stock excluded', needsReview: false };
+      await this.createUploadRow(
+        uploadJobId,
+        row,
+        'SKIPPED',
+        ['Zero or missing stock — excluded from live catalog'],
+        {},
+        defaults.existingRowId,
+      );
+      return {
+        status: 'SKIPPED',
+        message: 'Zero stock excluded',
+        needsReview: false,
+      };
     }
     const imageUrls = (raw.imageUrls || '')
       .split('|')
       .map((u) => u.trim())
       .filter(Boolean);
-    const parsedOemReferences = parseCompoundOemReferences(raw.oemReferences || raw.oemPartNumber || '');
+    const parsedOemReferences = parseCompoundOemReferences(
+      raw.oemReferences || raw.oemPartNumber || '',
+    );
     const oeNumbers = [
       ...parsedOemReferences.map((reference) => reference.displayNumber),
       ...extractOeNumbers(title),
@@ -523,17 +656,23 @@ export class MerchantUploadsService {
     const parsedVehicle = parseVehicleFromTitle(title);
     const category = raw.category?.trim() || extractCategory(title);
     const classification = classifyPart({
-      declaredType: raw.partType || raw.__suggestedPartType || defaults.defaultPartSource,
+      declaredType:
+        raw.partType || raw.__suggestedPartType || defaults.defaultPartSource,
       brand,
       condition: raw.condition,
-      sourceContext: raw.__template === 'FEBEST_AVAILABILITY' || raw.__template === 'DYNATRADE_STOCK'
-        ? 'AFTERMARKET_CATALOG'
-        : raw.__template === 'DXB_EXW'
-          ? 'MIXED_CATALOG'
-          : undefined,
+      sourceContext:
+        raw.__template === 'FEBEST_AVAILABILITY' ||
+        raw.__template === 'DYNATRADE_STOCK'
+          ? 'AFTERMARKET_CATALOG'
+          : raw.__template === 'DXB_EXW'
+            ? 'MIXED_CATALOG'
+            : undefined,
     });
-    const partSource = classification.partType === 'AFTERMARKET' ? 'AFTERMARKET' : 'OEM';
-    const qualityTier = normalizeQualityTier(raw.condition || defaults.defaultQualityTier);
+    const partSource =
+      classification.partType === 'AFTERMARKET' ? 'AFTERMARKET' : 'OEM';
+    const qualityTier = normalizeQualityTier(
+      raw.condition || defaults.defaultQualityTier,
+    );
     const reviewReasons = this.buildReviewReasons({
       title,
       price,
@@ -544,34 +683,50 @@ export class MerchantUploadsService {
       partSource,
       brand,
     });
-    if (!primaryCurrency) reviewReasons.push('Price currency requires confirmation');
-    if (raw.__template === 'FEBEST_AVAILABILITY' && !defaults.defaultWeightUnit) reviewReasons.push('Weight unit requires confirmation');
-    if (raw.__template === 'FEBEST_AVAILABILITY' && !defaults.defaultDimensionUnit) reviewReasons.push('Dimension unit requires confirmation');
-    if (classification.status !== 'READY') reviewReasons.push(...classification.reasons);
+    if (!primaryCurrency)
+      reviewReasons.push('Price currency requires confirmation');
+    if (raw.__template === 'FEBEST_AVAILABILITY' && !defaults.defaultWeightUnit)
+      reviewReasons.push('Weight unit requires confirmation');
+    if (
+      raw.__template === 'FEBEST_AVAILABILITY' &&
+      !defaults.defaultDimensionUnit
+    )
+      reviewReasons.push('Dimension unit requires confirmation');
+    if (classification.status !== 'READY')
+      reviewReasons.push(...classification.reasons);
     for (const reference of parsedOemReferences) {
-      if (reference.reviewReason) reviewReasons.push(`${reference.raw}: ${reference.reviewReason}`);
+      if (reference.reviewReason)
+        reviewReasons.push(`${reference.raw}: ${reference.reviewReason}`);
       if (reference.namespaceType === 'UNKNOWN' && defaults.preview) {
-        const hint = reference.matchedAlias || reference.raw.split(/\s+/)[0] || reference.raw;
+        const hint =
+          reference.matchedAlias ||
+          reference.raw.split(/\s+/)[0] ||
+          reference.raw;
         if (hint && !defaults.preview.unrecognizedMakes.includes(hint)) {
           defaults.preview.unrecognizedMakes.push(hint);
         }
       }
     }
-    if (classification.status !== 'READY' && defaults.preview) defaults.preview.ambiguousClassifications += 1;
-    if (defaults.preview) defaults.preview.oemReferences += parsedOemReferences.length;
+    if (classification.status !== 'READY' && defaults.preview)
+      defaults.preview.ambiguousClassifications += 1;
+    if (defaults.preview)
+      defaults.preview.oemReferences += parsedOemReferences.length;
 
     const normalizedMpn = normalizePartNumber(manufacturerPartNumber);
-    const brandMaster = brand ? await this.prisma.brandMaster.upsert({
-      where: { canonicalName: normalizeMasterName(brand) },
-      update: { displayName: brand },
-      create: {
-        canonicalName: normalizeMasterName(brand),
-        displayName: brand,
-        brandTypes: classification.partType === 'AFTERMARKET' ? ['AFTERMARKET'] : [],
-        isAftermarketBrand: classification.partType === 'AFTERMARKET',
-        requiresManualReview: classification.status !== 'READY',
-      },
-    }) : null;
+    const brandMaster = brand
+      ? await this.prisma.brandMaster.upsert({
+          where: { canonicalName: normalizeMasterName(brand) },
+          update: { displayName: brand },
+          create: {
+            canonicalName: normalizeMasterName(brand),
+            displayName: brand,
+            brandTypes:
+              classification.partType === 'AFTERMARKET' ? ['AFTERMARKET'] : [],
+            isAftermarketBrand: classification.partType === 'AFTERMARKET',
+            requiresManualReview: classification.status !== 'READY',
+          },
+        })
+      : null;
 
     const matchCandidates = await this.catalogMatch.findCandidates({
       brandId: brandMaster?.id,
@@ -610,36 +765,58 @@ export class MerchantUploadsService {
 
     if (defaults.commitMode === 'STAGED') {
       const status = reviewReasons.length > 0 ? 'NEEDS_REVIEW' : 'STAGED';
-      await this.createUploadRow(uploadJobId, row, status, reviewReasons, {
-        title,
-        brand: brand || null,
-        category,
-        oemPartNumber: oeNumbers[0],
-        partSource,
-        qualityTier,
-        condition: qualityTier,
-        price: Number.isFinite(price) ? price : undefined,
-        quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
-        currency: primaryCurrency || 'USD',
-        imageUrls,
-        fitmentSummary: parsedVehicle,
-        sourceKey: deterministicSourceKey('SPREADSHEET_ROW', sellerId, defaults.fileChecksum, row.sheetName, row.rowNumber),
-        normalizedData: { normalizedMpn, parsedOemReferences, classification },
-        stagedPayload,
-        suggestedPartType: classification.partType,
-        classificationConfidence: classification.confidence,
-        classificationReason: classification.reasons.join('; '),
-        matchConfidence: autoMatch?.score ?? matchCandidates[0]?.score ?? 0,
-        matchCandidateId: autoMatch?.canonicalPartId || matchCandidates[0]?.canonicalPartId,
-        matchExplanation: { candidates: matchCandidates },
-      }, defaults.existingRowId);
+      await this.createUploadRow(
+        uploadJobId,
+        row,
+        status,
+        reviewReasons,
+        {
+          title,
+          brand: brand || null,
+          category,
+          oemPartNumber: oeNumbers[0],
+          partSource,
+          qualityTier,
+          condition: qualityTier,
+          price: Number.isFinite(price) ? price : undefined,
+          quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
+          currency: primaryCurrency || 'USD',
+          imageUrls,
+          fitmentSummary: parsedVehicle,
+          sourceKey: deterministicSourceKey(
+            'SPREADSHEET_ROW',
+            sellerId,
+            defaults.fileChecksum,
+            row.sheetName,
+            row.rowNumber,
+          ),
+          normalizedData: {
+            normalizedMpn,
+            parsedOemReferences,
+            classification,
+          },
+          stagedPayload,
+          suggestedPartType: classification.partType,
+          classificationConfidence: classification.confidence,
+          classificationReason: classification.reasons.join('; '),
+          matchConfidence: autoMatch?.score ?? matchCandidates[0]?.score ?? 0,
+          matchCandidateId:
+            autoMatch?.canonicalPartId || matchCandidates[0]?.canonicalPartId,
+          matchExplanation: { candidates: matchCandidates },
+        },
+        defaults.existingRowId,
+      );
 
-      if (classification.status === 'ACTION_REQUIRED' || classification.status === 'REVIEW_RECOMMENDED') {
+      if (
+        classification.status === 'ACTION_REQUIRED' ||
+        classification.status === 'REVIEW_RECOMMENDED'
+      ) {
         await this.reviewTasks.enqueue({
           queueType: 'CLASSIFICATION',
           title: `Classify ${manufacturerPartNumber}`,
           description: classification.reasons.join('; '),
-          severity: classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
+          severity:
+            classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
           sellerId,
           uploadJobId,
           entityType: 'SellerUploadRow',
@@ -647,7 +824,9 @@ export class MerchantUploadsService {
           payload: { brand, manufacturerPartNumber, classification },
         });
       }
-      for (const reference of parsedOemReferences.filter((r) => r.reviewReason)) {
+      for (const reference of parsedOemReferences.filter(
+        (r) => r.reviewReason,
+      )) {
         await this.reviewTasks.enqueue({
           queueType: 'OEM_PARSE',
           title: `Unrecognized OEM token on ${manufacturerPartNumber}`,
@@ -669,43 +848,66 @@ export class MerchantUploadsService {
         originalValue: row.original || raw,
         normalizedValue: stagedPayload,
       });
-      return { status, message: reviewReasons.join('; '), needsReview: reviewReasons.length > 0 };
+      return {
+        status,
+        message: reviewReasons.join('; '),
+        needsReview: reviewReasons.length > 0,
+      };
     }
 
     const status = reviewReasons.length > 0 ? 'NEEDS_REVIEW' : 'IMPORTED';
     const existingNumber = autoMatch
       ? await this.prisma.catalogPartNumber.findFirst({
-          where: { canonicalPartId: autoMatch.canonicalPartId, numberType: 'BRAND_MPN', normalizedNumber: normalizedMpn },
+          where: {
+            canonicalPartId: autoMatch.canonicalPartId,
+            numberType: 'BRAND_MPN',
+            normalizedNumber: normalizedMpn,
+          },
           include: { canonicalPart: true },
         })
       : await this.prisma.catalogPartNumber.findFirst({
-          where: { normalizedNumber: normalizedMpn, numberType: 'BRAND_MPN', brandId: brandMaster?.id ?? null },
+          where: {
+            normalizedNumber: normalizedMpn,
+            numberType: 'BRAND_MPN',
+            brandId: brandMaster?.id ?? null,
+          },
           include: { canonicalPart: true },
         });
-    const canonicalPart = existingNumber?.canonicalPart ?? await this.prisma.canonicalPart.create({
-      data: {
-        title,
-        normalizedTitle: title.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim(),
-        description: description || null,
-        brand: brand || null,
-        manufacturer: brand || null,
-        primaryBrandId: brandMaster?.id,
-        manufacturerPartNumber,
-        category,
-        oeNumbers: Array.from(new Set(oeNumbers.map((v) => v.toUpperCase()))),
-        fitmentFlags: reviewReasons,
-        imageUrls,
-        compatibility: parsedVehicle ? ({ source: 'title_parse', vehicle: parsedVehicle } as any) : undefined,
-        partSource,
-        partType: partTypeFromLegacy(partSource, classification.partType),
-        classificationStatus: classification.status,
-        classificationConfidence: classification.confidence,
-        classificationReason: classification.reasons.join('; '),
-        qualityTier,
-        fitmentStatus: parsedVehicle ? (status === 'IMPORTED' ? 'AUTO_MATCHED' : 'NEEDS_REVIEW') : 'NEEDS_REVIEW',
-        fitmentConfidence: parsedVehicle ? 0.5 : 0,
-      },
-    });
+    const canonicalPart =
+      existingNumber?.canonicalPart ??
+      (await this.prisma.canonicalPart.create({
+        data: {
+          title,
+          normalizedTitle: title
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, ' ')
+            .trim(),
+          description: description || null,
+          brand: brand || null,
+          manufacturer: brand || null,
+          primaryBrandId: brandMaster?.id,
+          manufacturerPartNumber,
+          category,
+          oeNumbers: Array.from(new Set(oeNumbers.map((v) => v.toUpperCase()))),
+          fitmentFlags: reviewReasons,
+          imageUrls,
+          compatibility: parsedVehicle
+            ? ({ source: 'title_parse', vehicle: parsedVehicle } as any)
+            : undefined,
+          partSource,
+          partType: partTypeFromLegacy(partSource, classification.partType),
+          classificationStatus: classification.status,
+          classificationConfidence: classification.confidence,
+          classificationReason: classification.reasons.join('; '),
+          qualityTier,
+          fitmentStatus: parsedVehicle
+            ? status === 'IMPORTED'
+              ? 'AUTO_MATCHED'
+              : 'NEEDS_REVIEW'
+            : 'NEEDS_REVIEW',
+          fitmentConfidence: parsedVehicle ? 0.5 : 0,
+        },
+      }));
 
     await this.audit.record({
       action: existingNumber ? 'MATCH' : 'CLASSIFY',
@@ -721,142 +923,287 @@ export class MerchantUploadsService {
       metadata: { matchCandidates, autoMatch },
     });
 
-    const existingMpn = await this.prisma.catalogPartNumber.findFirst({ where: {
-      canonicalPartId: canonicalPart.id, numberType: 'BRAND_MPN', normalizedNumber: normalizedMpn,
-      brandId: brandMaster?.id ?? null, vehicleMakeId: null,
-    }});
-    if (existingMpn) await this.prisma.catalogPartNumber.update({ where: { id: existingMpn.id }, data: { displayNumber: manufacturerPartNumber } });
-    else await this.prisma.catalogPartNumber.create({ data: {
+    const existingMpn = await this.prisma.catalogPartNumber.findFirst({
+      where: {
         canonicalPartId: canonicalPart.id,
-        displayNumber: manufacturerPartNumber,
-        normalizedNumber: normalizedMpn,
         numberType: 'BRAND_MPN',
-        brandId: brandMaster?.id,
-        source: 'SELLER_SPREADSHEET',
-        verificationStatus: raw.__template === 'FEBEST_AVAILABILITY' ? 'SELLER_DECLARED' : 'UNVERIFIED',
-        confidence: raw.__template === 'FEBEST_AVAILABILITY' ? 0.96 : 0.55,
+        normalizedNumber: normalizedMpn,
+        brandId: brandMaster?.id ?? null,
+        vehicleMakeId: null,
       },
     });
-
-    for (const reference of parsedOemReferences) {
-      const make = reference.canonicalMake ? await this.prisma.vehicleMake.upsert({
-        where: { name: reference.canonicalMake }, update: {}, create: { name: reference.canonicalMake, canonicalName: reference.canonicalMake, displayName: reference.canonicalMake },
-      }) : null;
-      const existingReference = await this.prisma.catalogPartNumber.findFirst({ where: {
-        canonicalPartId: canonicalPart.id,
-        numberType: 'OEM_CROSS_REFERENCE',
-        normalizedNumber: reference.normalizedNumber,
-        brandId: null,
-        vehicleMakeId: make?.id ?? null,
-      }});
-      if (existingReference) await this.prisma.catalogPartNumber.update({ where: { id: existingReference.id }, data: { displayNumber: reference.displayNumber, confidence: reference.confidence } });
-      else await this.prisma.catalogPartNumber.create({ data: {
+    if (existingMpn)
+      await this.prisma.catalogPartNumber.update({
+        where: { id: existingMpn.id },
+        data: { displayNumber: manufacturerPartNumber },
+      });
+    else
+      await this.prisma.catalogPartNumber.create({
+        data: {
           canonicalPartId: canonicalPart.id,
-          displayNumber: reference.displayNumber,
-          normalizedNumber: reference.normalizedNumber,
-          numberType: 'OEM_CROSS_REFERENCE',
-          vehicleMakeId: make?.id,
+          displayNumber: manufacturerPartNumber,
+          normalizedNumber: normalizedMpn,
+          numberType: 'BRAND_MPN',
+          brandId: brandMaster?.id,
           source: 'SELLER_SPREADSHEET',
-          verificationStatus: 'SELLER_DECLARED',
-          confidence: reference.confidence,
-          metadata: { raw: reference.raw, namespaceType: reference.namespaceType },
+          verificationStatus:
+            raw.__template === 'FEBEST_AVAILABILITY'
+              ? 'SELLER_DECLARED'
+              : 'UNVERIFIED',
+          confidence: raw.__template === 'FEBEST_AVAILABILITY' ? 0.96 : 0.55,
         },
       });
+
+    for (const reference of parsedOemReferences) {
+      const make = reference.canonicalMake
+        ? await this.prisma.vehicleMake.upsert({
+            where: { name: reference.canonicalMake },
+            update: {},
+            create: {
+              name: reference.canonicalMake,
+              canonicalName: reference.canonicalMake,
+              displayName: reference.canonicalMake,
+            },
+          })
+        : null;
+      const existingReference = await this.prisma.catalogPartNumber.findFirst({
+        where: {
+          canonicalPartId: canonicalPart.id,
+          numberType: 'OEM_CROSS_REFERENCE',
+          normalizedNumber: reference.normalizedNumber,
+          brandId: null,
+          vehicleMakeId: make?.id ?? null,
+        },
+      });
+      if (existingReference)
+        await this.prisma.catalogPartNumber.update({
+          where: { id: existingReference.id },
+          data: {
+            displayNumber: reference.displayNumber,
+            confidence: reference.confidence,
+          },
+        });
+      else
+        await this.prisma.catalogPartNumber.create({
+          data: {
+            canonicalPartId: canonicalPart.id,
+            displayNumber: reference.displayNumber,
+            normalizedNumber: reference.normalizedNumber,
+            numberType: 'OEM_CROSS_REFERENCE',
+            vehicleMakeId: make?.id,
+            source: 'SELLER_SPREADSHEET',
+            verificationStatus: 'SELLER_DECLARED',
+            confidence: reference.confidence,
+            metadata: {
+              raw: reference.raw,
+              namespaceType: reference.namespaceType,
+            },
+          },
+        });
     }
 
     const sellerBasePrice = Number.isFinite(price) && price > 0 ? price : 0;
-    const priceQuote = await this.pricing.quote(sellerId, category, sellerBasePrice);
-    const offerSourceKey = deterministicSourceKey('SPREADSHEET', sellerId, defaults.fileChecksum, row.sheetName, row.rowNumber);
+    const priceQuote = await this.pricing.quote(
+      sellerId,
+      category,
+      sellerBasePrice,
+    );
+    const offerSourceKey = deterministicSourceKey(
+      'SPREADSHEET',
+      sellerId,
+      defaults.fileChecksum,
+      row.sheetName,
+      row.rowNumber,
+    );
     const offerData = {
-        sellerId,
-        canonicalPartId: canonicalPart.id,
-        price: priceQuote.customerPrice,
-        sellerBasePrice: priceQuote.sellerBasePrice,
-        marketplaceFee: priceQuote.marketplaceFee,
-        sellerProceeds: priceQuote.sellerProceeds,
-        pricingPolicyId: priceQuote.pricingPolicyId,
-        pricingPolicyVersion: priceQuote.pricingPolicyVersion,
-        pricedAt: new Date(),
-        currency: priceQuote.pricingPolicyId ? priceQuote.currency : primaryCurrency || 'USD',
-        condition: qualityTier,
-        partSource,
-        partType: classification.partType,
-        qualityTier,
-        sellerSku: raw.sku?.trim() || raw.sourceCode?.trim() || manufacturerPartNumber,
-        sellerTitle: title,
-        moq: raw.moq ? Math.max(1, parseInt(raw.moq, 10) || 1) : 1,
-        externalOfferId: raw.sku?.trim() || manufacturerPartNumber,
-        sourceKey: offerSourceKey,
-        status: quantity === 0 ? 'OUT_OF_STOCK' : status === 'IMPORTED' && sellerStatus === 'ACTIVE' ? 'ACTIVE' : 'REVIEW',
+      sellerId,
+      canonicalPartId: canonicalPart.id,
+      price: priceQuote.customerPrice,
+      sellerBasePrice: priceQuote.sellerBasePrice,
+      marketplaceFee: priceQuote.marketplaceFee,
+      sellerProceeds: priceQuote.sellerProceeds,
+      pricingPolicyId: priceQuote.pricingPolicyId,
+      pricingPolicyVersion: priceQuote.pricingPolicyVersion,
+      pricedAt: new Date(),
+      currency: priceQuote.pricingPolicyId
+        ? priceQuote.currency
+        : primaryCurrency || 'USD',
+      condition: qualityTier,
+      partSource,
+      partType: classification.partType,
+      qualityTier,
+      sellerSku:
+        raw.sku?.trim() || raw.sourceCode?.trim() || manufacturerPartNumber,
+      sellerTitle: title,
+      moq: raw.moq ? Math.max(1, parseInt(raw.moq, 10) || 1) : 1,
+      externalOfferId: raw.sku?.trim() || manufacturerPartNumber,
+      sourceKey: offerSourceKey,
+      status:
+        quantity === 0
+          ? 'OUT_OF_STOCK'
+          : status === 'IMPORTED' && sellerStatus === 'ACTIVE'
+            ? 'ACTIVE'
+            : 'REVIEW',
     };
-    const existingOffer = await this.prisma.sellerOffer.findUnique({ where: { sourceKey: offerSourceKey } });
+    const existingOffer = await this.prisma.sellerOffer.findUnique({
+      where: { sourceKey: offerSourceKey },
+    });
     const offer = existingOffer
-      ? await this.prisma.sellerOffer.update({ where: { id: existingOffer.id }, data: offerData })
+      ? await this.prisma.sellerOffer.update({
+          where: { id: existingOffer.id },
+          data: offerData,
+        })
       : await this.prisma.sellerOffer.create({ data: offerData });
 
     const inventoryRows: Array<{ warehouseId: string; quantity: number }> = [];
     if (stockSharjah !== null || stockJebelAli !== null) {
-      const sharjah = await this.findOrCreateWarehouse(sellerId, 'SHARJAH', 'Sharjah');
-      const jebelAli = await this.findOrCreateWarehouse(sellerId, 'JEBEL_ALI', 'Jebel Ali');
-      inventoryRows.push({ warehouseId: sharjah.id, quantity: Math.max(0, stockSharjah ?? 0) });
-      inventoryRows.push({ warehouseId: jebelAli.id, quantity: Math.max(0, stockJebelAli ?? 0) });
+      const sharjah = await this.findOrCreateWarehouse(
+        sellerId,
+        'SHARJAH',
+        'Sharjah',
+      );
+      const jebelAli = await this.findOrCreateWarehouse(
+        sellerId,
+        'JEBEL_ALI',
+        'Jebel Ali',
+      );
+      inventoryRows.push({
+        warehouseId: sharjah.id,
+        quantity: Math.max(0, stockSharjah ?? 0),
+      });
+      inventoryRows.push({
+        warehouseId: jebelAli.id,
+        quantity: Math.max(0, stockJebelAli ?? 0),
+      });
     } else {
-      inventoryRows.push({ warehouseId, quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0) });
+      inventoryRows.push({
+        warehouseId,
+        quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
+      });
     }
     for (const inventory of inventoryRows) {
       await this.prisma.inventory.upsert({
-        where: { warehouseId_offerId: { warehouseId: inventory.warehouseId, offerId: offer.id } },
-        update: { quantity: inventory.quantity, status: inventory.quantity > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK' },
-        create: { ...inventory, offerId: offer.id, status: inventory.quantity > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK' },
+        where: {
+          warehouseId_offerId: {
+            warehouseId: inventory.warehouseId,
+            offerId: offer.id,
+          },
+        },
+        update: {
+          quantity: inventory.quantity,
+          status: inventory.quantity > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK',
+        },
+        create: {
+          ...inventory,
+          offerId: offer.id,
+          status: inventory.quantity > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK',
+        },
       });
     }
 
-    const sourceKey = deterministicSourceKey('SPREADSHEET_ROW', sellerId, defaults.fileChecksum, row.sheetName, row.rowNumber);
+    const sourceKey = deterministicSourceKey(
+      'SPREADSHEET_ROW',
+      sellerId,
+      defaults.fileChecksum,
+      row.sheetName,
+      row.rowNumber,
+    );
     await this.prisma.sourceRecord.upsert({
       where: { sourceKey },
       update: {
         canonicalPartId: canonicalPart.id,
         sellerOfferId: offer.id,
         rawPayload: row.original || raw,
-        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification, matchCandidates } as any,
+        transformations: {
+          template: raw.__template,
+          normalizedMpn,
+          parsedOemReferences,
+          classification,
+          matchCandidates,
+        } as any,
         classificationConfidence: classification.confidence,
         matchConfidence: autoMatch?.score ?? 0,
         lastSyncedAt: new Date(),
       },
       create: {
-        sourceType: 'SPREADSHEET_ROW', sourcePlatform: 'SELLER_UPLOAD', sellerId,
-        canonicalPartId: canonicalPart.id, sellerOfferId: offer.id,
-        sourceFileName: defaults.fileName, sourceSheet: row.sheetName, sourceRowNumber: row.rowNumber,
-        sourceKey, rawPayload: row.original || raw,
-        transformations: { template: raw.__template, normalizedMpn, parsedOemReferences, classification, matchCandidates } as any,
+        sourceType: 'SPREADSHEET_ROW',
+        sourcePlatform: 'SELLER_UPLOAD',
+        sellerId,
+        canonicalPartId: canonicalPart.id,
+        sellerOfferId: offer.id,
+        sourceFileName: defaults.fileName,
+        sourceSheet: row.sheetName,
+        sourceRowNumber: row.rowNumber,
+        sourceKey,
+        rawPayload: row.original || raw,
+        transformations: {
+          template: raw.__template,
+          normalizedMpn,
+          parsedOemReferences,
+          classification,
+          matchCandidates,
+        } as any,
         classificationConfidence: classification.confidence,
         matchConfidence: autoMatch?.score ?? 0,
       },
     });
 
-    for (const [currency, amountText] of [['USD', raw.priceUsd], ['AED', raw.priceAed]] as const) {
+    for (const [currency, amountText] of [
+      ['USD', raw.priceUsd],
+      ['AED', raw.priceAed],
+    ] as const) {
       if (!amountText) continue;
       const amount = Number(amountText.replace(/[$,\s]/g, ''));
       if (!Number.isFinite(amount) || amount <= 0) continue;
       await this.prisma.offerPrice.upsert({
         where: { offerId_currency: { offerId: offer.id, currency } },
-        update: { amount, isPrimary: currency === primaryCurrency, exchangeRate: raw.priceUsd && raw.priceAed ? Number(raw.priceAed) / Number(raw.priceUsd) : undefined, rateSource: 'SELLER_SPREADSHEET' },
-        create: { offerId: offer.id, currency, amount, isPrimary: currency === primaryCurrency, exchangeRate: raw.priceUsd && raw.priceAed ? Number(raw.priceAed) / Number(raw.priceUsd) : undefined, rateSource: 'SELLER_SPREADSHEET' },
+        update: {
+          amount,
+          isPrimary: currency === primaryCurrency,
+          exchangeRate:
+            raw.priceUsd && raw.priceAed
+              ? Number(raw.priceAed) / Number(raw.priceUsd)
+              : undefined,
+          rateSource: 'SELLER_SPREADSHEET',
+        },
+        create: {
+          offerId: offer.id,
+          currency,
+          amount,
+          isPrimary: currency === primaryCurrency,
+          exchangeRate:
+            raw.priceUsd && raw.priceAed
+              ? Number(raw.priceAed) / Number(raw.priceUsd)
+              : undefined,
+          rateSource: 'SELLER_SPREADSHEET',
+        },
       });
     }
 
     const fitments = parsedVehicle
-      ? [{
-          vehicleConfigId: (await this.findOrCreateVehicleConfig(parsedVehicle)).id,
-          evidenceLevel: 'D',
-          confidence: 0.5,
-        }]
+      ? [
+          {
+            vehicleConfigId: (
+              await this.findOrCreateVehicleConfig(parsedVehicle)
+            ).id,
+            evidenceLevel: 'D',
+            confidence: 0.5,
+          },
+        ]
       : [];
 
     if (parsedVehicle && fitments[0]) {
       const fitment = await this.prisma.fitment.upsert({
-        where: { canonicalPartId_vehicleConfigId: { canonicalPartId: canonicalPart.id, vehicleConfigId: fitments[0].vehicleConfigId } },
-        update: { source: 'TITLE_PARSE', reason: 'Inferred from listing/product title' },
+        where: {
+          canonicalPartId_vehicleConfigId: {
+            canonicalPartId: canonicalPart.id,
+            vehicleConfigId: fitments[0].vehicleConfigId,
+          },
+        },
+        update: {
+          source: 'TITLE_PARSE',
+          reason: 'Inferred from listing/product title',
+        },
         create: {
           canonicalPartId: canonicalPart.id,
           vehicleConfigId: fitments[0].vehicleConfigId,
@@ -868,17 +1215,19 @@ export class MerchantUploadsService {
           reason: 'Inferred from listing/product title',
         },
       });
-      await this.prisma.fitmentEvidence.create({
-        data: {
-          fitmentId: fitment.id,
-          evidenceType: 'TITLE_PARSE',
-          evidenceLevel: 'D',
-          confidence: 0.5,
-          source: 'SELLER_SPREADSHEET',
-          reason: 'Title-parsed vehicle attributes are not verified fitment',
-          originalValue: parsedVehicle as any,
-        },
-      }).catch(() => undefined);
+      await this.prisma.fitmentEvidence
+        .create({
+          data: {
+            fitmentId: fitment.id,
+            evidenceType: 'TITLE_PARSE',
+            evidenceLevel: 'D',
+            confidence: 0.5,
+            source: 'SELLER_SPREADSHEET',
+            reason: 'Title-parsed vehicle attributes are not verified fitment',
+            originalValue: parsedVehicle as any,
+          },
+        })
+        .catch(() => undefined);
     }
 
     await this.prisma.searchOutbox.create({
@@ -898,8 +1247,18 @@ export class MerchantUploadsService {
       brand: canonicalPart.brand,
       manufacturerPartNumber: canonicalPart.manufacturerPartNumber,
       partNumbers: [
-        { displayNumber: manufacturerPartNumber, normalizedNumber: normalizedMpn, numberType: 'BRAND_MPN', brand },
-        ...parsedOemReferences.map((reference) => ({ displayNumber: reference.displayNumber, normalizedNumber: reference.normalizedNumber, numberType: 'OEM_CROSS_REFERENCE', make: reference.canonicalMake })),
+        {
+          displayNumber: manufacturerPartNumber,
+          normalizedNumber: normalizedMpn,
+          numberType: 'BRAND_MPN',
+          brand,
+        },
+        ...parsedOemReferences.map((reference) => ({
+          displayNumber: reference.displayNumber,
+          normalizedNumber: reference.normalizedNumber,
+          numberType: 'OEM_CROSS_REFERENCE',
+          make: reference.canonicalMake,
+        })),
       ],
       category: canonicalPart.category,
       oeNumbers: canonicalPart.oeNumbers,
@@ -911,15 +1270,17 @@ export class MerchantUploadsService {
       fitmentConfidence: canonicalPart.fitmentConfidence,
       createdAt: canonicalPart.createdAt,
       fitments,
-      offers: [{
-        id: offer.id,
-        price: offer.price,
-        condition: offer.condition,
-        partSource: offer.partSource,
-        qualityTier: offer.qualityTier,
-        sellerId: offer.sellerId,
-        sellerName,
-      }],
+      offers: [
+        {
+          id: offer.id,
+          price: offer.price,
+          condition: offer.condition,
+          partSource: offer.partSource,
+          qualityTier: offer.qualityTier,
+          sellerId: offer.sellerId,
+          sellerName,
+        },
+      ],
     });
 
     await this.prisma.searchOutbox.updateMany({
@@ -929,10 +1290,14 @@ export class MerchantUploadsService {
 
     if (classification.status !== 'READY') {
       await this.reviewTasks.enqueue({
-        queueType: classification.partType === 'GENUINE_OEM' ? 'OEM_AUTHENTICITY' : 'CLASSIFICATION',
+        queueType:
+          classification.partType === 'GENUINE_OEM'
+            ? 'OEM_AUTHENTICITY'
+            : 'CLASSIFICATION',
         title: `Review classification for ${canonicalPart.title}`,
         description: classification.reasons.join('; '),
-        severity: classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
+        severity:
+          classification.status === 'ACTION_REQUIRED' ? 'HIGH' : 'MEDIUM',
         sellerId,
         uploadJobId,
         canonicalPartId: canonicalPart.id,
@@ -943,33 +1308,44 @@ export class MerchantUploadsService {
       });
     }
 
-    await this.createUploadRow(uploadJobId, row, status, reviewReasons, {
-      canonicalPartId: canonicalPart.id,
-      sellerOfferId: offer.id,
-      title,
-      brand: canonicalPart.brand,
-      category,
-      oemPartNumber: oeNumbers[0],
-      partSource,
-      qualityTier,
-      condition: qualityTier,
-      price: offer.price,
-      quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
-      currency: offer.currency,
-      imageUrls,
-      fitmentSummary: parsedVehicle,
-      sourceKey,
-      normalizedData: { normalizedMpn, parsedOemReferences },
-      stagedPayload,
-      suggestedPartType: classification.partType,
-      classificationConfidence: classification.confidence,
-      classificationReason: classification.reasons.join('; '),
-      matchConfidence: autoMatch?.score ?? (existingNumber ? 1 : 0),
-      matchCandidateId: canonicalPart.id,
-      matchExplanation: { candidates: matchCandidates },
-    }, defaults.existingRowId);
+    await this.createUploadRow(
+      uploadJobId,
+      row,
+      status,
+      reviewReasons,
+      {
+        canonicalPartId: canonicalPart.id,
+        sellerOfferId: offer.id,
+        title,
+        brand: canonicalPart.brand,
+        category,
+        oemPartNumber: oeNumbers[0],
+        partSource,
+        qualityTier,
+        condition: qualityTier,
+        price: offer.price,
+        quantity: Math.max(0, Number.isFinite(quantity) ? quantity : 0),
+        currency: offer.currency,
+        imageUrls,
+        fitmentSummary: parsedVehicle,
+        sourceKey,
+        normalizedData: { normalizedMpn, parsedOemReferences },
+        stagedPayload,
+        suggestedPartType: classification.partType,
+        classificationConfidence: classification.confidence,
+        classificationReason: classification.reasons.join('; '),
+        matchConfidence: autoMatch?.score ?? (existingNumber ? 1 : 0),
+        matchCandidateId: canonicalPart.id,
+        matchExplanation: { candidates: matchCandidates },
+      },
+      defaults.existingRowId,
+    );
 
-    return { status, message: reviewReasons.join('; '), needsReview: reviewReasons.length > 0 };
+    return {
+      status,
+      message: reviewReasons.join('; '),
+      needsReview: reviewReasons.length > 0,
+    };
   }
   private buildReviewReasons(input: {
     title: string;
@@ -982,12 +1358,17 @@ export class MerchantUploadsService {
     brand?: string;
   }) {
     const reasons: string[] = [];
-    if (!Number.isFinite(input.price) || input.price <= 0) reasons.push('Missing or invalid price');
-    if (!Number.isFinite(input.quantity) || input.quantity < 0) reasons.push('Missing or invalid quantity');
+    if (!Number.isFinite(input.price) || input.price <= 0)
+      reasons.push('Missing or invalid price');
+    if (!Number.isFinite(input.quantity) || input.quantity < 0)
+      reasons.push('Missing or invalid quantity');
     if (input.imageUrls.length === 0) reasons.push('Missing product images');
-    if (input.oeNumbers.length === 0) reasons.push('Missing OE/OEM or manufacturer part number');
-    if (!input.parsedVehicle) reasons.push('Vehicle compatibility could not be inferred');
-    if (input.partSource === 'AFTERMARKET' && !input.brand?.trim()) reasons.push('Aftermarket part needs brand/manufacturer');
+    if (input.oeNumbers.length === 0)
+      reasons.push('Missing OE/OEM or manufacturer part number');
+    if (!input.parsedVehicle)
+      reasons.push('Vehicle compatibility could not be inferred');
+    if (input.partSource === 'AFTERMARKET' && !input.brand?.trim())
+      reasons.push('Aftermarket part needs brand/manufacturer');
     return reasons;
   }
 
@@ -1031,7 +1412,8 @@ export class MerchantUploadsService {
       title: extra.title || row.raw.title || null,
       brand: extra.brand || row.raw.brand || null,
       category: extra.category || row.raw.category || null,
-      oemPartNumber: extra.oemPartNumber || row.raw.oemPartNumber || row.raw.mpn || null,
+      oemPartNumber:
+        extra.oemPartNumber || row.raw.oemPartNumber || row.raw.mpn || null,
       partSource: extra.partSource || 'OEM',
       qualityTier: extra.qualityTier || 'USED',
       condition: extra.condition || 'USED',
@@ -1039,39 +1421,64 @@ export class MerchantUploadsService {
       quantity: extra.quantity ?? 1,
       currency: extra.currency || row.raw.currency || 'AED',
       imageUrls: extra.imageUrls || [],
-      fitmentSummary: extra.fitmentSummary === undefined ? undefined : (extra.fitmentSummary as any),
+      fitmentSummary:
+        extra.fitmentSummary === undefined
+          ? undefined
+          : (extra.fitmentSummary as any),
       reviewReasons,
       message: reviewReasons.join('; ') || null,
       rawData: row.original || row.raw,
       sourceKey: extra.sourceKey,
-      normalizedData: extra.normalizedData === undefined ? undefined : (extra.normalizedData as any),
-      stagedPayload: extra.stagedPayload === undefined ? undefined : (extra.stagedPayload as any),
+      normalizedData:
+        extra.normalizedData === undefined
+          ? undefined
+          : (extra.normalizedData as any),
+      stagedPayload:
+        extra.stagedPayload === undefined
+          ? undefined
+          : (extra.stagedPayload as any),
       suggestedPartType: extra.suggestedPartType,
       classificationConfidence: extra.classificationConfidence,
       classificationReason: extra.classificationReason,
       matchConfidence: extra.matchConfidence,
       matchCandidateId: extra.matchCandidateId,
-      matchExplanation: extra.matchExplanation === undefined ? undefined : (extra.matchExplanation as any),
+      matchExplanation:
+        extra.matchExplanation === undefined
+          ? undefined
+          : (extra.matchExplanation as any),
       canonicalPartId: extra.canonicalPartId,
       sellerOfferId: extra.sellerOfferId,
     };
 
     if (existingRowId) {
-      return this.prisma.sellerUploadRow.update({ where: { id: existingRowId }, data });
+      return this.prisma.sellerUploadRow.update({
+        where: { id: existingRowId },
+        data,
+      });
     }
 
     const existing = await this.prisma.sellerUploadRow.findUnique({
-      where: { uploadJobId_rowNumber: { uploadJobId, rowNumber: row.rowNumber } },
+      where: {
+        uploadJobId_rowNumber: { uploadJobId, rowNumber: row.rowNumber },
+      },
     });
     if (existing) {
-      return this.prisma.sellerUploadRow.update({ where: { id: existing.id }, data });
+      return this.prisma.sellerUploadRow.update({
+        where: { id: existing.id },
+        data,
+      });
     }
 
     return this.prisma.sellerUploadRow.create({ data });
   }
 
-  async reviewRow(rowId: string, body: { status: string; offerStatus?: string; notes?: string }) {
-    const row = await this.prisma.sellerUploadRow.findUnique({ where: { id: rowId } });
+  async reviewRow(
+    rowId: string,
+    body: { status: string; offerStatus?: string; notes?: string },
+  ) {
+    const row = await this.prisma.sellerUploadRow.findUnique({
+      where: { id: rowId },
+    });
     if (!row) throw new NotFoundException('Upload row not found');
 
     if (row.sellerOfferId && body.offerStatus) {
@@ -1081,7 +1488,9 @@ export class MerchantUploadsService {
           include: { seller: true },
         });
         if (offer?.seller.onboardingStatus !== 'ACTIVE') {
-          throw new BadRequestException('Seller must be ACTIVE before an offer can be activated');
+          throw new BadRequestException(
+            'Seller must be ACTIVE before an offer can be activated',
+          );
         }
       }
       await this.prisma.sellerOffer.update({
@@ -1095,13 +1504,24 @@ export class MerchantUploadsService {
       data: {
         status: body.status,
         message: body.notes ?? row.message,
-        reviewReasons: body.status === 'APPROVED' ? [] : Array.isArray(row.reviewReasons) ? row.reviewReasons : [],
+        reviewReasons:
+          body.status === 'APPROVED'
+            ? []
+            : Array.isArray(row.reviewReasons)
+              ? row.reviewReasons
+              : [],
       },
     });
   }
 
-  private async findOrCreateWarehouse(sellerId: string, externalKey: string, name: string) {
-    const existing = await this.prisma.warehouse.findFirst({ where: { sellerId, externalKey } });
+  private async findOrCreateWarehouse(
+    sellerId: string,
+    externalKey: string,
+    name: string,
+  ) {
+    const existing = await this.prisma.warehouse.findFirst({
+      where: { sellerId, externalKey },
+    });
     if (existing) return existing;
     return this.prisma.warehouse.create({
       data: { sellerId, externalKey, name, location: name },
@@ -1135,7 +1555,10 @@ export class MerchantUploadsService {
       generation = await this.prisma.vehicleGeneration.create({
         data: {
           modelId: model.id,
-          name: vehicle.startYear === vehicle.endYear ? `${vehicle.startYear}` : `${vehicle.startYear}-${vehicle.endYear}`,
+          name:
+            vehicle.startYear === vehicle.endYear
+              ? `${vehicle.startYear}`
+              : `${vehicle.startYear}-${vehicle.endYear}`,
           startYear: vehicle.startYear,
           endYear: vehicle.endYear,
         },

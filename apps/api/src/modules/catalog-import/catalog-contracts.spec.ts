@@ -1,5 +1,9 @@
 import { CatalogMatchService } from './catalog-match.service';
-import { isVerifiedFitmentEvidence, partTypeFromLegacy, partTypeLabel } from '@repo/catalog-contracts';
+import {
+  isVerifiedFitmentEvidence,
+  partTypeFromLegacy,
+  partTypeLabel,
+} from '@repo/catalog-contracts';
 
 describe('catalog contracts', () => {
   it('labels controlled part types for buyer/admin UI', () => {
@@ -20,16 +24,43 @@ describe('CatalogMatchService.pickAutoMatch', () => {
   const service = new CatalogMatchService({} as any);
 
   it('auto-matches only exact unblocked candidates', () => {
-    expect(service.pickAutoMatch([
-      { canonicalPartId: '1', title: 'A', score: 1, band: 'EXACT', blockers: [], features: [] },
-    ])?.canonicalPartId).toBe('1');
+    expect(
+      service.pickAutoMatch([
+        {
+          canonicalPartId: '1',
+          title: 'A',
+          score: 1,
+          band: 'EXACT',
+          blockers: [],
+          features: [],
+        },
+      ])?.canonicalPartId,
+    ).toBe('1');
 
-    expect(service.pickAutoMatch([
-      { canonicalPartId: '2', title: 'B', score: 0.8, band: 'PROBABLE', blockers: [], features: [] },
-    ])).toBeNull();
+    expect(
+      service.pickAutoMatch([
+        {
+          canonicalPartId: '2',
+          title: 'B',
+          score: 0.8,
+          band: 'PROBABLE',
+          blockers: [],
+          features: [],
+        },
+      ]),
+    ).toBeNull();
 
-    expect(service.pickAutoMatch([
-      { canonicalPartId: '3', title: 'C', score: 1, band: 'EXACT', blockers: ['Position conflict'], features: [] },
-    ])).toBeNull();
+    expect(
+      service.pickAutoMatch([
+        {
+          canonicalPartId: '3',
+          title: 'C',
+          score: 1,
+          band: 'EXACT',
+          blockers: ['Position conflict'],
+          features: [],
+        },
+      ]),
+    ).toBeNull();
   });
 });

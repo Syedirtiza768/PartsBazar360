@@ -15,24 +15,29 @@ export class GarageService {
               include: {
                 model: {
                   include: {
-                    make: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                    make: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
-  async addVehicleToGarage(userId: string, data: { vehicleConfigId: string, nickname?: string, vin?: string }) {
+  async addVehicleToGarage(
+    userId: string,
+    data: { vehicleConfigId: string; nickname?: string; vin?: string },
+  ) {
     const config = await this.prisma.vehicleConfiguration.findUnique({
-      where: { id: data.vehicleConfigId }
+      where: { id: data.vehicleConfigId },
     });
 
     if (!config) {
-      throw new NotFoundException(`Vehicle Configuration ${data.vehicleConfigId} not found`);
+      throw new NotFoundException(
+        `Vehicle Configuration ${data.vehicleConfigId} not found`,
+      );
     }
 
     return this.prisma.userVehicle.create({
@@ -40,22 +45,24 @@ export class GarageService {
         userId,
         vehicleConfigId: data.vehicleConfigId,
         nickname: data.nickname,
-        vin: data.vin
-      }
+        vin: data.vin,
+      },
     });
   }
 
   async removeVehicleFromGarage(userId: string, userVehicleId: string) {
     const userVehicle = await this.prisma.userVehicle.findUnique({
-      where: { id: userVehicleId }
+      where: { id: userVehicleId },
     });
 
     if (!userVehicle || userVehicle.userId !== userId) {
-      throw new NotFoundException(`User Vehicle ${userVehicleId} not found in your garage`);
+      throw new NotFoundException(
+        `User Vehicle ${userVehicleId} not found in your garage`,
+      );
     }
 
     return this.prisma.userVehicle.delete({
-      where: { id: userVehicleId }
+      where: { id: userVehicleId },
     });
   }
 }

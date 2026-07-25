@@ -1,4 +1,7 @@
-import { normalizeMasterName, normalizePartNumber } from './part-normalization.util';
+import {
+  normalizeMasterName,
+  normalizePartNumber,
+} from './part-normalization.util';
 
 export interface MakeAlias {
   canonicalName: string;
@@ -18,10 +21,21 @@ export interface ParsedOemReference {
 }
 
 export const DEFAULT_MAKE_ALIASES: MakeAlias[] = [
-  { canonicalName: 'Mercedes-Benz', aliases: ['MERCEDES-BENZ', 'MERCEDES BENZ', 'MERCEDES'] },
+  {
+    canonicalName: 'Mercedes-Benz',
+    aliases: ['MERCEDES-BENZ', 'MERCEDES BENZ', 'MERCEDES'],
+  },
   { canonicalName: 'Land Rover', aliases: ['LAND ROVER', 'LANDROVER'] },
-  { canonicalName: 'General Motors', aliases: ['GENERAL MOTORS', 'GM'], namespaceType: 'MANUFACTURER_GROUP' },
-  { canonicalName: 'Volkswagen Group', aliases: ['VOLKSWAGEN GROUP', 'VAG'], namespaceType: 'MANUFACTURER_GROUP' },
+  {
+    canonicalName: 'General Motors',
+    aliases: ['GENERAL MOTORS', 'GM'],
+    namespaceType: 'MANUFACTURER_GROUP',
+  },
+  {
+    canonicalName: 'Volkswagen Group',
+    aliases: ['VOLKSWAGEN GROUP', 'VAG'],
+    namespaceType: 'MANUFACTURER_GROUP',
+  },
   { canonicalName: 'Alfa Romeo', aliases: ['ALFA ROMEO'] },
   { canonicalName: 'Aston Martin', aliases: ['ASTON MARTIN'] },
   { canonicalName: 'Great Wall', aliases: ['GREAT WALL'] },
@@ -70,7 +84,13 @@ export const DEFAULT_MAKE_ALIASES: MakeAlias[] = [
 
 function aliasCandidates(masters: MakeAlias[]) {
   return masters
-    .flatMap((master) => master.aliases.map((alias) => ({ master, alias, normalized: normalizeMasterName(alias) })))
+    .flatMap((master) =>
+      master.aliases.map((alias) => ({
+        master,
+        alias,
+        normalized: normalizeMasterName(alias),
+      })),
+    )
     .sort((a, b) => b.normalized.length - a.normalized.length);
 }
 
@@ -86,11 +106,19 @@ export function parseCompoundOemReferences(
     const raw = token.trim();
     if (!raw) continue;
     const normalizedRaw = normalizeMasterName(raw);
-    const match = candidates.find(({ normalized }) =>
-      normalizedRaw === normalized || normalizedRaw.startsWith(`${normalized} `),
+    const match = candidates.find(
+      ({ normalized }) =>
+        normalizedRaw === normalized ||
+        normalizedRaw.startsWith(`${normalized} `),
     );
     const displayNumber = match
-      ? raw.slice(raw.toUpperCase().indexOf(match.alias.toUpperCase()) + match.alias.length).trim().replace(/^[-:]+\s*/, '')
+      ? raw
+          .slice(
+            raw.toUpperCase().indexOf(match.alias.toUpperCase()) +
+              match.alias.length,
+          )
+          .trim()
+          .replace(/^[-:]+\s*/, '')
       : raw;
     const normalizedNumber = normalizePartNumber(displayNumber);
     const key = `${match?.master.canonicalName ?? 'UNKNOWN'}:${normalizedNumber}`;
@@ -100,11 +128,14 @@ export function parseCompoundOemReferences(
       raw,
       canonicalMake: match?.master.canonicalName ?? null,
       matchedAlias: match?.alias ?? null,
-      namespaceType: match?.master.namespaceType ?? (match ? 'VEHICLE_MAKE' : 'UNKNOWN'),
+      namespaceType:
+        match?.master.namespaceType ?? (match ? 'VEHICLE_MAKE' : 'UNKNOWN'),
       displayNumber,
       normalizedNumber,
       confidence: match ? 0.98 : 0.2,
-      reviewReason: match ? undefined : 'Unrecognized OEM make or manufacturer-group prefix',
+      reviewReason: match
+        ? undefined
+        : 'Unrecognized OEM make or manufacturer-group prefix',
     });
   }
   return results;

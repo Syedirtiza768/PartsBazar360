@@ -101,12 +101,12 @@ function Steps({ current }: { current: 1 | 2 }) {
 
 function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtotal: number; currency: string | null }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <h2 className="text-base font-bold text-slate-900">Order summary</h2>
       <ul className="mt-3 space-y-2.5">
         {items.map((item) => (
           <li key={item.id} className="flex justify-between gap-3 text-sm">
-            <span className="line-clamp-1 min-w-0 text-slate-600">
+            <span className="line-clamp-2 min-w-0 text-graphite-700">
               {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
             </span>
             <span className="price shrink-0 text-sm">
@@ -116,11 +116,11 @@ function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtota
         ))}
       </ul>
       <dl className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Subtotal</dt>
           <dd className="price text-sm">{formatPrice(subtotal, currency)}</dd>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Shipping</dt>
           <dd className="text-graphite-600">Per seller, added to total</dd>
         </div>
@@ -258,7 +258,7 @@ export default function CheckoutPage() {
 
   if (!authReady || !isAuthenticated) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center text-sm text-graphite-600">
+      <div className="mx-auto max-w-md gutter py-16 text-center text-sm text-graphite-600">
         Checking your account…
       </div>
     );
@@ -266,7 +266,7 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16">
+      <div className="mx-auto max-w-2xl gutter py-16">
         <EmptyState
           variant="page"
           icon={<CartIcon />}
@@ -282,8 +282,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-content gutter py-8 sm:py-10">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Checkout</h1>
         <Steps current={step} />
       </div>
@@ -291,7 +291,7 @@ export default function CheckoutPage() {
       <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_340px]">
         {step === 1 ? (
           <form onSubmit={goToReview} noValidate className="space-y-6">
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
               <h2 className="text-base font-semibold text-slate-900">Account</h2>
               <p className="mt-1 text-sm text-graphite-600">
                 Signed in as <span className="font-medium text-slate-800">{user?.email}</span>. Payment
@@ -309,7 +309,7 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
               <h2 className="text-base font-semibold text-slate-900">Shipping address</h2>
               <div className="mt-4 grid grid-cols-1 gap-4">
                 <Input
@@ -354,22 +354,27 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            <div className="flex items-center justify-between gap-3">
+            {/*
+              Reverse-stacked on phones: the forward action sits above the
+              back link so the thumb lands on "Review order", and both keep a
+              full 44px target instead of sharing one cramped row.
+            */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Link
                 href="/cart"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-slate-700"
+                className="inline-flex min-h-touch items-center justify-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-graphite-800 sm:justify-start"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back to cart
               </Link>
-              <Button type="submit" size="lg">
+              <Button type="submit" size="lg" fullWidth className="sm:w-auto">
                 Review order
               </Button>
             </div>
           </form>
         ) : (
           <div className="space-y-6">
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">Shipping to</h2>
@@ -400,7 +405,7 @@ export default function CheckoutPage() {
                 className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card"
                 aria-label={`Shipment from ${group.name}`}
               >
-                <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+                <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 sm:px-5">
                   <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900">
                     <StoreIcon className="h-4 w-4 shrink-0 text-slate-400" />
                     <span className="truncate">{group.name}</span>
@@ -412,7 +417,7 @@ export default function CheckoutPage() {
                 </header>
                 <ul className="divide-y divide-slate-100">
                   {group.items.map((item) => (
-                    <li key={item.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
+                    <li key={item.id} className="flex items-start justify-between gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-medium text-slate-800">
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
@@ -482,17 +487,22 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-slate-700"
+                className="inline-flex min-h-touch items-center justify-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-graphite-800 sm:justify-start"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back to details
               </button>
-              <Button size="lg" onClick={placeOrder} loading={submitting}>
-                Pay with Stripe — {formatPrice(subtotal, currency)} + shipping
+              <Button size="lg" onClick={placeOrder} loading={submitting} fullWidth className="sm:w-auto">
+                {/* The full label runs to three lines in a 288px button, so
+                    phones get the amount and desktops get the full sentence. */}
+                <span className="sm:hidden">Pay {formatPrice(subtotal, currency)}</span>
+                <span className="hidden sm:inline">
+                  Pay with Stripe — {formatPrice(subtotal, currency)} + shipping
+                </span>
               </Button>
             </div>
 
@@ -504,7 +514,7 @@ export default function CheckoutPage() {
           </div>
         )}
 
-        <aside className="lg:sticky lg:top-40" aria-label="Order summary">
+        <aside className="lg:sticky lg:top-28" aria-label="Order summary">
           <SummaryCard items={items} subtotal={subtotal} currency={currency} />
         </aside>
       </div>

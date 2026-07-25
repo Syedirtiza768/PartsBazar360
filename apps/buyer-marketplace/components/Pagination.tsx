@@ -29,10 +29,10 @@ export function Pagination({
   if (totalPages <= 1) return null;
 
   const itemBase =
-    "flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors";
+    "flex h-11 min-w-11 items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors";
 
   return (
-    <nav aria-label="Pagination" className="mt-10 flex items-center justify-center gap-1.5">
+    <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-1.5">
       {page > 1 ? (
         <Link
           href={hrefFor(page - 1)}
@@ -50,7 +50,7 @@ export function Pagination({
 
       {pageWindow(page, totalPages).map((p, i) =>
         p === "…" ? (
-          <span key={`gap-${i}`} className="px-1.5 text-sm text-slate-400" aria-hidden="true">
+          <span key={`gap-${i}`} className="hidden px-1.5 text-sm text-slate-400 xs:inline" aria-hidden="true">
             …
           </span>
         ) : (
@@ -63,7 +63,11 @@ export function Pagination({
               itemBase,
               p === page
                 ? "border-brand-600 bg-brand-600 font-semibold text-white"
-                : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50",
+                : "border-slate-300 bg-white text-graphite-700 hover:border-slate-400 hover:bg-slate-50",
+              // Keep first / last / current visible on the narrowest screens
+              // and drop the rest, rather than wrapping to a second row of
+              // 44px chips that pushes the footer down.
+              p !== page && p !== 1 && p !== totalPages && "hidden xs:flex",
             )}
           >
             {p}

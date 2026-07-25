@@ -34,9 +34,15 @@ export class PricingService {
     });
   }
 
-  async quote(sellerId: string, category: string | null | undefined, sellerBasePrice: number): Promise<PriceQuote> {
+  async quote(
+    sellerId: string,
+    category: string | null | undefined,
+    sellerBasePrice: number,
+  ): Promise<PriceQuote> {
     if (!Number.isFinite(sellerBasePrice) || sellerBasePrice < 0) {
-      throw new BadRequestException('sellerBasePrice must be a non-negative number');
+      throw new BadRequestException(
+        'sellerBasePrice must be a non-negative number',
+      );
     }
 
     const now = new Date();
@@ -51,14 +57,19 @@ export class PricingService {
     });
 
     const active = assignments
-      .filter(({ pricingPolicy }) => (
-        pricingPolicy.status === 'ACTIVE'
-        && pricingPolicy.effectiveFrom <= now
-        && (!pricingPolicy.effectiveTo || pricingPolicy.effectiveTo > now)
-      ))
-      .filter((assignment) => !assignment.category || assignment.category === category)
+      .filter(
+        ({ pricingPolicy }) =>
+          pricingPolicy.status === 'ACTIVE' &&
+          pricingPolicy.effectiveFrom <= now &&
+          (!pricingPolicy.effectiveTo || pricingPolicy.effectiveTo > now),
+      )
+      .filter(
+        (assignment) =>
+          !assignment.category || assignment.category === category,
+      )
       .sort((a, b) => {
-        const categorySpecificity = Number(Boolean(b.category)) - Number(Boolean(a.category));
+        const categorySpecificity =
+          Number(Boolean(b.category)) - Number(Boolean(a.category));
         if (categorySpecificity !== 0) return categorySpecificity;
         return b.pricingPolicy.priority - a.pricingPolicy.priority;
       })[0];
@@ -83,7 +94,9 @@ export class PricingService {
       throw new BadRequestException(`Unsupported pricing mode: ${policy.mode}`);
     }
     if (policy.percentRate < 0 || policy.percentRate >= 1) {
-      throw new BadRequestException('Pricing policy percentRate must be between 0 and 0.9999');
+      throw new BadRequestException(
+        'Pricing policy percentRate must be between 0 and 0.9999',
+      );
     }
 
     let customerPrice = sellerBasePrice;
@@ -101,11 +114,13 @@ export class PricingService {
         sellerProceeds = sellerBasePrice - marketplaceFee;
         break;
       case 'COST_PLUS_MARKUP':
-        customerPrice = sellerBasePrice * (1 + policy.percentRate) + policy.fixedFee;
+        customerPrice =
+          sellerBasePrice * (1 + policy.percentRate) + policy.fixedFee;
         marketplaceFee = customerPrice - sellerBasePrice;
         break;
       case 'TARGET_MARGIN':
-        customerPrice = (sellerBasePrice + policy.fixedFee) / (1 - policy.percentRate);
+        customerPrice =
+          (sellerBasePrice + policy.fixedFee) / (1 - policy.percentRate);
         marketplaceFee = customerPrice - sellerBasePrice;
         break;
     }
@@ -126,7 +141,9 @@ export class PricingService {
     }
 
     if (sellerProceeds < 0) {
-      throw new BadRequestException('Pricing policy produces negative seller proceeds');
+      throw new BadRequestException(
+        'Pricing policy produces negative seller proceeds',
+      );
     }
 
     return {
@@ -149,7 +166,11 @@ export class PricingService {
     if (!offer) throw new BadRequestException('Offer not found');
 
     const base = sellerBasePrice ?? offer.sellerBasePrice ?? offer.price;
-    const quote = await this.quote(offer.sellerId, offer.canonicalPart.category, base);
+    const quote = await this.quote(
+      offer.sellerId,
+      offer.canonicalPart.category,
+      base,
+    );
     return this.prisma.sellerOffer.update({
       where: { id: offer.id },
       data: {
@@ -167,7 +188,10 @@ export class PricingService {
   }
 
   async repriceSeller(sellerId: string) {
-    const offers = await this.prisma.sellerOffer.findMany({ where: { sellerId }, select: { id: true } });
+    const offers = await this.prisma.sellerOffer.findMany({
+      where: { sellerId },
+      select: { id: true },
+    });
     let repricedOffers = 0;
     for (const offer of offers) {
       await this.repriceOffer(offer.id);

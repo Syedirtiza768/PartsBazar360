@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { SupportService } from './support.service';
 
 @Controller('support')
@@ -35,7 +43,8 @@ export class SupportController {
   @Patch('tickets/:id')
   async updateTicket(
     @Param('id') id: string,
-    @Body() body: { status?: string; priority?: string; internalNotes?: string },
+    @Body()
+    body: { status?: string; priority?: string; internalNotes?: string },
   ) {
     return this.support.updateTicket(id, body);
   }

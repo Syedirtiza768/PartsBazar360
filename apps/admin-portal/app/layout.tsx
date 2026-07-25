@@ -1,14 +1,21 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AdminAuthProvider } from "@/lib/auth-context";
 import { AdminShell } from "@/components/AdminShell";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "PartsBazar360 | Admin Console",
   description: "Platform administration for PartsBazar360.",
+};
+
+/** See the buyer app's layout for why `viewportFit: "cover"` is required. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -18,7 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-slate-50 text-slate-950 flex min-h-screen antialiased selection:bg-blue-200`}>
+      <body className={`${inter.className} min-h-dvh bg-slate-50 text-graphite-700 antialiased`}>
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         <AdminAuthProvider>
           <AdminShell>{children}</AdminShell>
         </AdminAuthProvider>

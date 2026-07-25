@@ -7,7 +7,11 @@ import { PrismaService } from './prisma.service';
 import { MerchantUploadsService } from './modules/merchant/uploads.service';
 import { IngestionProcessor } from './modules/ingestion/ingestion.processor';
 import { AuthService } from './modules/auth/auth.service';
-import { enabled, listingLimit, storeManifest } from './modules/seed/seed.config';
+import {
+  enabled,
+  listingLimit,
+  storeManifest,
+} from './modules/seed/seed.config';
 import {
   MARKETPLACE_ORG,
   MARKETPLACE_SELLERS,
@@ -32,10 +36,14 @@ async function ensureSeller(
     ? await prisma.seller.findUnique({ where: { id: input.id } })
     : null;
   if (!seller && input.storeId) {
-    seller = await prisma.seller.findFirst({ where: { storeId: input.storeId } });
+    seller = await prisma.seller.findFirst({
+      where: { storeId: input.storeId },
+    });
   }
   if (!seller) {
-    seller = await prisma.seller.findFirst({ where: { organizationId, name: input.name } });
+    seller = await prisma.seller.findFirst({
+      where: { organizationId, name: input.name },
+    });
   }
 
   const data = {
@@ -114,7 +122,10 @@ async function main() {
       },
     });
 
-    const sellerByKey: Record<string, { id: string; name: string; storeId: string | null }> = {};
+    const sellerByKey: Record<
+      string,
+      { id: string; name: string; storeId: string | null }
+    > = {};
     for (const cfg of Object.values(MARKETPLACE_SELLERS)) {
       const seller = await ensureSeller(prisma, org.id, {
         id: cfg.id,
@@ -123,7 +134,11 @@ async function main() {
         sourcePlatform: cfg.sourcePlatform,
         externalId: cfg.externalAccountId,
       });
-      sellerByKey[cfg.key] = { id: seller.id, name: seller.name, storeId: seller.storeId };
+      sellerByKey[cfg.key] = {
+        id: seller.id,
+        name: seller.name,
+        storeId: seller.storeId,
+      };
       report.sellers.push({
         id: seller.id,
         name: seller.name,
@@ -145,7 +160,9 @@ async function main() {
     // RealTrack: Salvage ← salvagea only; Blackline ← blacklineusedautoparts only
     if (enabled('SEED_EBAY_STORES', true)) {
       for (const store of storeManifest()) {
-        const allowed = REALTRACK_MARKETPLACE_SELLERS.find((s) => s.storeId === store.storeId);
+        const allowed = REALTRACK_MARKETPLACE_SELLERS.find(
+          (s) => s.storeId === store.storeId,
+        );
         if (!allowed) {
           report.errors.push({
             source: store.name,
@@ -195,7 +212,8 @@ async function main() {
                 env: 'SEED_DYNATRADE_FILE',
                 label: 'Dynatrade Stock List',
                 brand: undefined as string | undefined,
-                currency: process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
+                currency:
+                  process.env.SEED_DYNATRADE_CURRENCY || MARKETPLACE_CURRENCY,
                 partSource: 'AFTERMARKET',
               },
             ]
@@ -242,7 +260,9 @@ async function main() {
     }
   } finally {
     report.completedAt = new Date().toISOString();
-    const reportPath = path.resolve(process.env.SEED_REPORT_PATH || 'seed-report.json');
+    const reportPath = path.resolve(
+      process.env.SEED_REPORT_PATH || 'seed-report.json',
+    );
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2));
     await app.close();
     console.log(JSON.stringify({ reportPath, ...report }, null, 2));

@@ -31,9 +31,18 @@ export class CatalogAuditService {
         source: input.source,
         reason: input.reason,
         confidence: input.confidence,
-        originalValue: input.originalValue === undefined ? undefined : (input.originalValue as Prisma.InputJsonValue),
-        normalizedValue: input.normalizedValue === undefined ? undefined : (input.normalizedValue as Prisma.InputJsonValue),
-        metadata: input.metadata === undefined ? undefined : (input.metadata as Prisma.InputJsonValue),
+        originalValue:
+          input.originalValue === undefined
+            ? undefined
+            : (input.originalValue as Prisma.InputJsonValue),
+        normalizedValue:
+          input.normalizedValue === undefined
+            ? undefined
+            : (input.normalizedValue as Prisma.InputJsonValue),
+        metadata:
+          input.metadata === undefined
+            ? undefined
+            : (input.metadata as Prisma.InputJsonValue),
         canonicalPartId: input.canonicalPartId,
       },
     });

@@ -25,7 +25,9 @@ export class CatalogMatchService {
     oemNumbers?: string[];
     position?: string | null;
   }): Promise<MatchCandidate[]> {
-    const normalizedMpn = input.manufacturerPartNumber ? normalizePartNumber(input.manufacturerPartNumber) : '';
+    const normalizedMpn = input.manufacturerPartNumber
+      ? normalizePartNumber(input.manufacturerPartNumber)
+      : '';
     if (!normalizedMpn) return [];
 
     const byMpn = await this.prisma.catalogPartNumber.findMany({
@@ -42,19 +44,27 @@ export class CatalogMatchService {
 
     const candidates: MatchCandidate[] = [];
     for (const row of byMpn) {
-      const features: string[] = [`Normalized ${row.numberType} match: ${normalizedMpn}`];
+      const features: string[] = [
+        `Normalized ${row.numberType} match: ${normalizedMpn}`,
+      ];
       const blockers: string[] = [];
       let score = 0.7;
 
       if (input.brandId && row.brandId && input.brandId === row.brandId) {
         score = 1;
         features.push('Exact brand namespace + MPN');
-      } else if (input.brandName && row.brand?.displayName && row.brand.displayName.toLowerCase() === input.brandName.toLowerCase()) {
+      } else if (
+        input.brandName &&
+        row.brand?.displayName &&
+        row.brand.displayName.toLowerCase() === input.brandName.toLowerCase()
+      ) {
         score = 0.95;
         features.push('Brand display name + MPN');
       } else if (input.brandId || input.brandName) {
         if (row.brandId) {
-          blockers.push('Same normalized number under a different brand namespace');
+          blockers.push(
+            'Same normalized number under a different brand namespace',
+          );
           score = 0.35;
         } else {
           features.push('MPN match without brand namespace on existing record');
@@ -62,8 +72,14 @@ export class CatalogMatchService {
         }
       }
 
-      if (input.position && row.canonicalPart.position && input.position !== row.canonicalPart.position) {
-        blockers.push(`Position conflict (${input.position} vs ${row.canonicalPart.position})`);
+      if (
+        input.position &&
+        row.canonicalPart.position &&
+        input.position !== row.canonicalPart.position
+      ) {
+        blockers.push(
+          `Position conflict (${input.position} vs ${row.canonicalPart.position})`,
+        );
         score = Math.min(score, 0.2);
       }
 
@@ -98,7 +114,8 @@ export class CatalogMatchService {
         take: 5,
       });
       for (const hit of oemHits) {
-        if (candidates.some((c) => c.canonicalPartId === hit.canonicalPartId)) continue;
+        if (candidates.some((c) => c.canonicalPartId === hit.canonicalPartId))
+          continue;
         candidates.push({
           canonicalPartId: hit.canonicalPartId,
           title: hit.canonicalPart.title,
@@ -107,7 +124,9 @@ export class CatalogMatchService {
           partType: hit.canonicalPart.partType,
           score: 0.45,
           band: 'POSSIBLE',
-          blockers: ['OEM/cross-reference only — never auto-merge across brands'],
+          blockers: [
+            'OEM/cross-reference only — never auto-merge across brands',
+          ],
           features: [`OEM/cross-reference number ${hit.displayNumber}`],
         });
       }
@@ -117,7 +136,9 @@ export class CatalogMatchService {
   }
 
   pickAutoMatch(candidates: MatchCandidate[]) {
-    const exact = candidates.find((c) => c.band === 'EXACT' && c.blockers.length === 0);
+    const exact = candidates.find(
+      (c) => c.band === 'EXACT' && c.blockers.length === 0,
+    );
     return exact || null;
   }
 }

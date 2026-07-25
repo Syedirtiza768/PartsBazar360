@@ -11,15 +11,18 @@ export class OrderService {
     buyerId: string | undefined,
     cartItems: any[],
     shippingAddress: any,
-    shippingTotalsBySeller: Record<string, number>
+    shippingTotalsBySeller: Record<string, number>,
   ) {
     // We group cart items by Seller ID to split them into SellerOrders
-    const itemsBySeller = cartItems.reduce((acc, item) => {
-      const sellerId = item.sellerOffer.sellerId;
-      if (!acc[sellerId]) acc[sellerId] = [];
-      acc[sellerId].push(item);
-      return acc;
-    }, {} as Record<string, typeof cartItems>);
+    const itemsBySeller = cartItems.reduce(
+      (acc, item) => {
+        const sellerId = item.sellerOffer.sellerId;
+        if (!acc[sellerId]) acc[sellerId] = [];
+        acc[sellerId].push(item);
+        return acc;
+      },
+      {} as Record<string, typeof cartItems>,
+    );
 
     let parentOrderTotal = 0;
 
@@ -31,22 +34,28 @@ export class OrderService {
           buyerId,
           totalAmount: 0, // Will update after summation
           shippingAddress,
-          status: 'PENDING_PAYMENT'
-        }
+          status: 'PENDING_PAYMENT',
+        },
       });
 
-      for (const [sellerId, items] of Object.entries(itemsBySeller) as [string, typeof cartItems][]) {
+      for (const [sellerId, items] of Object.entries(itemsBySeller) as [
+        string,
+        typeof cartItems,
+      ][]) {
         let subTotal = 0;
         let marketplaceFeeTotal = 0;
         let sellerProceedsTotal = 0;
         for (const item of items) {
-          subTotal += (item.quantity * item.sellerOffer.price);
-          marketplaceFeeTotal += item.quantity * (item.sellerOffer.marketplaceFee ?? 0);
-          sellerProceedsTotal += item.quantity * (item.sellerOffer.sellerProceeds ?? item.sellerOffer.price);
+          subTotal += item.quantity * item.sellerOffer.price;
+          marketplaceFeeTotal +=
+            item.quantity * (item.sellerOffer.marketplaceFee ?? 0);
+          sellerProceedsTotal +=
+            item.quantity *
+            (item.sellerOffer.sellerProceeds ?? item.sellerOffer.price);
         }
 
         const shippingTotal = shippingTotalsBySeller[sellerId] || 0;
-        parentOrderTotal += (subTotal + shippingTotal);
+        parentOrderTotal += subTotal + shippingTotal;
 
         // Create Child Seller Order
         const sellerOrder = await tx.sellerOrder.create({
@@ -58,7 +67,7 @@ export class OrderService {
             marketplaceFeeTotal,
             sellerProceedsTotal,
             status: 'AWAITING_PAYMENT',
-          }
+          },
         });
 
         // Create Order Items
@@ -74,8 +83,8 @@ export class OrderService {
               sellerProceedsUnit: item.sellerOffer.sellerProceeds,
               pricingPolicyId: item.sellerOffer.pricingPolicyId,
               pricingPolicyVersion: item.sellerOffer.pricingPolicyVersion,
-              weight: item.sellerOffer.canonicalPart?.weight
-            }
+              weight: item.sellerOffer.canonicalPart?.weight,
+            },
           });
         }
       }
@@ -84,7 +93,7 @@ export class OrderService {
       return tx.order.update({
         where: { id: parentOrder.id },
         data: { totalAmount: parentOrderTotal },
-        include: { sellerOrders: { include: { items: true } } }
+        include: { sellerOrders: { include: { items: true } } },
       });
     });
   }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
 @Injectable()
@@ -14,12 +18,12 @@ export class CartService {
             sellerOffer: {
               include: {
                 seller: true,
-                canonicalPart: true
-              }
-            }
-          }
-        }
-      }
+                canonicalPart: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!cart) {
@@ -35,14 +39,16 @@ export class CartService {
     }
 
     const where = userId ? { userId } : { sessionId };
-    let cart = await this.prisma.cart.findFirst({ where: { ...where, status: 'ACTIVE' } });
+    let cart = await this.prisma.cart.findFirst({
+      where: { ...where, status: 'ACTIVE' },
+    });
 
     if (!cart) {
       cart = await this.prisma.cart.create({
         data: {
           userId,
           sessionId,
-        }
+        },
       });
     }
 
@@ -53,27 +59,36 @@ export class CartService {
     // 1. Validate offer and stock
     const offer = await this.prisma.sellerOffer.findUnique({
       where: { id: offerId },
-      include: { inventory: true, seller: true }
+      include: { inventory: true, seller: true },
     });
 
-    if (!offer || offer.status !== 'ACTIVE' || offer.seller.onboardingStatus !== 'ACTIVE') {
+    if (
+      !offer ||
+      offer.status !== 'ACTIVE' ||
+      offer.seller.onboardingStatus !== 'ACTIVE'
+    ) {
       throw new BadRequestException('Offer is not available');
     }
 
-    const totalStock = offer.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
+    const totalStock = offer.inventory.reduce(
+      (sum, inv) => sum + inv.quantity,
+      0,
+    );
     if (totalStock < quantity) {
-      throw new BadRequestException(`Insufficient stock. Only ${totalStock} available.`);
+      throw new BadRequestException(
+        `Insufficient stock. Only ${totalStock} available.`,
+      );
     }
 
     // 2. Add or update item in cart
     const existingItem = await this.prisma.cartItem.findFirst({
-      where: { cartId, sellerOfferId: offerId }
+      where: { cartId, sellerOfferId: offerId },
     });
 
     if (existingItem) {
       await this.prisma.cartItem.update({
         where: { id: existingItem.id },
-        data: { quantity: existingItem.quantity + quantity }
+        data: { quantity: existingItem.quantity + quantity },
       });
     } else {
       await this.prisma.cartItem.create({
@@ -81,7 +96,7 @@ export class CartService {
           cartId,
           sellerOfferId: offerId,
           quantity,
-        }
+        },
       });
     }
 
@@ -89,7 +104,9 @@ export class CartService {
   }
 
   async updateItemQuantity(cartId: string, itemId: string, quantity: number) {
-    const item = await this.prisma.cartItem.findFirst({ where: { id: itemId, cartId } });
+    const item = await this.prisma.cartItem.findFirst({
+      where: { id: itemId, cartId },
+    });
     if (!item) {
       throw new NotFoundException('Cart item not found');
     }
@@ -103,17 +120,25 @@ export class CartService {
       where: { id: item.sellerOfferId },
       include: { inventory: true },
     });
-    const totalStock = offer?.inventory.reduce((sum, inv) => sum + inv.quantity, 0) ?? 0;
+    const totalStock =
+      offer?.inventory.reduce((sum, inv) => sum + inv.quantity, 0) ?? 0;
     if (totalStock < quantity) {
-      throw new BadRequestException(`Insufficient stock. Only ${totalStock} available.`);
+      throw new BadRequestException(
+        `Insufficient stock. Only ${totalStock} available.`,
+      );
     }
 
-    await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
+    await this.prisma.cartItem.update({
+      where: { id: itemId },
+      data: { quantity },
+    });
     return this.getCart(cartId);
   }
 
   async removeItem(cartId: string, itemId: string) {
-    const item = await this.prisma.cartItem.findFirst({ where: { id: itemId, cartId } });
+    const item = await this.prisma.cartItem.findFirst({
+      where: { id: itemId, cartId },
+    });
     if (!item) {
       throw new NotFoundException('Cart item not found');
     }

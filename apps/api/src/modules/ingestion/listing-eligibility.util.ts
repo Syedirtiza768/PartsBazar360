@@ -11,7 +11,8 @@ export function listingQuantity(listing: any): number | null {
     listing?.availableQuantity ??
     listing?.qty;
   if (raw === undefined || raw === null || raw === '') return null;
-  const n = typeof raw === 'number' ? raw : parseInt(String(raw).replace(/,/g, ''), 10);
+  const n =
+    typeof raw === 'number' ? raw : parseInt(String(raw).replace(/,/g, ''), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -36,14 +37,16 @@ export function isActiveListingStatus(listing: any): boolean {
     'WITHDRAWN',
   ];
   if (inactive.includes(status)) return false;
-  return [
-    'ACTIVE',
-    'PUBLISHED',
-    'LIVE',
-    'AVAILABLE',
-    'FOR_SALE',
-    'PUBLISH',
-  ].includes(status) || !inactive.includes(status);
+  return (
+    [
+      'ACTIVE',
+      'PUBLISHED',
+      'LIVE',
+      'AVAILABLE',
+      'FOR_SALE',
+      'PUBLISH',
+    ].includes(status) || !inactive.includes(status)
+  );
 }
 
 /**

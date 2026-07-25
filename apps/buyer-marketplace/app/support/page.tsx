@@ -81,7 +81,7 @@ function SupportForm() {
 
   if (result) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-12 sm:py-16">
+      <div className="mx-auto max-w-2xl gutter py-12 sm:py-16">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center sm:p-8">
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
             <CheckCircleIcon className="h-7 w-7" />
@@ -106,11 +106,11 @@ function SupportForm() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_320px]">
+    <div className="mx-auto max-w-5xl gutter py-8 sm:py-12">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10">
         <div>
           <header>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Get help from a human
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-graphite-600 sm:text-base">
@@ -241,7 +241,7 @@ export default function SupportPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8" aria-busy="true">
+        <div className="mx-auto max-w-5xl gutter py-8 sm:py-12" aria-busy="true">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="mt-3 h-4 w-96 max-w-full" />
           <Skeleton className="mt-6 h-[480px] w-full max-w-2xl rounded-xl" />
