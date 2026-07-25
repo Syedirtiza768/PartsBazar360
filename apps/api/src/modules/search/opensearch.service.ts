@@ -285,10 +285,10 @@ export class OpenSearchService implements OnModuleInit {
       // Browse only parts that still have at least one indexed offer.
       { exists: { field: 'offers.sellerId' } },
     ];
-    if (category) filter.push({ term: { category } });
+    if (category) filter.push({ term: { 'category.keyword': category } });
     if (brand) filter.push({ term: { 'brand.keyword': brand } });
-    if (make) filter.push({ term: { makes: make } });
-    if (partType) filter.push({ term: { partType } });
+    if (make) filter.push({ term: { 'makes.keyword': make } });
+    if (partType) filter.push({ term: { 'partType.keyword': partType } });
 
     const sortClause: any[] =
       sort === 'price_asc'
@@ -346,8 +346,8 @@ export class OpenSearchService implements OnModuleInit {
           size: 0,
           aggs: {
             brands: { terms: { field: 'brand.keyword', size: 50 } },
-            categories: { terms: { field: 'category', size: 50 } },
-            makes: { terms: { field: 'makes', size: 50 } },
+            categories: { terms: { field: 'category.keyword', size: 50 } },
+            makes: { terms: { field: 'makes.keyword', size: 50 } },
           },
         },
       });
