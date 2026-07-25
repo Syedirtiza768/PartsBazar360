@@ -6,7 +6,7 @@
  * `http://localhost:7070/buyer` into production robots.txt.
  */
 
-const PRODUCTION_SITE_URL = "https://partsbazar360.realtrackapp.com/buyer";
+const PRODUCTION_SITE_URL = "https://partsbazar360.com/buyer";
 
 /** Public storefront origin including `/buyer` basePath, no trailing slash. */
 export function getSiteUrl(): string {

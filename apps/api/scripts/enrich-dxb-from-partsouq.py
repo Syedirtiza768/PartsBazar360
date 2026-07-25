@@ -43,7 +43,7 @@ STATE_PATH = Path(os.environ.get("DXB_STATE_PATH", "/tmp/dxb-oem-enrich-progress
 OPENSEARCH_URL = os.environ.get("OPENSEARCH_URL")
 INDEX_NAME = os.environ.get("OPENSEARCH_INDEX", "canonical_parts")
 USER_AGENT = (
-    "PartsBazar360CatalogBot/1.0 (+https://partsbazar360.realtrackapp.com; catalog enrichment)"
+    "PartsBazar360CatalogBot/1.0 (+https://partsbazar360.com; catalog enrichment)"
 )
 
 # Known PartSouq placeholder thumbnails (wrong brand/pn still returns 200).

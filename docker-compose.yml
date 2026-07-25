@@ -59,12 +59,12 @@ services:
       REDIS_PORT: 6379
       OPENSEARCH_URL: http://opensearch:9200
       PORT: 3001
-      CORS_ORIGIN: https://partsbazar360.realtrackapp.com
+      CORS_ORIGIN: https://partsbazar360.com
       REALTRACK_API_URL: https://mhn.realtrackapp.com/api
       REALTRACK_API_EMAIL: api-published-listings@realtrack.local
       REALTRACK_API_PASSWORD: Ebay$321
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
-      BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.realtrackapp.com/buyer}
+      BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.com/buyer}
       BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
@@ -140,7 +140,7 @@ services:
       # reach the API directly over the compose network (faster + avoids an
       # extra hop through nginx for SSR data fetching).
       INTERNAL_API_URL: http://api:3001
-      SITE_URL: https://partsbazar360.realtrackapp.com/buyer
+      SITE_URL: https://partsbazar360.com/buyer
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
     restart: unless-stopped
     networks:

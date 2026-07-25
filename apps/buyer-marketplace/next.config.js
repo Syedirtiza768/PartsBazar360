@@ -13,7 +13,7 @@ const nextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
   // Local development without the nginx/docker stack: set DEV_API_PROXY to a
-  // deployed origin (e.g. https://partsbazar360.realtrackapp.com) and the dev
+  // deployed origin (e.g. https://partsbazar360.com) and the dev
   // server proxies browser /api and /img-proxy calls there, mirroring what
   // nginx does in production. Unset in production, so this emits no rewrites.
   async rewrites() {

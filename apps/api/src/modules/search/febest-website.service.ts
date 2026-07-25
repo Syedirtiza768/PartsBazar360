@@ -24,7 +24,7 @@ export type FebestLiveEnrichment = {
 
 const BASE = 'https://febest.de';
 const USER_AGENT =
-  'PartsBazar360/1.0 (+https://partsbazar360.realtrackapp.com; live catalog lookup)';
+  'PartsBazar360/1.0 (+https://partsbazar360.com; live catalog lookup)';
 
 @Injectable()
 export class FebestWebsiteService {

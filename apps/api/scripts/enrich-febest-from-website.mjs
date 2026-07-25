@@ -21,7 +21,7 @@ import path from 'node:path';
 
 const BASE = 'https://febest.de';
 const USER_AGENT =
-  'PartsBazar360CatalogBot/1.0 (+https://partsbazar360.realtrackapp.com; catalog enrichment; contact: ops)';
+  'PartsBazar360CatalogBot/1.0 (+https://partsbazar360.com; catalog enrichment; contact: ops)';
 // Marketplace FEBEST catalog is sold under Superior Auto Parts (not the suspended seed seller).
 const SELLER_ID = process.env.FEBEST_SELLER_ID || 'seller-superior-auto-parts';
 const DELAY_MS = Number(process.env.FEBEST_DELAY_MS || 400);
