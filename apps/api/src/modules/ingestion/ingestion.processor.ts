@@ -104,12 +104,9 @@ export class IngestionProcessor extends WorkerHost {
       discovered += result.items.length;
       for (const summary of result.items) {
         try {
-          const detail = await this.realTrackService.fetchListingDetail(
-            canonicalStoreId,
-            summary.id,
-          );
+          // Use summary data directly — detail endpoint is unreliable
           const outcome = await this.processListing(
-            { ...summary, ...detail },
+            summary,
             canonicalStoreId,
           );
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
@@ -173,12 +170,9 @@ export class IngestionProcessor extends WorkerHost {
       let skippedInactiveOrZero = 0;
       for (const summary of result.items) {
         try {
-          const detail = await this.realTrackService.fetchListingDetail(
-            canonicalStoreId,
-            summary.id,
-          );
+          // Use summary data directly — detail endpoint is unreliable
           const outcome = await this.processListing(
-            { ...summary, ...detail },
+            summary,
             canonicalStoreId,
           );
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
@@ -325,7 +319,7 @@ export class IngestionProcessor extends WorkerHost {
     const category = extractCategory(title);
     const oeNumbers = extractListingOeNumbers(listing, extractOeNumbers(title));
     const description = extractListingDescription(listing);
-    const brand = extractListingBrand(listing) || parsedVehicle?.make || null;
+    const brand = extractListingBrand(listing);
     const mpn =
       (typeof listing.mpn === 'string' && listing.mpn.trim()) ||
       (typeof listing.manufacturerPartNumber === 'string' &&

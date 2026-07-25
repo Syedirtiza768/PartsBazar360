@@ -96,6 +96,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
   if (params.q) chips.push({ key: "q", label: `“${params.q}”` });
   if (params.category) chips.push({ key: "category", label: params.category });
   if (params.brand) chips.push({ key: "brand", label: params.brand });
+  if (params.make) chips.push({ key: "make", label: params.make });
   if (params.partType) chips.push({ key: "partType", label: params.partType.replaceAll("_", " ") });
   if (chips.length === 0) return null;
 
@@ -133,6 +134,7 @@ export function FilterSections({
 }) {
   const categories = facets.categories ?? [];
   const brands = facets.brands ?? [];
+  const makes = facets.makes ?? [];
   // Interchange matching is on unless the buyer turned it off.
   const interchangeOn = params.includeInterchange !== "false";
 
@@ -240,6 +242,45 @@ export function FilterSections({
                     })}
                     active={params.brand === b.name}
                     label={b.name}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+        </FilterGroup>
+      )}
+
+      {makes.length > 0 && (
+        <FilterGroup title="Vehicle Make">
+          {params.make && (
+            <FilterOption
+              href={buildHref(params, { make: undefined })}
+              active={false}
+              label="All makes"
+            />
+          )}
+          {makes.slice(0, 10).map((m) => (
+            <FilterOption
+              key={m.name}
+              href={buildHref(params, { make: params.make === m.name ? undefined : m.name })}
+              active={params.make === m.name}
+              label={m.name}
+            />
+          ))}
+          {makes.length > 10 && (
+            <details>
+              <summary className="flex min-h-touch cursor-pointer list-none items-center px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 lg:min-h-0 [&::-webkit-details-marker]:hidden">
+                Show all {makes.length} makes
+              </summary>
+              <div className="space-y-0.5">
+                {makes.slice(10).map((m) => (
+                  <FilterOption
+                    key={m.name}
+                    href={buildHref(params, {
+                      make: params.make === m.name ? undefined : m.name,
+                    })}
+                    active={params.make === m.name}
+                    label={m.name}
                   />
                 ))}
               </div>

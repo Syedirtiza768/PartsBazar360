@@ -65,6 +65,14 @@ export class OpenSearchService implements OnModuleInit {
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           category: part.category,
+          // Extract unique makes from compatibility data for faceted filtering.
+          // Makes (Toyota, BMW) are vehicle manufacturers — distinct from brand
+          // (FEBEST, Bosch) which is the parts manufacturer.
+          makes: [...new Set(
+            (part.compatibility || [])
+              .map((c: any) => c.make)
+              .filter(Boolean)
+          )],
           oeNumbers: part.oeNumbers,
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
@@ -200,6 +208,7 @@ export class OpenSearchService implements OnModuleInit {
     q?: string;
     category?: string;
     brand?: string;
+    make?: string;
     partType?: string;
     sort?: 'newest' | 'price_asc' | 'price_desc';
     page?: number;
@@ -216,6 +225,7 @@ export class OpenSearchService implements OnModuleInit {
       q,
       category,
       brand,
+      make,
       partType,
       sort = 'newest',
       page = 1,
@@ -277,6 +287,7 @@ export class OpenSearchService implements OnModuleInit {
     ];
     if (category) filter.push({ term: { 'category.keyword': category } });
     if (brand) filter.push({ term: { 'brand.keyword': brand } });
+    if (make) filter.push({ term: { 'makes.keyword': make } });
     if (partType) filter.push({ term: { 'partType.keyword': partType } });
 
     const sortClause: any[] =
@@ -336,6 +347,7 @@ export class OpenSearchService implements OnModuleInit {
           aggs: {
             brands: { terms: { field: 'brand.keyword', size: 50 } },
             categories: { terms: { field: 'category.keyword', size: 50 } },
+            makes: { terms: { field: 'makes.keyword', size: 50 } },
           },
         },
       });
@@ -350,10 +362,14 @@ export class OpenSearchService implements OnModuleInit {
           name: b.key,
           count: b.doc_count,
         })),
+        makes: (aggs?.makes?.buckets || []).map((b: any) => ({
+          name: b.key,
+          count: b.doc_count,
+        })),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
-      return { brands: [], categories: [] };
+      return { brands: [], categories: [], makes: [] };
     }
   }
 }

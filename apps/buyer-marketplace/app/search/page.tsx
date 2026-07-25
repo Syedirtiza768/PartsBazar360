@@ -26,6 +26,7 @@ interface SearchPageProps {
     q?: string;
     category?: string;
     brand?: string;
+    make?: string;
     partType?: string;
     sort?: "newest" | "price_asc" | "price_desc";
     page?: string;
@@ -42,6 +43,7 @@ async function getResults(
   if (params.q) qs.set("q", params.q);
   if (params.category) qs.set("category", params.category);
   if (params.brand) qs.set("brand", params.brand);
+  if (params.make) qs.set("make", params.make);
   if (params.partType) qs.set("partType", params.partType);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
@@ -71,10 +73,10 @@ async function getFacets(): Promise<FacetsResponse> {
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return { brands: [], categories: [] };
+    if (!res.ok) return { brands: [], categories: [], makes: [] };
     return res.json();
   } catch {
-    return { brands: [], categories: [] };
+    return { brands: [], categories: [], makes: [] };
   }
 }
 
@@ -165,8 +167,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     includeInterchange: params.includeInterchange,
   };
 
-  const activeFilterCount = [params.category, params.brand, params.partType].filter(Boolean).length;
-  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0);
+  const activeFilterCount = [params.category, params.brand, params.make, params.partType].filter(Boolean).length;
+  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0);
   const interchangeOff = params.includeInterchange === "false";
 
   const heading = isFitmentMode

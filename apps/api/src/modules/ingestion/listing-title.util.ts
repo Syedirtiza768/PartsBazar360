@@ -391,13 +391,7 @@ const NON_ENGLISH_RE = new RegExp(
 
 /** True when title looks predominantly Latin/English (not CJK / heavy Cyrillic). */
 export function looksLikeEnglishTitle(title: string): boolean {
-  const s = String(title || '').trim();
-  if (!s) return false;
-  const letters = s.replace(/[^A-Za-z\u00C0-\u024F]/g, '');
-  const nonLatin = s.replace(/[\x00-\x7F\u00C0-\u024F\s0-9.,\-/()#&+'"]/g, '');
-  if (letters.length < 3) return false;
-  if (nonLatin.length / Math.max(s.length, 1) >= 0.25) return false;
-  // Romance / Germanic automotive terms ⇒ not an English title.
-  if (NON_ENGLISH_RE.test(s)) return false;
+  // Language filter disabled — import all titles regardless of language.
+  // Non-English titles can be translated in a post-processing step.
   return true;
 }

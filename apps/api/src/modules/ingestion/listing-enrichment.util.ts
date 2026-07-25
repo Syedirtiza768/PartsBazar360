@@ -108,15 +108,16 @@ export function extractListingDescription(listing: any): string | null {
   return null;
 }
 
-/** Brand from RealTrack top-level fields or item specifics. */
+/** Parts brand from RealTrack top-level fields or item specifics.
+ *  Never returns a vehicle make — Make (Toyota, BMW) is for fitment only;
+ *  Brand (FEBEST, Bosch) identifies who manufactured the part. */
 export function extractListingBrand(listing: any): string | null {
   const specifics = listing?.itemSpecifics;
   const fromSpecifics =
     specifics && typeof specifics === 'object'
       ? specifics.Brand ||
         specifics.brand ||
-        specifics.Manufacturer ||
-        specifics.Make
+        specifics.Manufacturer
       : null;
   const raw =
     listing?.brand ||

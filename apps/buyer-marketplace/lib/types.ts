@@ -163,4 +163,5 @@ export interface Facet {
 export interface FacetsResponse {
   brands: Facet[];
   categories: Facet[];
+  makes: Facet[];
 }

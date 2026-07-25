@@ -62,12 +62,15 @@ export class RealTrackService {
 
   private async requestJson(path: string, retry = 0): Promise<any> {
     await this.authenticate();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json',
       },
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
     if (response.status === 401 && retry < 1) {
       this.accessToken = null;
       this.tokenExpiry = null;

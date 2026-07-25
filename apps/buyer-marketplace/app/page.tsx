@@ -40,9 +40,9 @@ async function getFacets(): Promise<FacetsResponse> {
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(8_000),
     });
-    return response.ok ? response.json() : { brands: [], categories: [] };
+    return response.ok ? response.json() : { brands: [], categories: [], makes: [] };
   } catch {
-    return { brands: [], categories: [] };
+    return { brands: [], categories: [], makes: [] };
   }
 }
 

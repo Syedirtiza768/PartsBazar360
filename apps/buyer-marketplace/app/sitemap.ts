@@ -44,16 +44,17 @@ async function getPartUrls(): Promise<{ id: string; updatedAt?: string }[]> {
 async function getFacets(): Promise<{
   brands: Array<{ name: string; count: number }>;
   categories: Array<{ name: string; count: number }>;
+  makes: Array<{ name: string; count: number }>;
 }> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
       next: { revalidate: 3600 },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return { brands: [], categories: [] };
+    if (!res.ok) return { brands: [], categories: [], makes: [] };
     return res.json();
   } catch {
-    return { brands: [], categories: [] };
+    return { brands: [], categories: [], makes: [] };
   }
 }
 
