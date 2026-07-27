@@ -28,7 +28,8 @@
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
     "import:mvl": "node scripts/import-us-mvl.mjs",
     "backfill:compat-mvl": "node scripts/backfill-compat-from-mvl.mjs",
-    "enrich:dxb": "node scripts/enrich-dxb-from-partsouq.mjs"
+    "enrich:dxb": "node scripts/enrich-dxb-from-partsouq.mjs",
+    "enrich:itemspecifics": "node scripts/enrich-itemspecifics.mjs"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

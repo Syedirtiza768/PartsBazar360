@@ -83,6 +83,29 @@ export interface PartFitment {
   };
 }
 
+export interface ItemSpecifics {
+  partType?: string | null;
+  placementOnVehicle?: string | null;
+  position?: string | null;
+  material?: string | null;
+  color?: string | null;
+  features?: string[];
+  countryOfOrigin?: string | null;
+  warranty?: string | null;
+  condition?: string | null;
+  brandType?: string | null;
+  surfaceFinish?: string | null;
+  isPerformancePart?: boolean;
+  isCustomBundle?: boolean;
+  isModifiedItem?: boolean;
+  isUniversalFitment?: boolean;
+  OE_numbers?: string[];
+  supersedes?: string[];
+  interchangeNumbers?: string[];
+  vehicleSystem?: string | null;
+  categoryType?: string | null;
+}
+
 export interface Part {
   id: string;
   title: string;
@@ -107,6 +130,10 @@ export interface Part {
   fitmentConfidence?: number | null;
   createdAt?: string;
   minPrice?: number | null;
+  position?: string | null;
+  vehicleSystem?: string | null;
+  material?: string | null;
+  itemSpecifics?: ItemSpecifics | null;
   /**
    * Search index documents carry verified vehicleConfig ids (string[]);
    * the part detail endpoint carries full fitment relations (PartFitment[]).

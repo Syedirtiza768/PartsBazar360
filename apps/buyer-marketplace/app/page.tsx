@@ -13,6 +13,7 @@ import {
 } from "@repo/ui/icons";
 import { INTERNAL_API_URL } from "@/lib/api";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { HeroSearch } from "@/components/HeroSearch";
 import { ProductCard } from "@/components/ProductCard";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { VehiclePicker } from "@/components/VehiclePicker";
@@ -116,31 +117,9 @@ export default async function Home() {
               by side, "Find parts" plus the icon left roughly 110px for the
               input, so the placeholder was unreadable on a 320px handset.
             */}
-            <form
-              action="/search"
-              role="search"
-              className="mt-7 flex max-w-3xl flex-col gap-1 border-2 border-white bg-white p-1 text-graphite-950 xs:flex-row sm:mt-8"
-            >
-              <div className="flex min-w-0 flex-1 items-center">
-                <SearchIcon className="ml-3 h-5 w-5 shrink-0 text-graphite-600" />
-                <label htmlFor="home-search" className="sr-only">
-                  Search all motor parts
-                </label>
-                <input
-                  id="home-search"
-                  name="q"
-                  type="search"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  className="min-h-touch min-w-0 flex-1 self-stretch border-0 bg-transparent px-3 py-3 text-base font-medium outline-none placeholder:font-normal placeholder:text-graphite-600"
-                  placeholder="OE number, brake caliper, BMW N47 alternator"
-                />
-              </div>
-              <button className="min-h-touch shrink-0 bg-signal-500 px-5 text-sm font-black uppercase tracking-wide text-graphite-950 transition-colors hover:bg-signal-600">
-                Find parts
-              </button>
-            </form>
+            <div className="mt-7 sm:mt-8">
+              <HeroSearch />
+            </div>
 
             <ul className="mt-5 flex flex-col gap-2.5 text-xs font-semibold text-slate-300 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3">
               <li className="flex items-center gap-2">

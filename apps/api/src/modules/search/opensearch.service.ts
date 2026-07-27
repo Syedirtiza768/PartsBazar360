@@ -337,6 +337,120 @@ export class OpenSearchService implements OnModuleInit {
     }
   }
 
+  /**
+   * Lightweight autocomplete suggestions. Returns the top matching parts,
+   * categories, and brands for a partial query. Designed to be called on
+   * every keystroke (debounced client-side) so it must be sub-100ms.
+   */
+  async suggest(q: string): Promise<{
+    parts: Array<{
+      id: string;
+      title: string;
+      brand: string | null;
+      category: string | null;
+      imageUrl: string | null;
+      minPrice: number | null;
+      currency: string | null;
+      manufacturerPartNumber: string | null;
+    }>;
+    categories: string[];
+    brands: string[];
+  }> {
+    try {
+      const normalized = normalizePartNumber(q);
+      const response = await this.client.search({
+        index: this.INDEX_NAME,
+        body: {
+          size: 6,
+          _source: [
+            'id',
+            'title',
+            'brand',
+            'category',
+            'imageUrls',
+            'minPrice',
+            'manufacturerPartNumber',
+            'offers.currency',
+          ],
+          query: {
+            bool: {
+              must: [
+                {
+                  bool: {
+                    should: [
+                      {
+                        multi_match: {
+                          query: q,
+                          fields: [
+                            'title^3',
+                            'brand^2',
+                            'category',
+                            'manufacturerPartNumber^4',
+                            'oeNumbers^2',
+                          ],
+                          type: 'best_fields',
+                          fuzziness: 'AUTO',
+                        },
+                      },
+                      {
+                        term: {
+                          'normalizedPartNumbers.keyword': {
+                            value: normalized,
+                            boost: 10,
+                          },
+                        },
+                      },
+                    ],
+                    minimum_should_match: 1,
+                  },
+                },
+              ],
+              filter: [{ exists: { field: 'offers.sellerId' } }],
+            },
+          },
+          aggs: {
+            categories: {
+              terms: { field: 'category.keyword', size: 4 },
+            },
+            brands: {
+              terms: { field: 'brand.keyword', size: 4 },
+            },
+          },
+        } as any,
+      });
+
+      const aggs: any = response.body.aggregations;
+      const parts = response.body.hits.hits.map((hit: any) => {
+        const src = hit._source;
+        const currency =
+          src.offers?.find((o: any) => o.currency)?.currency ?? null;
+        return {
+          id: src.id || hit._id,
+          title: src.title,
+          brand: src.brand ?? null,
+          category: src.category ?? null,
+          imageUrl: src.imageUrls?.[0] ?? null,
+          minPrice: src.minPrice ?? null,
+          currency,
+          manufacturerPartNumber: src.manufacturerPartNumber ?? null,
+        };
+      });
+
+      return {
+        parts,
+        categories: (aggs?.categories?.buckets || []).map(
+          (b: any) => b.key as string,
+        ),
+        brands: (aggs?.brands?.buckets || []).map(
+          (b: any) => b.key as string,
+        ),
+      };
+    } catch (error) {
+      this.logger.error(`suggest failed for "${q}"`, error.stack);
+      return { parts: [], categories: [], brands: [] };
+    }
+  }
+
   /** Distinct brand/category facets with counts, for building filter sidebars. */
   async getFacets() {
     try {

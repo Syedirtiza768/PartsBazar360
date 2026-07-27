@@ -17,50 +17,94 @@ import {
   ClockIcon,
   HeartIcon,
   MenuIcon,
+  PackageIcon,
   SearchIcon,
   ShieldCheckIcon,
+  TagIcon,
   UserIcon,
 } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import { Sheet } from "@repo/ui/sheet";
+import { Spinner } from "@repo/ui/spinner";
 import { useCart } from "@/lib/cart-context";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { useWatchlist } from "@/lib/watchlist-context";
 import { useAuth } from "@/lib/auth-context";
 import { clearRecentSearches, getRecentSearches, pushRecentSearch } from "@/lib/recent";
+import { formatPrice } from "@/lib/format";
+import { useSearchSuggestions } from "@/lib/use-search-suggestions";
 import type { Facet } from "@/lib/types";
+
+const IMG_PROXY = process.env.NEXT_PUBLIC_IMG_PROXY_BASE || "/img-proxy/";
+
+function thumbUrl(src: string): string {
+  if (src.startsWith("http://") || src.startsWith("https://")) {
+    const url = src.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, "/s-l120.$1");
+    return `${IMG_PROXY}?url=${url}`;
+  }
+  return src;
+}
+
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function Highlight({ text, q }: { text: string; q: string }) {
+  const trimmed = q.trim();
+  if (!trimmed) return <>{text}</>;
+  const regex = new RegExp(`(${escapeRegex(trimmed)})`, "gi");
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <strong key={i} className="font-bold text-graphite-950">{part}</strong>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 function SearchBox({ categories }: { categories: Facet[] }) {
   const router = useRouter();
-  // The header renders one SearchBox per breakpoint — ids must stay unique
-  // per instance or the second input loses its label association.
   const searchId = useId();
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const {
+    query,
+    setQuery,
+    results,
+    loading,
+    activeIndex,
+    setActiveIndex,
+    moveUp,
+    moveDown,
+    reset,
+  } = useSearchSuggestions();
 
   useEffect(() => {
     if (open) setRecents(getRecentSearches());
   }, [open]);
 
   useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    const handlePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        reset();
+      }
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
-    };
-  }, []);
+    document.addEventListener("pointerdown", handlePointer);
+    return () => document.removeEventListener("pointerdown", handlePointer);
+  }, [reset]);
 
   const submit = useCallback(
-    (value: string, category?: string) => {
+    (value: string, category?: string, brand?: string) => {
       const params = new URLSearchParams();
       const clean = value.trim();
       if (clean) {
@@ -68,19 +112,110 @@ function SearchBox({ categories }: { categories: Facet[] }) {
         pushRecentSearch(clean);
       }
       if (category) params.set("category", category);
+      if (brand) params.set("brand", brand);
       setOpen(false);
+      reset();
+      setQuery("");
       router.push(`/search${params.size ? `?${params.toString()}` : ""}`);
     },
-    [router],
+    [router, reset, setQuery],
   );
 
+  const navigateToPart = useCallback(
+    (id: string) => {
+      setOpen(false);
+      reset();
+      setQuery("");
+      router.push(`/part/${id}`);
+    },
+    [router, reset, setQuery],
+  );
+
+  const hasQuery = query.trim().length >= 2;
+  const showSuggestions = hasQuery && results;
   const looksLikeNumber = /\d{3,}/.test(query) && query.trim().length > 4;
+
+  // Flat keyboard-navigation index boundaries
+  const searchActionEnd = hasQuery ? 1 : 0;
+  const partsEnd = searchActionEnd + (results?.parts.length ?? 0);
+  const suggestCatEnd = partsEnd + (results?.categories.length ?? 0);
+  const suggestBrandEnd = suggestCatEnd + (results?.brands.length ?? 0);
+  const recentsStart = suggestBrandEnd;
+  const recentsEnd = recentsStart + Math.min(recents.length, 5);
+  const totalNav = recentsEnd;
+
+  const activateItem = useCallback(
+    (index: number) => {
+      if (index === 0 && hasQuery) {
+        submit(query);
+        return;
+      }
+      if (index < partsEnd && results) {
+        const part = results.parts[index - searchActionEnd];
+        if (part) navigateToPart(part.id);
+        return;
+      }
+      if (index < suggestCatEnd && results) {
+        const cat = results.categories[index - partsEnd];
+        if (cat) submit("", cat);
+        return;
+      }
+      if (index < suggestBrandEnd && results) {
+        const brand = results.brands[index - suggestCatEnd];
+        if (brand) submit("", undefined, brand);
+        return;
+      }
+      if (index < recentsEnd) {
+        const recent = recents[index - recentsStart];
+        if (recent) submit(recent);
+      }
+    },
+    [hasQuery, query, results, recents, submit, navigateToPart, searchActionEnd, partsEnd, suggestCatEnd, suggestBrandEnd, recentsStart, recentsEnd],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!open) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          setOpen(true);
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (totalNav > 0) moveDown();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (totalNav > 0) moveUp();
+      } else if (e.key === "Enter" && activeIndex >= 0) {
+        e.preventDefault();
+        activateItem(activeIndex);
+      } else if (e.key === "Escape") {
+        setOpen(false);
+        reset();
+      }
+    },
+    [open, activeIndex, totalNav, moveUp, moveDown, activateItem, reset],
+  );
+
+  // Scroll active keyboard item into view
+  useEffect(() => {
+    if (activeIndex < 0 || !open) return;
+    const el = listRef.current?.querySelector(`[data-aidx="${activeIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, open]);
+
+  const itemBase =
+    "flex min-h-touch w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors";
 
   return (
     <div ref={rootRef} className="relative min-w-0 flex-1">
       <form
         role="search"
         aria-label="Search all motor parts"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
           submit(query);
@@ -92,20 +227,28 @@ function SearchBox({ categories }: { categories: Facet[] }) {
         </label>
         <SearchIcon className="ml-3 h-5 w-5 shrink-0 text-graphite-600 sm:ml-4" />
         <input
+          ref={inputRef}
           id={searchId}
           type="search"
           autoComplete="off"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="search-listbox"
+          aria-activedescendant={activeIndex >= 0 ? `search-opt-${activeIndex}` : undefined}
+          aria-expanded={open}
           value={query}
           onFocus={() => setOpen(true)}
           onChange={(event) => setQuery(event.target.value)}
-          // Placeholder shortens on narrow screens: the long copy was clipped
-          // mid-word at 320px and read as broken rather than helpful.
+          onKeyDown={handleKeyDown}
           placeholder="Part, OE number, or brand"
           className="h-full min-w-0 flex-1 border-0 bg-transparent px-2.5 text-base font-medium text-graphite-950 outline-none placeholder:font-normal placeholder:text-graphite-600 sm:px-3 sm:text-[15px]"
         />
+        {loading && hasQuery && (
+          <Spinner className="h-4 w-4 mr-1 shrink-0" />
+        )}
         <button
           type="submit"
           aria-label="Search"
@@ -117,17 +260,24 @@ function SearchBox({ categories }: { categories: Facet[] }) {
       </form>
 
       {open && (
-        /*
-          Capped against the dynamic viewport and scrollable: with a long
-          recents list this panel used to run past the bottom of a landscape
-          phone with no way to reach the last entries.
-        */
-        <div className="absolute inset-x-0 top-full z-dropdown mt-2 max-h-[min(28rem,60dvh)] overflow-y-auto overscroll-none-y border-2 border-graphite-950 bg-white shadow-overlay">
-          {query.trim() && (
+        <div
+          ref={listRef}
+          id="search-listbox"
+          role="listbox"
+          aria-label="Search suggestions"
+          className="absolute inset-x-0 top-full z-dropdown mt-2 max-h-[min(32rem,65dvh)] overflow-y-auto overscroll-none-y border-2 border-graphite-950 bg-white shadow-overlay"
+        >
+          {/* Full-text search action */}
+          {hasQuery && (
             <button
+              id="search-opt-0"
+              role="option"
+              aria-selected={activeIndex === 0}
+              data-aidx={0}
               type="button"
               onClick={() => submit(query)}
-              className="flex min-h-touch w-full items-center gap-3 border-b border-stone-200 px-4 py-3 text-left text-sm hover:bg-brand-50"
+              onMouseEnter={() => setActiveIndex(0)}
+              className={`${itemBase} border-b border-stone-200 hover:bg-brand-50 ${activeIndex === 0 ? "bg-brand-50" : ""}`}
             >
               <SearchIcon className="h-4 w-4 shrink-0 text-brand-700" />
               <span className="min-w-0 break-anywhere">
@@ -140,56 +290,224 @@ function SearchBox({ categories }: { categories: Facet[] }) {
               )}
             </button>
           )}
-          <div className="grid sm:grid-cols-2">
-            <section className="border-b border-stone-200 p-3 sm:border-b-0 sm:border-r" aria-label="Recent searches">
+
+          {/* Parts suggestions */}
+          {showSuggestions && results.parts.length > 0 && (
+            <section aria-label="Matching parts" className="border-b border-stone-200">
+              <p className="eyebrow px-4 pt-3 pb-1.5">Parts</p>
+              {results.parts.map((part, i) => {
+                const idx = searchActionEnd + i;
+                return (
+                  <button
+                    id={`search-opt-${idx}`}
+                    role="option"
+                    aria-selected={activeIndex === idx}
+                    key={part.id}
+                    data-aidx={idx}
+                    type="button"
+                    onClick={() => navigateToPart(part.id)}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    className={`${itemBase} gap-3 hover:bg-stone-50 ${activeIndex === idx ? "bg-stone-50" : ""}`}
+                  >
+                    {part.imageUrl ? (
+                      <img
+                        src={thumbUrl(part.imageUrl)}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-10 w-10 shrink-0 rounded border border-stone-200 object-contain bg-[#f7f6f2]"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-stone-200 bg-slate-50">
+                        <PackageIcon className="h-5 w-5 text-slate-300" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-graphite-950">
+                        <Highlight text={part.title} q={query} />
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-graphite-600">
+                        {part.brand && (
+                          <span>
+                            <Highlight text={part.brand} q={query} />
+                          </span>
+                        )}
+                        {part.category && <span>{part.category}</span>}
+                        {part.manufacturerPartNumber && (
+                          <span className="part-number">
+                            <Highlight text={part.manufacturerPartNumber} q={query} />
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    {part.minPrice != null && (
+                      <span className="shrink-0 text-sm font-bold text-graphite-950">
+                        {formatPrice(part.minPrice, part.currency)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {results.parts.length >= 6 && (
+                <button
+                  type="button"
+                  onClick={() => submit(query)}
+                  className="flex min-h-touch w-full items-center justify-center gap-1.5 border-t border-stone-100 px-4 py-2 text-xs font-bold uppercase tracking-wide text-brand-700 hover:bg-brand-50"
+                >
+                  See all results
+                  <ChevronRightIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </section>
+          )}
+
+          {/* Suggested categories + brands (side by side) */}
+          {showSuggestions &&
+            (results.categories.length > 0 || results.brands.length > 0) && (
+              <section className="border-b border-stone-200">
+                <div className="grid sm:grid-cols-2">
+                  {results.categories.length > 0 && (
+                    <div className="border-b border-stone-200 p-3 sm:border-b-0 sm:border-r">
+                      <p className="eyebrow px-2 py-1">Categories</p>
+                      {results.categories.map((cat, i) => {
+                        const idx = partsEnd + i;
+                        return (
+                          <button
+                            id={`search-opt-${idx}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            key={cat}
+                            data-aidx={idx}
+                            type="button"
+                            onClick={() => submit("", cat)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
+                          >
+                            <TagIcon className="h-4 w-4 shrink-0 text-brand-700" />
+                            <span className="min-w-0 truncate">
+                              <Highlight text={cat} q={query} />
+                            </span>
+                            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {results.brands.length > 0 && (
+                    <div className="p-3">
+                      <p className="eyebrow px-2 py-1">Brands</p>
+                      {results.brands.map((brand, i) => {
+                        const idx = suggestCatEnd + i;
+                        return (
+                          <button
+                            id={`search-opt-${idx}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            key={brand}
+                            data-aidx={idx}
+                            type="button"
+                            onClick={() => submit("", undefined, brand)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
+                          >
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-graphite-950 text-[9px] font-black text-white">
+                              {brand.charAt(0)}
+                            </span>
+                            <span className="min-w-0 truncate">
+                              <Highlight text={brand} q={query} />
+                            </span>
+                            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+          {/* Recent searches */}
+          {recents.length > 0 && (
+            <section aria-label="Recent searches" className="p-3">
               <div className="flex items-center justify-between gap-2 px-2 py-1">
                 <p className="eyebrow">Recent searches</p>
-                {recents.length > 0 && (
-                  <button
-                    type="button"
-                    className="shrink-0 text-xs font-semibold text-graphite-600 hover:text-graphite-950"
-                    onClick={() => {
-                      clearRecentSearches();
-                      setRecents([]);
-                    }}
-                  >
-                    Clear
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="shrink-0 text-xs font-semibold text-graphite-600 hover:text-graphite-950"
+                  onClick={() => {
+                    clearRecentSearches();
+                    setRecents([]);
+                  }}
+                >
+                  Clear
+                </button>
               </div>
-              {recents.length ? (
-                recents.slice(0, 5).map((recent) => (
+              {recents.slice(0, 5).map((recent, i) => {
+                const idx = recentsStart + i;
+                return (
                   <button
+                    id={`search-opt-${idx}`}
+                    role="option"
+                    aria-selected={activeIndex === idx}
                     key={recent}
+                    data-aidx={idx}
                     type="button"
                     onClick={() => submit(recent)}
-                    className="flex min-h-touch w-full items-center gap-2 px-2 py-2 text-left text-sm text-graphite-700 hover:bg-stone-100"
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
                   >
                     <ClockIcon className="h-4 w-4 shrink-0 text-slate-400" />
                     <span className="min-w-0 truncate">{recent}</span>
                   </button>
-                ))
-              ) : (
+                );
+              })}
+            </section>
+          )}
+
+          {/* Empty state: no query and no recents — show category browse */}
+          {!hasQuery && recents.length === 0 && (
+            <div className="grid sm:grid-cols-2">
+              <section className="border-b border-stone-200 p-3 sm:border-b-0 sm:border-r" aria-label="Recent searches">
+                <p className="eyebrow px-2 py-1">Recent searches</p>
                 <p className="px-2 py-3 text-sm text-graphite-600">
                   Your recent searches will appear here.
                 </p>
-              )}
-            </section>
-            <section className="p-3" aria-label="Popular categories">
-              <p className="eyebrow px-2 py-1">Browse systems</p>
-              {categories.slice(0, 6).map((category) => (
-                <button
-                  key={category.name}
-                  type="button"
-                  onClick={() => submit("", category.name)}
-                  className="flex min-h-touch w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm text-graphite-700 hover:bg-stone-100"
-                >
-                  <span className="min-w-0 truncate">{category.name}</span>
-                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-slate-400" />
-                </button>
-              ))}
-            </section>
-          </div>
+              </section>
+              <section className="p-3" aria-label="Popular categories">
+                <p className="eyebrow px-2 py-1">Browse systems</p>
+                {categories.slice(0, 6).map((category) => (
+                  <button
+                    key={category.name}
+                    type="button"
+                    onClick={() => submit("", category.name)}
+                    className="flex min-h-touch w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm text-graphite-700 hover:bg-stone-100"
+                  >
+                    <span className="min-w-0 truncate">{category.name}</span>
+                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                  </button>
+                ))}
+              </section>
+            </div>
+          )}
+
+          {/* No results state */}
+          {hasQuery && !loading && results && results.parts.length === 0 && results.categories.length === 0 && results.brands.length === 0 && (
+            <div className="px-4 py-6 text-center">
+              <p className="text-sm font-semibold text-graphite-950">No suggestions for &ldquo;{query.trim()}&rdquo;</p>
+              <p className="mt-1 text-xs text-graphite-600">
+                Try a different keyword, part number, or brand name.
+              </p>
+            </div>
+          )}
+
+          {/* Keyboard hint */}
+          {hasQuery && totalNav > 0 && (
+            <div className="hidden sm:flex items-center gap-3 border-t border-stone-100 px-4 py-1.5 text-[10px] text-graphite-600">
+              <span><kbd className="rounded border border-stone-300 px-1 py-0.5 font-mono">↑↓</kbd> navigate</span>
+              <span><kbd className="rounded border border-stone-300 px-1 py-0.5 font-mono">↵</kbd> select</span>
+              <span><kbd className="rounded border border-stone-300 px-1 py-0.5 font-mono">esc</kbd> close</span>
+            </div>
+          )}
         </div>
       )}
     </div>

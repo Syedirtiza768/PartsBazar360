@@ -98,6 +98,15 @@ export class SearchController {
     return this.searchService.getFacets();
   }
 
+  // Lightweight autocomplete — returns top parts, categories, and brands
+  // for a partial query. Called on every keystroke (debounced client-side).
+  @Get('suggest')
+  async suggest(@Query('q') q?: string) {
+    const query = (q ?? '').trim();
+    if (query.length < 2) return { parts: [], categories: [], brands: [] };
+    return this.searchService.suggest(query);
+  }
+
   /**
    * Validate Year/Make/Model rows against MVL in one (or few) batched queries
    * instead of findFirst-per-row-per-market. Preserves market preference order

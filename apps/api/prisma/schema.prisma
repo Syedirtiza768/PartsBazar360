@@ -231,6 +231,8 @@ model CanonicalPart {
   classificationReason     String?
   completenessScore        Float?
   verificationStatus       String   @default("UNVERIFIED")
+  itemSpecifics            Json?
+  material                 String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

@@ -303,6 +303,44 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   <span className="part-number">{part.ebayItemId}</span>
                 </SpecRow>
               )}
+              {part.position && (
+                <SpecRow label="Position">{part.position}</SpecRow>
+              )}
+              {part.vehicleSystem && (
+                <SpecRow label="Vehicle system">{part.vehicleSystem}</SpecRow>
+              )}
+              {part.material && (
+                <SpecRow label="Material">{part.material}</SpecRow>
+              )}
+              {part.itemSpecifics?.partType && (
+                <SpecRow label="Part type">{part.itemSpecifics.partType}</SpecRow>
+              )}
+              {part.itemSpecifics?.placementOnVehicle && (
+                <SpecRow label="Placement">{part.itemSpecifics.placementOnVehicle}</SpecRow>
+              )}
+              {part.itemSpecifics?.color && (
+                <SpecRow label="Color">{part.itemSpecifics.color}</SpecRow>
+              )}
+              {part.itemSpecifics?.brandType && (
+                <SpecRow label="Brand type">{part.itemSpecifics.brandType}</SpecRow>
+              )}
+              {part.itemSpecifics?.surfaceFinish && (
+                <SpecRow label="Surface finish">{part.itemSpecifics.surfaceFinish}</SpecRow>
+              )}
+              {part.itemSpecifics?.countryOfOrigin && (
+                <SpecRow label="Country of origin">{part.itemSpecifics.countryOfOrigin}</SpecRow>
+              )}
+              {part.itemSpecifics?.warranty && (
+                <SpecRow label="Warranty">{part.itemSpecifics.warranty}</SpecRow>
+              )}
+              {part.itemSpecifics?.categoryType && (
+                <SpecRow label="Category type">{part.itemSpecifics.categoryType}</SpecRow>
+              )}
+              {part.itemSpecifics?.features && part.itemSpecifics.features.length > 0 && (
+                <SpecRow label="Features">
+                  {part.itemSpecifics.features.join(', ')}
+                </SpecRow>
+              )}
 
             </dl>
             <p className="mt-3 text-xs leading-relaxed text-graphite-600">
