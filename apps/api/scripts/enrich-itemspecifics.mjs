@@ -26,6 +26,11 @@ const VEHICLES = (process.env.ENRICH_VEHICLES || 'Toyota Corolla,BMW 335i,Dodge 
   .split(',')
   .map((v) => v.trim());
 
+// Tracking: stamp every enriched row so we can tell which campaign wrote
+// itemSpecifics (e.g. llm:mimo, llm:mimo:toyota-corolla, febest.de).
+const ENRICH_SOURCE =
+  process.env.ENRICH_SOURCE || `llm:mimo:${VEHICLES.join('+').toLowerCase()}`;
+
 const SYSTEM_PROMPT = `You are an automotive parts catalog specialist for a used OEM auto parts marketplace.
 Given listing data for a used auto part, generate standardized eBay Motors item specifics as valid JSON.
 
@@ -193,6 +198,7 @@ async function main() {
   console.log(`Vehicles: ${VEHICLES.join(', ')}`);
   console.log(`Limit: ${LIMIT || 'all'}`);
   console.log(`Concurrency: ${CONCURRENCY}`);
+  console.log(`Source: ${ENRICH_SOURCE}`);
   console.log(`Dry run: ${DRY_RUN}`);
   console.log('');
 
@@ -229,8 +235,13 @@ async function main() {
           const itemSpecifics = await callOpenRouter(userPrompt);
 
           await pool.query(
-            `UPDATE "CanonicalPart" SET "itemSpecifics" = $1, "updatedAt" = NOW() WHERE id = $2`,
-            [JSON.stringify(itemSpecifics), part.id],
+            `UPDATE "CanonicalPart"
+               SET "itemSpecifics" = $1,
+                   "enrichedAt" = NOW(),
+                   "enrichmentSource" = $3,
+                   "updatedAt" = NOW()
+             WHERE id = $2`,
+            [JSON.stringify(itemSpecifics), part.id, ENRICH_SOURCE],
           );
 
           return { partId: part.id, result: itemSpecifics };

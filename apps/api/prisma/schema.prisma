@@ -232,6 +232,8 @@ model CanonicalPart {
   completenessScore        Float?
   verificationStatus       String   @default("UNVERIFIED")
   itemSpecifics            Json?
+  enrichedAt               DateTime? // when itemSpecifics were last enriched (tracking)
+  enrichmentSource         String? // which enrichment campaign wrote itemSpecifics (e.g. llm:mimo, febest.de)
   material                 String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt

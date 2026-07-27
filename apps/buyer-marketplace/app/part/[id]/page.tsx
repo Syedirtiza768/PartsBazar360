@@ -303,14 +303,14 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   <span className="part-number">{part.ebayItemId}</span>
                 </SpecRow>
               )}
-              {part.position && (
-                <SpecRow label="Position">{part.position}</SpecRow>
+              {(part.position || part.itemSpecifics?.position) && (
+                <SpecRow label="Position">{part.position || part.itemSpecifics?.position}</SpecRow>
               )}
-              {part.vehicleSystem && (
-                <SpecRow label="Vehicle system">{part.vehicleSystem}</SpecRow>
+              {(part.vehicleSystem || part.itemSpecifics?.vehicleSystem) && (
+                <SpecRow label="Vehicle system">{part.vehicleSystem || part.itemSpecifics?.vehicleSystem}</SpecRow>
               )}
-              {part.material && (
-                <SpecRow label="Material">{part.material}</SpecRow>
+              {(part.material || part.itemSpecifics?.material) && (
+                <SpecRow label="Material">{part.material || part.itemSpecifics?.material}</SpecRow>
               )}
               {part.itemSpecifics?.partType && (
                 <SpecRow label="Part type">{part.itemSpecifics.partType}</SpecRow>
