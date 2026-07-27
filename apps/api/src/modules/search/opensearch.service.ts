@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
+import { sanitizeSearchItem } from './buyer-visible-offers.util';
 
 @Injectable()
 export class OpenSearchService implements OnModuleInit {
@@ -341,6 +342,10 @@ export class OpenSearchService implements OnModuleInit {
    * Lightweight autocomplete suggestions. Returns the top matching parts,
    * categories, and brands for a partial query. Designed to be called on
    * every keystroke (debounced client-side) so it must be sub-100ms.
+   *
+   * Applies the same buyer-visibility sanitization as browseParts so only
+   * parts with at least one active, buyer-visible offer surface in the
+   * dropdown — never ghost listings from hidden/inactive sellers.
    */
   async suggest(q: string): Promise<{
     parts: Array<{
@@ -358,10 +363,12 @@ export class OpenSearchService implements OnModuleInit {
   }> {
     try {
       const normalized = normalizePartNumber(q);
+      // Fetch more than we need so sanitization (which drops parts with no
+      // buyer-visible offers) still leaves enough to fill the dropdown.
       const response = await this.client.search({
         index: this.INDEX_NAME,
         body: {
-          size: 6,
+          size: 20,
           _source: [
             'id',
             'title',
@@ -370,7 +377,12 @@ export class OpenSearchService implements OnModuleInit {
             'imageUrls',
             'minPrice',
             'manufacturerPartNumber',
+            'offers.id',
+            'offers.price',
             'offers.currency',
+            'offers.sellerId',
+            'offers.sellerName',
+            'offers.status',
           ],
           query: {
             bool: {
@@ -420,30 +432,48 @@ export class OpenSearchService implements OnModuleInit {
       });
 
       const aggs: any = response.body.aggregations;
-      const parts = response.body.hits.hits.map((hit: any) => {
-        const src = hit._source;
+
+      // Apply the same buyer-visibility sanitization the regular search uses.
+      // This drops parts whose only offers are from hidden/inactive sellers,
+        // and recomputes minPrice from buyer-visible offers only.
+      const sanitized = response.body.hits.hits
+        .map((hit: any) => sanitizeSearchItem({ id: hit._id, ...hit._source }))
+        .filter((item: any): item is NonNullable<typeof item> => Boolean(item))
+        .slice(0, 6);
+
+      const parts = sanitized.map((item: any) => {
         const currency =
-          src.offers?.find((o: any) => o.currency)?.currency ?? null;
+          item.offers?.find((o: any) => o.currency)?.currency ?? null;
         return {
-          id: src.id || hit._id,
-          title: src.title,
-          brand: src.brand ?? null,
-          category: src.category ?? null,
-          imageUrl: src.imageUrls?.[0] ?? null,
-          minPrice: src.minPrice ?? null,
+          id: item.id,
+          title: item.title,
+          brand: item.brand ?? null,
+          category: item.category ?? null,
+          imageUrl: item.imageUrls?.[0] ?? null,
+          minPrice: item.minPrice ?? null,
           currency,
-          manufacturerPartNumber: src.manufacturerPartNumber ?? null,
+          manufacturerPartNumber: item.manufacturerPartNumber ?? null,
         };
       });
 
+      // Only surface categories/brands that have at least one buyer-visible
+      // part in the results, so clicking a suggestion never leads to an empty
+      // results page.
+      const visibleCats = new Set(
+        parts.map((p) => p.category).filter(Boolean),
+      );
+      const visibleBrands = new Set(
+        parts.map((p) => p.brand).filter(Boolean),
+      );
+
       return {
         parts,
-        categories: (aggs?.categories?.buckets || []).map(
-          (b: any) => b.key as string,
-        ),
-        brands: (aggs?.brands?.buckets || []).map(
-          (b: any) => b.key as string,
-        ),
+        categories: (aggs?.categories?.buckets || [])
+          .map((b: any) => b.key as string)
+          .filter((c: string) => visibleCats.has(c)),
+        brands: (aggs?.brands?.buckets || [])
+          .map((b: any) => b.key as string)
+          .filter((b: string) => visibleBrands.has(b)),
       };
     } catch (error) {
       this.logger.error(`suggest failed for "${q}"`, error.stack);
