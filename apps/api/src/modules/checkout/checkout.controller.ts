@@ -8,7 +8,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsObject, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { CheckoutService } from './checkout.service';
@@ -26,7 +27,9 @@ class CheckoutDto {
 }
 
 class ShippingQuoteDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'Shipping country is required' })
   country!: string;
 }
 

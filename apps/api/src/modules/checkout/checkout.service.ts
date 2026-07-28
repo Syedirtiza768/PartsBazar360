@@ -184,6 +184,11 @@ export class CheckoutService {
   }
 
   async quoteShipping(cartId: string, destinationCountry: string) {
+    const country = destinationCountry?.trim() ?? '';
+    if (!country) {
+      throw new BadRequestException('Shipping country is required');
+    }
+
     const cart = await this.cartService.getCart(cartId);
     if (cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
@@ -196,7 +201,7 @@ export class CheckoutService {
           weight: item.sellerOffer.canonicalPart?.weight ?? undefined,
           quantity: item.quantity,
         })),
-        destinationCountry,
+        country,
       );
 
       return {
@@ -217,7 +222,7 @@ export class CheckoutService {
 
     return {
       currency: 'AED',
-      destinationCountry: destinationCountry.trim(),
+      destinationCountry: country,
       subtotal,
       shippingTotal,
       totalAmount: subtotal + shippingTotal,
