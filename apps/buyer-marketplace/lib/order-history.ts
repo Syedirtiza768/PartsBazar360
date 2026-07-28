@@ -44,3 +44,20 @@ export function storeOrder(order: StoredOrder) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify([order, ...existing]));
   window.dispatchEvent(new Event("pb360:orders-changed"));
 }
+
+export function getStoredOrder(id: string): StoredOrder | null {
+  return getStoredOrders().find((item) => item.id === id) || null;
+}
+
+export function orderMoneyBreakdown(order: StoredOrder) {
+  const itemsSubtotal = order.sellerOrders.reduce((sum, so) => sum + (so.subTotal || 0), 0);
+  const shippingTotal = order.sellerOrders.reduce(
+    (sum, so) => sum + (so.shippingTotal || 0),
+    0,
+  );
+  return {
+    itemsSubtotal,
+    shippingTotal,
+    totalAmount: order.totalAmount,
+  };
+}

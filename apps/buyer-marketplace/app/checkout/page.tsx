@@ -24,6 +24,14 @@ import { useCurrency } from "@/lib/currency-context";
 import { SETTLEMENT_CURRENCY } from "@/lib/currency";
 import { CartLineFitment } from "@/components/CartLineFitment";
 import { storeOrder } from "@/lib/order-history";
+import {
+  getShippingCountry,
+  setShippingCountry,
+} from "@/lib/shipping-destination";
+import {
+  useShippingQuote,
+  type ShippingQuote,
+} from "@/lib/use-shipping-quote";
 
 type FormState = {
   name: string;
@@ -32,20 +40,6 @@ type FormState = {
   city: string;
   country: string;
   postalCode: string;
-};
-
-type ShippingQuote = {
-  currency: string;
-  settlementCurrency?: string;
-  destinationCountry: string;
-  shippingTotal: number;
-  totalAmount: number;
-  sellerQuotes: Array<{
-    sellerId: string;
-    sellerName: string;
-    amount: number;
-    matchedCountry: boolean;
-  }>;
 };
 
 const EMPTY_FORM: FormState = {
@@ -121,12 +115,14 @@ function SummaryCard({
   currency,
   shippingQuote,
   shippingLoading,
+  shippingError,
 }: {
   items: CartItem[];
   subtotal: number;
   currency: string | null;
   shippingQuote: ShippingQuote | null;
   shippingLoading: boolean;
+  shippingError?: string | null;
 }) {
   const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
 
@@ -172,6 +168,11 @@ function SummaryCard({
           </div>
         )}
       </dl>
+      {shippingError && !shippingQuote && (
+        <p className="mt-2 text-xs text-amber-700" role="status">
+          {shippingError}
+        </p>
+      )}
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
         Shipping is calculated in AED, then converted into your selected charge currency.
@@ -195,12 +196,21 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
-  const [shippingQuote, setShippingQuote] = useState<ShippingQuote | null>(null);
-  const [shippingLoading, setShippingLoading] = useState(false);
-  const [shippingError, setShippingError] = useState<string | null>(null);
 
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
+
+  const {
+    quote: shippingQuote,
+    loading: shippingLoading,
+    error: shippingError,
+  } = useShippingQuote({
+    cartId: cart.id,
+    country: form.country,
+    currency: displayCurrency,
+    enabled: isAuthenticated,
+    authHeaders,
+  });
 
   useEffect(() => {
     if (!authReady) return;
@@ -210,54 +220,19 @@ export default function CheckoutPage() {
   }, [authReady, isAuthenticated, router]);
 
   useEffect(() => {
-    if (!user || prefilled) return;
+    if (prefilled || !authReady) return;
+    const savedCountry = getShippingCountry();
     setForm((prev) => ({
       ...prev,
-      name: prev.name || user.name || "",
+      name: prev.name || user?.name || "",
+      country: prev.country || savedCountry,
     }));
     setPrefilled(true);
-  }, [user, prefilled]);
+  }, [user, prefilled, authReady]);
 
   useEffect(() => {
-    if (step !== 2 || !cart.id) return;
-    const country = form.country.trim();
-    if (!country) {
-      setShippingQuote(null);
-      setShippingError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setShippingLoading(true);
-    setShippingError(null);
-
-    fetch(`${API_BASE_URL}/checkout/${cart.id}/shipping-quote`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders(),
-      },
-      body: JSON.stringify({ country, currency: displayCurrency }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Unable to quote shipping.");
-        if (!cancelled) setShippingQuote(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setShippingQuote(null);
-          setShippingError(err instanceof Error ? err.message : "Unable to quote shipping.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setShippingLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [step, cart.id, form.country, displayCurrency, authHeaders]);
+    if (form.country.trim()) setShippingCountry(form.country);
+  }, [form.country]);
 
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
@@ -580,7 +555,7 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {shippingError && (
+            {shippingError && step === 2 && (
               <div
                 className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
                 role="status"
@@ -589,7 +564,7 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {shippingQuote && (
+            {shippingQuote && step === 2 && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
                 <h2 className="text-base font-semibold text-slate-900">Shipping estimate</h2>
                 <p className="mt-1 text-sm text-graphite-600">
@@ -648,6 +623,7 @@ export default function CheckoutPage() {
             currency={currency}
             shippingQuote={shippingQuote}
             shippingLoading={shippingLoading}
+            shippingError={shippingError}
           />
         </aside>
       </div>

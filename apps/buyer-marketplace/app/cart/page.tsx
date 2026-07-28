@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, buttonClasses } from "@repo/ui/button";
+import { Input } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
 import {
@@ -14,11 +15,17 @@ import {
   ShieldCheckIcon,
 } from "@repo/ui/icons";
 import { useCart, type CartItem } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
 import { humanize } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { PartImage } from "@/components/PartImage";
 import { QuantityStepper } from "@/components/QuantityStepper";
 import { CartLineFitment } from "@/components/CartLineFitment";
+import {
+  resolveShippingCountry,
+  setShippingCountry,
+} from "@/lib/shipping-destination";
+import { useShippingQuote } from "@/lib/use-shipping-quote";
 
 function CartLine({ item }: { item: CartItem }) {
   const { updateQuantity, removeItem, loading } = useCart();
@@ -85,10 +92,34 @@ function CartLine({ item }: { item: CartItem }) {
 
 export default function CartPage() {
   const { cart, subtotal, itemCount, loading } = useCart();
-  const { format, settlementCurrency } = useCurrency();
+  const { format, currency: displayCurrency, settlementCurrency, detectedCountry, ready: currencyReady } =
+    useCurrency();
+  const { isAuthenticated, authHeaders, ready: authReady } = useAuth();
   const router = useRouter();
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
+
+  const [destination, setDestination] = useState("");
+  const [destinationReady, setDestinationReady] = useState(false);
+
+  useEffect(() => {
+    if (!currencyReady) return;
+    setDestination(resolveShippingCountry(detectedCountry));
+    setDestinationReady(true);
+  }, [currencyReady, detectedCountry]);
+
+  useEffect(() => {
+    if (!destinationReady) return;
+    setShippingCountry(destination);
+  }, [destination, destinationReady]);
+
+  const { quote, loading: shippingLoading, error: shippingError } = useShippingQuote({
+    cartId: cart.id,
+    country: destination,
+    currency: displayCurrency,
+    enabled: authReady && isAuthenticated && destinationReady,
+    authHeaders,
+  });
 
   // Group lines by seller — orders ship per seller, and the cart should
   // set that expectation before checkout does.
@@ -105,6 +136,19 @@ export default function CartPage() {
   }, [items]);
 
   const initialLoading = loading && items.length === 0;
+  const estimatedTotal = quote?.totalAmount ?? subtotal;
+  const estimatedCurrency = quote?.currency ?? currency;
+  const shippingLabel = !destination.trim()
+    ? "Add destination to estimate"
+    : !isAuthenticated
+      ? "Sign in to estimate"
+      : shippingLoading
+        ? "Calculating…"
+        : quote
+          ? format(quote.shippingTotal, quote.currency)
+          : shippingError
+            ? "Unavailable"
+            : "—";
 
   return (
     <div className="mx-auto max-w-content gutter py-8 pb-[calc(env(safe-area-inset-bottom,0px)+6.5rem)] sm:py-10 lg:pb-10">
@@ -174,6 +218,16 @@ export default function CartPage() {
           <aside className="lg:sticky lg:top-28" aria-label="Order summary">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
               <h2 className="text-base font-bold text-slate-900">Order summary</h2>
+              <div className="mt-4">
+                <Input
+                  label="Ship to country"
+                  autoComplete="country-name"
+                  placeholder="e.g. UAE, United Kingdom"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  hint="Used to estimate shipping before checkout."
+                />
+              </div>
               <dl className="mt-4 space-y-2.5 text-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="min-w-0 text-graphite-600">
@@ -183,16 +237,24 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-graphite-600">Shipping</dt>
-                  <dd className="text-graphite-600">Calculated at checkout</dd>
+                  <dd className={`text-right ${quote ? "price" : "text-graphite-600"}`}>
+                    {shippingLabel}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-3 border-t border-slate-100 pt-2.5 text-base">
                   <dt className="font-semibold text-slate-900">Estimated total</dt>
-                  <dd className="price">{format(subtotal, currency)}</dd>
+                  <dd className="price">{format(estimatedTotal, estimatedCurrency)}</dd>
                 </div>
               </dl>
+              {shippingError && destination.trim() && isAuthenticated && (
+                <p className="mt-2 text-xs text-amber-700" role="status">
+                  {shippingError}
+                </p>
+              )}
               <p className="mt-2 text-xs leading-relaxed text-graphite-600">
-                Weight-based shipping is added per seller shipment on the next step.
-                Checkout is charged in {settlementCurrency}.
+                {quote
+                  ? `Estimate for ${quote.destinationCountry}, per seller shipment. Final amount confirmed at checkout.`
+                  : `Weight-based shipping is added per seller shipment. Checkout is charged in ${displayCurrency} (settlement ${settlementCurrency}).`}
               </p>
               <Button
                 fullWidth
@@ -237,9 +299,12 @@ export default function CartPage() {
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs text-graphite-600">
-                {itemCount} item{itemCount === 1 ? "" : "s"} · shipping at checkout
+                {itemCount} item{itemCount === 1 ? "" : "s"}
+                {quote ? " · incl. shipping" : " · shipping estimated below"}
               </p>
-              <p className="price text-lg leading-tight">{format(subtotal, currency)}</p>
+              <p className="price text-lg leading-tight">
+                {format(estimatedTotal, estimatedCurrency)}
+              </p>
             </div>
             <Button
               className="shrink-0"

@@ -44,12 +44,31 @@ export class CartService {
     });
 
     if (!cart) {
-      cart = await this.prisma.cart.create({
-        data: {
-          userId,
-          sessionId,
-        },
-      });
+      // Checked-out carts keep history but must release sessionId (unique)
+      // or guests cannot open a new ACTIVE cart after checkout.
+      if (sessionId) {
+        await this.prisma.cart.updateMany({
+          where: { sessionId, NOT: { status: 'ACTIVE' } },
+          data: { sessionId: null },
+        });
+      }
+
+      try {
+        cart = await this.prisma.cart.create({
+          data: {
+            userId,
+            sessionId,
+          },
+        });
+      } catch (err) {
+        // Concurrent create race — return the ACTIVE cart if another request won.
+        cart = await this.prisma.cart.findFirst({
+          where: { ...where, status: 'ACTIVE' },
+        });
+        if (!cart) {
+          throw err;
+        }
+      }
     }
 
     return this.getCart(cart.id);

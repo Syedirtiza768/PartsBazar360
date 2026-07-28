@@ -2,13 +2,26 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { buttonClasses } from "@repo/ui/button";
 import { CheckCircleIcon, ReceiptIcon } from "@repo/ui/icons";
+import { formatPrice } from "@/lib/format";
+import {
+  getStoredOrder,
+  orderMoneyBreakdown,
+  type StoredOrder,
+} from "@/lib/order-history";
 
 function SuccessContent() {
   const params = useSearchParams();
   const orderId = params.get("orderId");
+  const [order, setOrder] = useState<StoredOrder | null>(null);
+
+  useEffect(() => {
+    setOrder(orderId ? getStoredOrder(orderId) : null);
+  }, [orderId]);
+
+  const breakdown = order ? orderMoneyBreakdown(order) : null;
 
   return (
     <div className="mx-auto max-w-2xl gutter py-12 sm:py-16">
@@ -34,6 +47,26 @@ function SuccessContent() {
             </p>
           </div>
           <p className="part-number px-5 py-4 text-sm text-slate-900">{orderId}</p>
+          {breakdown && order && (
+            <dl className="space-y-2 border-t border-slate-100 px-5 py-4 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-graphite-600">Items</dt>
+                <dd className="price text-sm">
+                  {formatPrice(breakdown.itemsSubtotal, order.currency)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-graphite-600">Shipping</dt>
+                <dd className="price text-sm">
+                  {formatPrice(breakdown.shippingTotal, order.currency)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-slate-100 pt-2 text-base">
+                <dt className="font-semibold text-slate-900">Total paid</dt>
+                <dd className="price">{formatPrice(breakdown.totalAmount, order.currency)}</dd>
+              </div>
+            </dl>
+          )}
         </div>
       )}
 

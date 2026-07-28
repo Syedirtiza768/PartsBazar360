@@ -5,7 +5,11 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { buttonClasses } from "@repo/ui/button";
 import { ArrowLeftIcon, CheckCircleIcon, MessageIcon, PackageIcon, RotateCcwIcon, TruckIcon } from "@repo/ui/icons";
-import { getStoredOrders, type StoredOrder } from "@/lib/order-history";
+import {
+  getStoredOrders,
+  orderMoneyBreakdown,
+  type StoredOrder,
+} from "@/lib/order-history";
 import { formatPrice, humanize } from "@/lib/format";
 
 export default function PurchaseDetailsPage() {
@@ -15,6 +19,8 @@ export default function PurchaseDetailsPage() {
 
   if (order === undefined) return <div className="h-80 animate-pulse bg-white" aria-label="Loading order" />;
   if (!order) return <div className="border-2 border-slate-950 bg-white p-8"><h2 className="font-display text-2xl font-black uppercase text-slate-950">Order not found on this device</h2><p className="mt-2 text-sm text-slate-600">Open purchase history from the same browser used at checkout, or contact support with your confirmation email.</p><Link href="/account/purchases" className={`${buttonClasses({ variant: "outline" })} mt-5`}><ArrowLeftIcon className="h-4 w-4" />Purchase history</Link></div>;
+
+  const breakdown = orderMoneyBreakdown(order);
 
   return (
     <section>
@@ -36,6 +42,33 @@ export default function PurchaseDetailsPage() {
           ))}
         </div>
         <aside className="space-y-4">
+          <div className="border-2 border-slate-950 bg-white p-4">
+            <p className="eyebrow">Order totals</p>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-graphite-600">Items</dt>
+                <dd className="price text-sm">{formatPrice(breakdown.itemsSubtotal, order.currency)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-graphite-600">Shipping</dt>
+                <dd className="price text-sm">{formatPrice(breakdown.shippingTotal, order.currency)}</dd>
+              </div>
+              {order.sellerOrders.length > 1 && (
+                <ul className="space-y-1 border-t border-stone-200 pt-2 text-xs text-graphite-600">
+                  {order.sellerOrders.map((so, index) => (
+                    <li key={so.id || index} className="flex justify-between gap-2">
+                      <span>Shipment {index + 1}</span>
+                      <span>{formatPrice(so.shippingTotal || 0, order.currency)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex justify-between gap-3 border-t border-stone-200 pt-2 text-base">
+                <dt className="font-semibold text-slate-950">Total</dt>
+                <dd className="price">{formatPrice(breakdown.totalAmount, order.currency)}</dd>
+              </div>
+            </dl>
+          </div>
           <div className="border-2 border-slate-950 bg-white p-4"><p className="eyebrow">Delivery address</p><p className="mt-3 text-sm leading-relaxed text-slate-700">{order.shippingAddress.name}<br />{order.shippingAddress.line1}{order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}<br />{order.shippingAddress.city} {order.shippingAddress.postalCode}<br />{order.shippingAddress.country}</p></div>
           <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent(`Question about order ${order.id}`)}`} className={`${buttonClasses()} w-full`}><MessageIcon className="h-4 w-4" />Contact seller / support</Link>
           <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=RETURNS&subject=${encodeURIComponent(`Return request for order ${order.id}`)}`} className={`${buttonClasses({ variant: "outline" })} w-full`}><RotateCcwIcon className="h-4 w-4" />Start a return</Link>

@@ -182,10 +182,14 @@ export class CheckoutService {
       data: { externalId: checkoutSession.id },
     });
 
-    // 5. Deactivate Cart
+    // 5. Deactivate Cart (clear sessionId so guest can start a fresh cart)
     await this.prisma.cart.update({
       where: { id: cartId },
-      data: { status: 'CHECKED_OUT', userId: buyer.buyerId },
+      data: {
+        status: 'CHECKED_OUT',
+        userId: buyer.buyerId,
+        sessionId: null,
+      },
     });
 
     this.logger.log(
