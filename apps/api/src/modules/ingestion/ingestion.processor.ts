@@ -329,7 +329,7 @@ export class IngestionProcessor extends WorkerHost {
     }
   }
 
-  /** Sync only the two RealTrack marketplace sellers in parallel. */
+  /** Sync only the two RealTrack marketplace sellers, staggered (API can't handle concurrent requests). */
   private async syncMarketplaceRealTrackStores() {
     // Check for an existing incomplete run to resume
     let syncRunId = await this.redis.get('sync:activeRunId');
@@ -343,19 +343,21 @@ export class IngestionProcessor extends WorkerHost {
       `\n${'='.repeat(60)}\n  SYNC RUN: ${syncRunId}${isResume ? ' (RESUME)' : ' (NEW)'}\n  Monitor: GET /operations/sync/progress/${syncRunId}\n${'='.repeat(60)}`,
     );
 
-    const results = await Promise.all(
-      REALTRACK_MARKETPLACE_SELLERS.map((store) => {
-        this.logger.log(
-          `[${syncRunId}] Syncing ${store.name} ← storeId ${store.storeId} (parallel)`,
-        );
-        return this.syncStoreComplete(
+    // Run sequentially — RealTrack API returns 500 on concurrent requests
+    const results: any[] = [];
+    for (const store of REALTRACK_MARKETPLACE_SELLERS) {
+      this.logger.log(
+        `[${syncRunId}] Syncing ${store.name} ← storeId ${store.storeId}`,
+      );
+      results.push(
+        await this.syncStoreComplete(
           store.storeId!,
           undefined,
           store.storeSlug || undefined,
           syncRunId!,
-        );
-      }),
-    );
+        ),
+      );
+    }
 
     this.logger.log(
       `[${syncRunId}] All stores synced. Running bulk OpenSearch reindex...`,
