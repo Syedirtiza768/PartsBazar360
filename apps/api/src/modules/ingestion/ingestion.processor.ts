@@ -147,10 +147,13 @@ export class IngestionProcessor extends WorkerHost {
               skippedNonEnglish++;
             else if (outcome === 'imported') imported++;
           } catch (error) {
-            errors.push({
-              listingId: summary.id,
-              message: error instanceof Error ? error.message : String(error),
-            });
+            const msg = error instanceof Error ? error.message : String(error);
+            errors.push({ listingId: summary.id, message: msg });
+            if (errors.length <= 5 || errors.length % 100 === 0) {
+              this.logger.warn(
+                `[${syncRunId}] Listing ${summary.id} error #${errors.length}: ${msg.slice(0, 200)}`,
+              );
+            }
           }
         }
 
