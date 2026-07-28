@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma.service';
 import { isExactWeightSource } from '../checkout/billable-weight.util';
 
 /** Current prompt/pipeline generation. Bump to re-enrich the whole catalog. */
-export const ENRICHMENT_VERSION = 2;
+export const ENRICHMENT_VERSION = 3;
 
 /** BullMQ: lower number = higher priority. PDP must always beat prewarm. */
 export const ENRICHMENT_PDP_PRIORITY = 1;
@@ -39,9 +39,16 @@ export class EnrichmentService {
   ) {}
 
   private get enabled(): boolean {
-    return (
-      process.env.ENRICHMENT_ENABLED === '1' && Boolean(process.env.OPENROUTER_API_KEY)
-    );
+    if (process.env.ENRICHMENT_ENABLED !== '1') return false;
+    // RealTrack is the default provider for weight/specs. Diagrams optionally
+    // still need OpenRouter, but the queue itself must run without it.
+    const provider = (process.env.ENRICHMENT_PROVIDER || 'realtrack').toLowerCase();
+    if (provider === 'realtrack') {
+      return Boolean(
+        process.env.REALTRACK_API_URL || process.env.REALTRACK_API_EMAIL,
+      );
+    }
+    return Boolean(process.env.OPENROUTER_API_KEY);
   }
 
   /** Speculative search/hover warm-up. Default off — enable with ENRICHMENT_PREWARM=1. */

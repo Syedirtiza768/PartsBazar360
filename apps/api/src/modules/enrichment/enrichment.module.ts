@@ -4,23 +4,25 @@ import { EnrichmentService } from './enrichment.service';
 import { EnrichmentBudgetService } from './enrichment-budget.service';
 import { EnrichmentProcessor } from './enrichment.processor';
 import { BuyerCacheService } from '../search/buyer-cache.service';
+import { IntegrationModule } from '../integration/integration.module';
 
 /**
- * AI enrichment of shipping metrics.
+ * Listing enrichment.
  *
- * The HTTP API container only enqueues (RUN_ENRICHMENT_WORKER=0); the dedicated
- * `worker` service consumes the queue, so an OpenRouter call can never sit in
- * front of a buyer's request. Mirrors the IngestionModule split.
+ * Default provider: RealTrack trading-enrichment (item specifics + shipping).
+ * Optional AI diagrams for high-value parts still run in the worker when
+ * OPENROUTER_API_KEY is set. The HTTP API only enqueues.
  */
 const runWorker = process.env.RUN_ENRICHMENT_WORKER !== '0';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: 'enrichment' })],
+  imports: [
+    BullModule.registerQueue({ name: 'enrichment' }),
+    IntegrationModule,
+  ],
   providers: [
     EnrichmentService,
     EnrichmentBudgetService,
-    // Provided directly rather than by importing SearchModule: SearchModule
-    // depends on EnrichmentService, and BuyerCacheService is stateless.
     BuyerCacheService,
     ...(runWorker ? [EnrichmentProcessor] : []),
   ],

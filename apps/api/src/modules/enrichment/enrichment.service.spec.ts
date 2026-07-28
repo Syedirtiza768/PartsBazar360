@@ -29,6 +29,9 @@ describe('EnrichmentService', () => {
 
   beforeEach(() => {
     process.env.ENRICHMENT_ENABLED = '1';
+    process.env.ENRICHMENT_PROVIDER = 'realtrack';
+    process.env.REALTRACK_API_URL = 'https://mhn.realtrackapp.com/api';
+    process.env.REALTRACK_API_EMAIL = 'api@test';
     process.env.OPENROUTER_API_KEY = 'sk-or-test';
     delete process.env.ENRICHMENT_PREWARM;
   });
@@ -193,8 +196,9 @@ describe('EnrichmentService', () => {
       expect(add).not.toHaveBeenCalled();
     });
 
-    it('does nothing without an API key', async () => {
-      delete process.env.OPENROUTER_API_KEY;
+    it('does nothing without RealTrack credentials when provider is realtrack', async () => {
+      delete process.env.REALTRACK_API_URL;
+      delete process.env.REALTRACK_API_EMAIL;
       const { service, add } = build();
       await service.requestEnrichment(candidate);
       expect(add).not.toHaveBeenCalled();

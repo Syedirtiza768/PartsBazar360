@@ -3,11 +3,10 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { BuyerCacheService } from '../search/buyer-cache.service';
+import { RealTrackService } from '../integration/realtrack.service';
 import { OpenRouterClient } from '../listing-pipeline/openrouter-client';
 import { EnrichmentBudgetService } from './enrichment-budget.service';
 import { ENRICHMENT_VERSION } from './enrichment.service';
-import { estimateWeight } from './weight-estimator';
-import { generateItemSpecifics } from './item-specifics-generator';
 import {
   generateInfographicSpec,
   infographicMinPriceUsd,
@@ -20,6 +19,7 @@ import {
   locationDiagramMinPriceUsd,
   resolveLocationDiagramSource,
 } from './location-diagram';
+import { mapTradingEnrichmentPayload } from './realtrack-enrichment.mapper';
 import { resolvePartClassKey } from '../checkout/part-class-weights';
 import {
   deriveBillableWeight,
@@ -27,35 +27,41 @@ import {
   parseDimensionsJson,
 } from '../checkout/billable-weight.util';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
- * Consumes the `enrichment` queue: fills shipping weight/dimensions, item
- * specifics, and (for high-value parts) location-diagram + SVG infographic.
- * Busts the buyer ISR cache when done so the PDP picks up the better data.
+ * Background enrichment consumer.
  *
- * Concurrency is deliberately low. These jobs are latency-tolerant (the page
- * already rendered an estimate) and the point is to control spend, not to drain
- * the queue quickly.
+ * Default provider is RealTrack trading-enrichment (item specifics + shipping
+ * metrics). AI is only used for ≥$300 location-diagram PNG + SVG infographic.
+ * The PDP paints immediately and polls until this job lands.
  */
 @Processor('enrichment', {
   concurrency: Number(process.env.ENRICHMENT_CONCURRENCY || 2),
 })
 export class EnrichmentProcessor extends WorkerHost {
   private readonly logger = new Logger(EnrichmentProcessor.name);
-  private client: OpenRouterClient | null = null;
+  private openRouter: OpenRouterClient | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly budget: EnrichmentBudgetService,
     private readonly buyerCache: BuyerCacheService,
+    private readonly realTrack: RealTrackService,
   ) {
     super();
   }
 
+  private get diagramsEnabled(): boolean {
+    return Boolean(process.env.OPENROUTER_API_KEY);
+  }
+
   private getClient(): OpenRouterClient {
-    if (!this.client) {
-      this.client = new OpenRouterClient(process.env.OPENROUTER_API_KEY || '');
+    if (!this.openRouter) {
+      this.openRouter = new OpenRouterClient(process.env.OPENROUTER_API_KEY || '');
     }
-    return this.client;
+    return this.openRouter;
   }
 
   async process(job: Job<{ partId: string; reason?: string }>) {
@@ -65,15 +71,6 @@ export class EnrichmentProcessor extends WorkerHost {
     }
 
     const { partId } = job.data;
-
-    const gate = await this.budget.canSpend();
-    if (!gate.allowed) {
-      // Not a failure: the part keeps its class estimate and can be retried in a
-      // later window. DEFERRED distinguishes this from a genuine error.
-      this.logger.log(`Deferring ${partId}: ${gate.reason}`);
-      await this.setStatus(partId, 'DEFERRED');
-      return { deferred: true, reason: gate.reason };
-    }
 
     const part = await this.prisma.canonicalPart.findUnique({
       where: { id: partId },
@@ -101,9 +98,13 @@ export class EnrichmentProcessor extends WorkerHost {
         infographicVersion: true,
         offers: {
           where: { status: 'ACTIVE' },
-          orderBy: { price: 'desc' },
-          take: 1,
-          select: { price: true },
+          orderBy: [{ updatedAt: 'desc' }, { price: 'desc' }],
+          take: 3,
+          select: {
+            price: true,
+            externalOfferId: true,
+            sourceKey: true,
+          },
         },
         media: {
           orderBy: { sortOrder: 'asc' },
@@ -148,92 +149,111 @@ export class EnrichmentProcessor extends WorkerHost {
         part.partClassKey ??
         resolvePartClassKey({ title: part.title, category: part.category });
 
-      // A measured weight outranks anything the model can produce; only fill the
-      // gaps around it.
+      const rtListingId = this.resolveRealTrackListingId(part.offers);
+      if (!rtListingId) {
+        await this.setStatus(partId, 'FAILED');
+        this.logger.warn(
+          `No RealTrack listing id for ${partId} — cannot trading-enrich`,
+        );
+        return { skipped: true, reason: 'no_realtrack_listing_id' };
+      }
+
+      let rtPayload: unknown;
+      try {
+        rtPayload = await this.realTrack.fetchTradingEnrichment(rtListingId);
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        // Endpoint not deployed yet, or rate-limited: defer rather than poison.
+        if (/404|429|503|502/.test(msg)) {
+          await this.setStatus(partId, 'DEFERRED');
+          this.logger.warn(`RealTrack enrichment deferred for ${partId}: ${msg}`);
+          return { deferred: true, reason: msg };
+        }
+        throw err;
+      }
+
+      const mapped = mapTradingEnrichmentPayload(rtPayload);
+
       const weightIsTrusted =
         typeof part.weight === 'number' &&
         part.weight > 0 &&
         isExactWeightSource(part.weightSource);
       const existingDims = parseDimensionsJson(part.dimensions);
-      // Version bumps must not re-spend on weight when we already have an AI
-      // answer; item specifics / diagrams are the new work.
-      const skipWeightCall =
-        (weightIsTrusted && Boolean(existingDims)) ||
-        (typeof part.weight === 'number' &&
-          part.weight > 0 &&
-          Boolean(existingDims) &&
-          part.weightSource === 'AI');
 
-      const estimate = skipWeightCall
-        ? null
-        : await estimateWeight(this.getClient(), {
-              title: part.title,
-              brand: part.brand,
-              category: part.category,
-              partClassKey,
-              oeNumbers: part.oeNumbers,
-              manufacturerPartNumber: part.manufacturerPartNumber,
-            });
+      const weightKg = weightIsTrusted
+        ? (part.weight as number)
+        : (mapped.weightKg ?? part.weight ?? null);
+      const dimensionsCm = existingDims ?? mapped.dimensionsCm ?? null;
+      const billable = deriveBillableWeight({
+        actualKg: weightKg,
+        dimensionsCm,
+      });
 
-      if (estimate) {
-        await this.budget.recordSpend(estimate.costUsd);
-      }
-
-      const itemSpecifics = await this.maybeBuildItemSpecifics(part);
-
-      const mergedSpecifics =
-        itemSpecifics?.flat ??
+      const itemSpecifics =
+        mapped.itemSpecifics ||
         (part.itemSpecifics &&
         typeof part.itemSpecifics === 'object' &&
         !Array.isArray(part.itemSpecifics)
           ? (part.itemSpecifics as Record<string, unknown>)
           : null);
 
-      const locationDiagram = await this.maybeBuildLocationDiagram(
-        part,
-        mergedSpecifics,
-      );
+      const imageUrls =
+        mapped.imageUrls && mapped.imageUrls.length
+          ? [...new Set([...(mapped.imageUrls || []), ...(part.imageUrls || [])])]
+          : null;
 
-      const infographic = await this.maybeBuildInfographic(
-        {
-          ...part,
-          itemSpecifics: mergedSpecifics ?? part.itemSpecifics,
-          position: itemSpecifics?.position ?? part.position,
-          material: itemSpecifics?.material ?? part.material,
-        },
-        estimate?.weightKg,
-      );
+      // Diagrams still use OpenRouter; gated separately so RT failures don't
+      // depend on the AI daily budget.
+      const locationDiagram = this.diagramsEnabled
+        ? await this.maybeBuildLocationDiagram(
+            {
+              ...part,
+              imageUrls: imageUrls || part.imageUrls,
+              position: mapped.position || part.position,
+            },
+            itemSpecifics,
+          )
+        : null;
 
-      const weightKg = weightIsTrusted
-        ? (part.weight as number)
-        : (estimate?.weightKg ?? null);
-      const dimensionsCm = existingDims ?? estimate?.dimensionsCm ?? null;
-      const billable = deriveBillableWeight({
-        actualKg: weightKg,
-        dimensionsCm,
-      });
-
-      const sourceBits = [
-        estimate ? `weight:${estimate.modelId}` : null,
-        itemSpecifics ? `specs:${itemSpecifics.modelId}` : null,
-        locationDiagram ? `diagram:${locationDiagram.modelId}` : null,
-        infographic ? `infographic` : null,
-      ].filter(Boolean);
+      const infographic = this.diagramsEnabled
+        ? await this.maybeBuildInfographic(
+            {
+              ...part,
+              itemSpecifics: itemSpecifics ?? part.itemSpecifics,
+              position: mapped.position || part.position,
+              material: mapped.material || part.material,
+              brand: mapped.brand || part.brand,
+              manufacturerPartNumber:
+                mapped.manufacturerPartNumber || part.manufacturerPartNumber,
+              oeNumbers: mapped.oeNumbers || part.oeNumbers,
+            },
+            weightKg,
+          )
+        : null;
 
       await this.prisma.canonicalPart.update({
         where: { id: partId },
         data: {
           partClassKey,
-          ...(weightIsTrusted || !estimate
-            ? {}
-            : {
-                weight: estimate.weightKg,
-                weightSource: 'AI',
-                weightConfidence: estimate.confidence,
-              }),
-          ...(existingDims || !estimate?.dimensionsCm
-            ? {}
-            : { dimensions: estimate.dimensionsCm as any }),
+          ...(mapped.brand && !part.brand ? { brand: mapped.brand } : {}),
+          ...(mapped.description && !part.description
+            ? { description: mapped.description }
+            : {}),
+          ...(mapped.manufacturerPartNumber
+            ? { manufacturerPartNumber: mapped.manufacturerPartNumber }
+            : {}),
+          ...(mapped.oeNumbers?.length ? { oeNumbers: mapped.oeNumbers } : {}),
+          ...(imageUrls ? { imageUrls } : {}),
+          ...(!weightIsTrusted && mapped.weightKg
+            ? {
+                weight: mapped.weightKg,
+                weightSource: 'SELLER',
+                weightConfidence: mapped.rawCached === false ? 0.85 : 0.95,
+              }
+            : {}),
+          ...(!existingDims && mapped.dimensionsCm
+            ? { dimensions: mapped.dimensionsCm as any }
+            : {}),
           ...(billable
             ? {
                 dimensionalWeightKg: billable.volumetricKg,
@@ -242,15 +262,11 @@ export class EnrichmentProcessor extends WorkerHost {
             : {}),
           ...(itemSpecifics
             ? {
-                itemSpecifics: itemSpecifics.flat as any,
-                ...(itemSpecifics.position
-                  ? { position: itemSpecifics.position }
-                  : {}),
-                ...(itemSpecifics.material
-                  ? { material: itemSpecifics.material }
-                  : {}),
-                ...(itemSpecifics.vehicleSystem
-                  ? { vehicleSystem: itemSpecifics.vehicleSystem }
+                itemSpecifics: itemSpecifics as any,
+                ...(mapped.position ? { position: mapped.position } : {}),
+                ...(mapped.material ? { material: mapped.material } : {}),
+                ...(mapped.vehicleSystem
+                  ? { vehicleSystem: mapped.vehicleSystem }
                   : {}),
               }
             : {}),
@@ -264,9 +280,9 @@ export class EnrichmentProcessor extends WorkerHost {
           enrichmentStatus: 'DONE',
           enrichmentVersion: ENRICHMENT_VERSION,
           enrichedAt: new Date(),
-          enrichmentSource: sourceBits.length
-            ? `llm:${sourceBits.join('+')}`
-            : 'deterministic',
+          enrichmentSource: `realtrack:trading-enrichment${
+            mapped.rawCached ? ':cached' : ''
+          }${locationDiagram ? '+diagram' : ''}${infographic ? '+infographic' : ''}`,
         },
       });
 
@@ -282,32 +298,21 @@ export class EnrichmentProcessor extends WorkerHost {
         await this.linkInfographicMedia(partId, part.title);
       }
 
-      await this.budget.recordSuccess();
-      // The PDP cached an estimate; drop it so the better number shows up.
       await this.buyerCache.revalidatePart(partId);
-
-      const costUsd =
-        (estimate?.costUsd ?? 0) +
-        (itemSpecifics?.costUsd ?? 0) +
-        (locationDiagram?.costUsd ?? 0) +
-        (infographic?.costUsd ?? 0);
 
       return {
         partId,
+        provider: 'realtrack',
+        rtListingId,
+        cached: mapped.rawCached,
         weightKg,
-        dimensionsCm,
         billableWeightKg: billable?.billableKg ?? null,
-        model: estimate?.modelId ?? null,
-        costUsd,
-        confidence: estimate?.confidence ?? null,
-        clamped: estimate?.clamped ?? false,
         itemSpecifics: Boolean(itemSpecifics),
         locationDiagram: locationDiagram?.mode ?? null,
         infographic: Boolean(infographic),
+        costUsd: (locationDiagram?.costUsd ?? 0) + (infographic?.costUsd ?? 0),
       };
     } catch (err: any) {
-      await this.budget.recordFailure();
-      // Leave the part on its class estimate rather than a half-written state.
       await this.setStatus(partId, 'FAILED');
       this.logger.error(
         `Enrichment failed for ${partId}: ${err?.message || err}`,
@@ -316,59 +321,19 @@ export class EnrichmentProcessor extends WorkerHost {
     }
   }
 
-  private async maybeBuildItemSpecifics(part: {
-    itemSpecifics: unknown;
-    title: string;
-    brand: string | null;
-    manufacturerPartNumber: string | null;
-    oeNumbers: string[];
-    category: string | null;
-    description: string | null;
-    partSource: string | null;
-    qualityTier: string | null;
-    fitments: Array<{
-      vehicleConfig: {
-        trim: string | null;
-        engine: string | null;
-        generation: {
-          startYear: number | null;
-          model: {
-            name: string;
-            make: { name: string; displayName: string | null } | null;
-          } | null;
-        } | null;
-      } | null;
-    }>;
-  }) {
-    if (part.itemSpecifics) return null;
-
-    const gate = await this.budget.canSpend();
-    if (!gate.allowed) return null;
-
-    const result = await generateItemSpecifics(this.getClient(), {
-      title: part.title,
-      brand: part.brand,
-      manufacturerPartNumber: part.manufacturerPartNumber,
-      oeNumbers: part.oeNumbers,
-      category: part.category,
-      description: part.description,
-      partSource: part.partSource,
-      qualityTier: part.qualityTier,
-      compatibility: part.fitments.map((f) => {
-        const vc = f.vehicleConfig;
-        const gen = vc?.generation;
-        return {
-          year: gen?.startYear,
-          make: gen?.model?.make?.displayName || gen?.model?.make?.name,
-          model: gen?.model?.name,
-          trim: vc?.trim,
-          engine: vc?.engine,
-        };
-      }),
-    });
-
-    if (result) await this.budget.recordSpend(result.costUsd);
-    return result;
+  private resolveRealTrackListingId(
+    offers: Array<{ externalOfferId: string | null; sourceKey: string | null }>,
+  ): string | null {
+    for (const offer of offers) {
+      if (offer.externalOfferId && UUID_RE.test(offer.externalOfferId)) {
+        return offer.externalOfferId;
+      }
+      // sourceKey format: rt:<storeId>:<listingId>
+      const key = offer.sourceKey || '';
+      const m = key.match(/^rt:[0-9a-f-]+:([0-9a-f-]{36})$/i);
+      if (m) return m[1];
+    }
+    return null;
   }
 
   private async maybeBuildLocationDiagram(
@@ -402,8 +367,6 @@ export class EnrichmentProcessor extends WorkerHost {
   ) {
     const topPrice = part.offers[0]?.price ?? 0;
     if (topPrice < locationDiagramMinPriceUsd()) return null;
-
-    // Already on disk from a prior run at this prompt generation.
     if (await locationDiagramExists(part.id)) return null;
 
     const gate = await this.budget.canSpend();
@@ -461,13 +424,6 @@ export class EnrichmentProcessor extends WorkerHost {
     return result;
   }
 
-  /**
-   * Generates an infographic spec for high-value parts only.
-   *
-   * The price gate is re-evaluated on every run rather than stored, so a part
-   * that later crosses the threshold picks one up on its next enrichment, and a
-   * discounted one simply stops being regenerated.
-   */
   private async maybeBuildInfographic(
     part: {
       title: string;
@@ -488,7 +444,6 @@ export class EnrichmentProcessor extends WorkerHost {
   ) {
     const topPrice = part.offers[0]?.price ?? 0;
     if (topPrice < infographicMinPriceUsd()) return null;
-    // Already current: regenerating would spend money to produce the same card.
     if (part.infographicSpec && part.infographicVersion >= INFOGRAPHIC_VERSION) {
       return null;
     }
@@ -538,7 +493,6 @@ export class EnrichmentProcessor extends WorkerHost {
           url,
           normalizedUrl: url,
           mediaType: 'LOCATION_DIAGRAM',
-          // Ahead of the SVG infographic (−1) and seller photos.
           sortOrder: -2,
           altText: alt,
         },
@@ -551,11 +505,6 @@ export class EnrichmentProcessor extends WorkerHost {
       );
   }
 
-  /**
-   * Publishes the infographic as ProductMedia so the PDP can show it ahead of
-   * the seller photos. The URL is same-origin and stable, so it bypasses the
-   * image proxy and stays cacheable; freshness is handled by the route's ETag.
-   */
   private async linkInfographicMedia(partId: string, title: string) {
     const url = `/api/search/parts/${partId}/infographic.svg`;
     await this.prisma.productMedia
@@ -571,7 +520,6 @@ export class EnrichmentProcessor extends WorkerHost {
           url,
           normalizedUrl: url,
           mediaType: 'INFOGRAPHIC',
-          // Negative so it sorts ahead of imported seller photos.
           sortOrder: -1,
           altText: `Specifications for ${title}`.slice(0, 200),
         },

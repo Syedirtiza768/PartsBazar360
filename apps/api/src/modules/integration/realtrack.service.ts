@@ -151,6 +151,53 @@ export class RealTrackService {
     );
   }
 
+  /**
+   * eBay Trading–backed enrichment for a single published listing.
+   * Cached responses are typically <10ms; cold fetches ~1.7s.
+   * Requires `published_listings.view`.
+   */
+  async fetchTradingEnrichment(listingId: string): Promise<any> {
+    return this.requestJson(
+      `/published-listings/${encodeURIComponent(listingId)}/trading-enrichment`,
+    );
+  }
+
+  /** Rate-limit / budget status for trading enrichment. */
+  async fetchTradingEnrichmentBudget(): Promise<any> {
+    return this.requestJson(`/published-listings/trading-enrichment/budget`);
+  }
+
+  /**
+   * Pre-warm cache for many listings. Requires `published_listings.sync`
+   * (our reader account may not have this — use single GET on PDP instead).
+   */
+  async batchTradingEnrichment(listingIds: string[]): Promise<any> {
+    await this.authenticate();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/published-listings/trading-enrichment/batch`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids: listingIds }),
+          signal: controller.signal,
+        },
+      );
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`RealTrack batch enrichment ${response.status}: ${text}`);
+      }
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async fetchAllListings(options: FetchListingsOptions = {}): Promise<any[]> {
     const allItems: any[] = [];
     let currentPage = 1;
