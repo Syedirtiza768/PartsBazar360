@@ -7,7 +7,7 @@ import type { PipelineStage, ModelUsageRecord } from './types';
  * Estimates per-listing and bulk costs for each pipeline configuration.
  */
 
-interface StageCostEstimate {
+export interface StageCostEstimate {
   stage: PipelineStage;
   modelId: string;
   inputTokens: number;
@@ -16,7 +16,7 @@ interface StageCostEstimate {
   callsPerListing: number;
 }
 
-interface PipelineCostEstimate {
+export interface PipelineCostEstimate {
   configName: string;
   stages: StageCostEstimate[];
   totalPerListing: number;
