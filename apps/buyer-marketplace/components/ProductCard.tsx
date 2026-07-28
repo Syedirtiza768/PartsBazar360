@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Skeleton } from "@repo/ui/skeleton";
 import { UserIcon, TagIcon, RefreshIcon } from "@repo/ui/icons";
@@ -11,6 +12,7 @@ import { WatchlistButton } from "./WatchlistButton";
 import { lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { fitmentForConfig } from "@/lib/fitment";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
+import { prewarmEnrichment } from "@/lib/enrichment-client";
 import type { Part } from "@/lib/types";
 
 /**
@@ -18,6 +20,9 @@ import type { Part } from "@/lib/types";
  * for the active vehicle, condition + source, title, OE number, seller,
  * price. Fitment badge only renders once the garage has loaded to avoid a
  * badge flash-swap.
+ *
+ * Hover / viewport entry fires a low-priority enrichment pre-warm so the PDP
+ * is more likely to already have a refined weight when the buyer opens it.
  */
 export function ProductCard({
   part,
@@ -32,6 +37,32 @@ export function ProductCard({
   fitmentContext?: "auto" | "verified" | "hidden";
 }) {
   const { activeVehicle, ready } = useGarage();
+  const rootRef = useRef<HTMLElement | null>(null);
+  const prewarmed = useRef(false);
+
+  const triggerPrewarm = () => {
+    if (prewarmed.current) return;
+    prewarmed.current = true;
+    prewarmEnrichment([part.id]);
+  };
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          triggerPrewarm();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "120px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+    // part.id is stable for the life of this card instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [part.id]);
 
   const offers = buyerVisibleOffers(part.offers);
   const price = lowestOfferPrice(offers);
@@ -67,8 +98,12 @@ export function ProductCard({
           : null;
 
   return (
-    <article className="group relative flex min-w-0 flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover focus-within:z-10">
-      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
+    <article
+      ref={rootRef}
+      onMouseEnter={triggerPrewarm}
+      onFocus={triggerPrewarm}
+      className="group relative flex min-w-0 flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover focus-within:z-10"
+    >      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
         <Link href={`/part/${part.id}`} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
         <PartImage
           src={image}

@@ -212,6 +212,12 @@ export default function CheckoutPage() {
     authHeaders,
   });
 
+  // Shipments over the courier ceiling are rejected by processCheckout, so the
+  // Pay button must be disabled rather than failing after the buyer commits.
+  const freightSellers = (shippingQuote?.sellerQuotes ?? []).filter(
+    (quote) => quote.requiresFreightQuote,
+  );
+
   useEffect(() => {
     if (!authReady) return;
     if (!isAuthenticated) {
@@ -578,11 +584,37 @@ export default function CheckoutPage() {
                         {!quote.matchedCountry ? " (average fallback rate)" : ""}
                       </span>
                       <span className="price shrink-0">
-                        {format(quote.amount, shippingQuote.currency)}
+                        {quote.requiresFreightQuote
+                          ? "Freight quote"
+                          : format(quote.amount, shippingQuote.currency)}
                       </span>
                     </li>
                   ))}
                 </ul>
+                {freightSellers.length > 0 && (
+                  /* Checkout rejects these server-side, so warn here rather than
+                     letting the buyer discover it on the Pay button. */
+                  <div
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                    role="status"
+                  >
+                    <p className="font-semibold">This order needs a freight quote</p>
+                    <p className="mt-1">
+                      {freightSellers.length === 1
+                        ? `${freightSellers[0]!.sellerName}'s shipment exceeds courier limits`
+                        : `${freightSellers.length} shipments exceed courier limits`}
+                      , so we price them manually instead of charging an automatic
+                      rate.{" "}
+                      <Link
+                        href={`/support?subject=${encodeURIComponent("Freight quote request")}`}
+                        className="font-semibold underline underline-offset-2"
+                      >
+                        Request a freight quote
+                      </Link>{" "}
+                      and we&apos;ll come back with a price.
+                    </p>
+                  </div>
+                )}
               </section>
             )}
 
@@ -595,7 +627,14 @@ export default function CheckoutPage() {
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back to details
               </button>
-              <Button size="lg" onClick={placeOrder} loading={submitting} fullWidth className="sm:w-auto">
+              <Button
+                size="lg"
+                onClick={placeOrder}
+                loading={submitting}
+                disabled={freightSellers.length > 0}
+                fullWidth
+                className="sm:w-auto"
+              >
                 {/* The full label runs to three lines in a 288px button, so
                     phones get the amount and desktops get the full sentence. */}
                 <span className="sm:hidden">

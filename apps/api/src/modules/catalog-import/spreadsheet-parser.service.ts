@@ -53,10 +53,34 @@ const FIELD_ALIASES: Record<string, string> = {
   stocksharjah: 'stockSharjah',
   stockjebelali: 'stockJebelAli',
   netweight: 'netWeight',
+  nettweight: 'netWeight',
+  weightnet: 'netWeight',
+  weight: 'netWeight',
+  weightkg: 'netWeight',
+  weightg: 'netWeight',
+  itemweight: 'netWeight',
   grossweight: 'grossWeight',
+  weightgross: 'grossWeight',
+  shippingweight: 'grossWeight',
+  packageweight: 'grossWeight',
   height: 'height',
+  heightcm: 'height',
+  packageheight: 'height',
   length: 'length',
+  lengthcm: 'length',
+  packagelength: 'length',
   width: 'width',
+  widthcm: 'width',
+  packagewidth: 'width',
+  dimensions: 'dimensionsRaw',
+  dimension: 'dimensionsRaw',
+  size: 'dimensionsRaw',
+  packsize: 'dimensionsRaw',
+  packagesize: 'dimensionsRaw',
+  packagedimensions: 'dimensionsRaw',
+  weightunit: 'weightUnit',
+  dimensionunit: 'dimensionUnit',
+  dimensionsunit: 'dimensionUnit',
   condition: 'condition',
   conditionid: 'condition',
   parttype: 'partType',
@@ -220,6 +244,9 @@ export class SpreadsheetParserService {
             ) {
               return;
             }
+            // Several headers can alias the same field (e.g. "Weight" and "Net
+            // Weight"). A blank duplicate column must not clear a filled one.
+            if (!value && raw[mapped]) return;
             raw[mapped] = value;
             return;
           }

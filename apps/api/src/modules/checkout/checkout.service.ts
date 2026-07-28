@@ -8,7 +8,9 @@ import {
 import { CartService } from '../cart/cart.service';
 import { ReservationService } from '../inventory/reservation.service';
 import { OrderService } from '../order/order.service';
-import { ShippingService } from './shipping.service';
+import { ShippingService, type ShippingQuoteItem } from './shipping.service';
+import { parseDimensionsJson } from './billable-weight.util';
+import { resolvePartClassKey } from './part-class-weights';
 import { StripeService } from './stripe.service';
 import { PrismaService } from '../../prisma.service';
 import {
@@ -69,6 +71,35 @@ export class CheckoutService {
       });
     }
 
+    // Validate shipping before reserving stock: a reservation held by a failed
+    // checkout blocks the offer until its Redis TTL expires.
+    const destinationCountry = this.getDestinationCountry(shippingAddress);
+    const quotesBySeller = new Map(
+      Object.entries(this.groupItemsBySeller(cart.items)).map(
+        ([sellerId, items]) =>
+          [
+            sellerId,
+            this.shippingService.quoteSellerShipping(
+              items.map((i) => this.toShippingItem(i)),
+              destinationCountry,
+            ),
+          ] as const,
+      ),
+    );
+
+    const freightSellers = [...quotesBySeller.values()].filter(
+      (quote) => quote.requiresFreightQuote,
+    );
+    if (freightSellers.length > 0) {
+      // The rate sheet only covers courier parcels, so an automatic price here
+      // would under-charge by a wide margin. Ops must quote these manually.
+      throw new BadRequestException(
+        `This order exceeds courier limits (${freightSellers
+          .map((q) => `${q.quotedWeightKg}kg+`)
+          .join(', ')}) and needs a freight quote. Please request a shipping quote for these items.`,
+      );
+    }
+
     // 1. Lock stock for all items
     const reservedOffers: string[] = [];
     for (const item of cart.items) {
@@ -88,22 +119,12 @@ export class CheckoutService {
       reservedOffers.push(item.sellerOfferId);
     }
 
-    const destinationCountry = this.getDestinationCountry(shippingAddress);
     const pricedItems = this.toChargeCurrencyItems(cart.items, chargeCurrency);
-    const itemsBySeller = this.groupItemsBySeller(pricedItems);
 
     const shippingTotalsBySeller: Record<string, number> = {};
-    for (const [sellerId, items] of Object.entries(itemsBySeller)) {
-      const formattedItemsForShipping = items.map((i) => ({
-        weight: i.sellerOffer.canonicalPart?.weight ?? undefined,
-        quantity: i.quantity,
-      }));
-      const shippingAed = this.shippingService.calculateSellerShippingTotal(
-        formattedItemsForShipping,
-        destinationCountry,
-      );
+    for (const [sellerId, quote] of quotesBySeller) {
       shippingTotalsBySeller[sellerId] = convertAmount(
-        shippingAed,
+        quote.amount,
         SETTLEMENT_CURRENCY,
         chargeCurrency,
       );
@@ -229,10 +250,7 @@ export class CheckoutService {
     const itemsBySeller = this.groupItemsBySeller(cart.items);
     const sellerQuotes = Object.entries(itemsBySeller).map(([sellerId, items]) => {
       const quote = this.shippingService.quoteSellerShipping(
-        items.map((item) => ({
-          weight: item.sellerOffer.canonicalPart?.weight ?? undefined,
-          quantity: item.quantity,
-        })),
+        items.map((item) => this.toShippingItem(item)),
         country,
       );
       const amount = convertAmount(
@@ -396,6 +414,39 @@ export class CheckoutService {
       throw new BadRequestException('Shipping country is required');
     }
     return country;
+  }
+
+  /**
+   * Maps a cart line to the rate engine's input. Dimensions and part class come
+   * from the catalog part so bulky-light items are billed on volume, and the
+   * weight source is forwarded so estimates receive a safety margin.
+   */
+  private toShippingItem(item: {
+    quantity: number;
+    sellerOffer: {
+      canonicalPart?: {
+        weight?: number | null;
+        weightSource?: string | null;
+        partClassKey?: string | null;
+        dimensions?: unknown;
+        title?: string | null;
+        category?: string | null;
+      } | null;
+    };
+  }): ShippingQuoteItem {
+    const part = item.sellerOffer.canonicalPart;
+    return {
+      quantity: item.quantity,
+      weightKg: part?.weight ?? null,
+      weightSource: part?.weightSource ?? null,
+      dimensionsCm: parseDimensionsJson(part?.dimensions),
+      partClassKey:
+        part?.partClassKey ??
+        resolvePartClassKey({
+          title: part?.title ?? null,
+          category: part?.category ?? null,
+        }),
+    };
   }
 
   private toChargeCurrencyItems<

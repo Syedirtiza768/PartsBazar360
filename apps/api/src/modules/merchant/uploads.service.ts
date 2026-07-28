@@ -24,6 +24,12 @@ import {
 import { CatalogMatchService } from '../catalog-import/catalog-match.service';
 import { ReviewTaskService } from '../catalog-import/review-task.service';
 import { CatalogAuditService } from '../catalog-import/catalog-audit.service';
+import { resolveShippingMetrics } from '../catalog-import/weight-normalizer';
+import { resolvePartClassKey } from '../checkout/part-class-weights';
+import {
+  deriveBillableWeight,
+  parseDimensionsJson,
+} from '../checkout/billable-weight.util';
 import { partTypeFromLegacy } from '@repo/catalog-contracts';
 
 interface ParsedUploadRow {
@@ -646,6 +652,18 @@ export class MerchantUploadsService {
       .split('|')
       .map((u) => u.trim())
       .filter(Boolean);
+    const shippingMetrics = resolveShippingMetrics({
+      netWeight: raw.netWeight,
+      grossWeight: raw.grossWeight,
+      length: raw.length,
+      width: raw.width,
+      height: raw.height,
+      dimensionsRaw: raw.dimensionsRaw,
+      weightUnit: raw.weightUnit,
+      dimensionUnit: raw.dimensionUnit,
+      defaultWeightUnit: defaults.defaultWeightUnit,
+      defaultDimensionUnit: defaults.defaultDimensionUnit,
+    });
     const parsedOemReferences = parseCompoundOemReferences(
       raw.oemReferences || raw.oemPartNumber || '',
     );
@@ -655,6 +673,11 @@ export class MerchantUploadsService {
     ].filter((v): v is string => Boolean(v?.trim()));
     const parsedVehicle = parseVehicleFromTitle(title);
     const category = raw.category?.trim() || extractCategory(title);
+    const partClassKey = resolvePartClassKey({ title, category });
+    const billable = deriveBillableWeight({
+      actualKg: shippingMetrics.weightKg,
+      dimensionsCm: shippingMetrics.dimensionsCm,
+    });
     const classification = classifyPart({
       declaredType:
         raw.partType || raw.__suggestedPartType || defaults.defaultPartSource,
@@ -692,6 +715,13 @@ export class MerchantUploadsService {
       !defaults.defaultDimensionUnit
     )
       reviewReasons.push('Dimension unit requires confirmation');
+    // Weight drives the shipping quote, so surface unit ambiguity and gaps
+    // rather than letting the part fall back to a class-median estimate.
+    reviewReasons.push(...shippingMetrics.warnings);
+    if (!shippingMetrics.weightKg)
+      reviewReasons.push(
+        'Shipping weight missing — quotes will use a class estimate',
+      );
     if (classification.status !== 'READY')
       reviewReasons.push(...classification.reasons);
     for (const reference of parsedOemReferences) {
@@ -761,6 +791,13 @@ export class MerchantUploadsService {
       parsedVehicle,
       matchCandidates,
       autoMatchPartId: autoMatch?.canonicalPartId || null,
+      weightKg: shippingMetrics.weightKg,
+      weightConfidence: shippingMetrics.weightConfidence,
+      dimensionsCm: shippingMetrics.dimensionsCm,
+      dimensionsConfidence: shippingMetrics.dimensionsConfidence,
+      partClassKey,
+      dimensionalWeightKg: billable?.volumetricKg ?? null,
+      billableWeightKg: billable?.billableKg ?? null,
     };
 
     if (defaults.commitMode === 'STAGED') {
@@ -891,6 +928,13 @@ export class MerchantUploadsService {
           oeNumbers: Array.from(new Set(oeNumbers.map((v) => v.toUpperCase()))),
           fitmentFlags: reviewReasons,
           imageUrls,
+          weight: shippingMetrics.weightKg ?? undefined,
+          weightSource: shippingMetrics.weightKg ? 'SPREADSHEET' : undefined,
+          weightConfidence: shippingMetrics.weightConfidence ?? undefined,
+          dimensions: (shippingMetrics.dimensionsCm as any) ?? undefined,
+          partClassKey,
+          dimensionalWeightKg: billable?.volumetricKg ?? undefined,
+          billableWeightKg: billable?.billableKg ?? undefined,
           compatibility: parsedVehicle
             ? ({ source: 'title_parse', vehicle: parsedVehicle } as any)
             : undefined,
@@ -908,6 +952,15 @@ export class MerchantUploadsService {
           fitmentConfidence: parsedVehicle ? 0.5 : 0,
         },
       }));
+
+    if (existingNumber?.canonicalPart) {
+      await this.backfillShippingMetrics(existingNumber.canonicalPart, {
+        weightKg: shippingMetrics.weightKg,
+        weightConfidence: shippingMetrics.weightConfidence,
+        dimensionsCm: shippingMetrics.dimensionsCm,
+        partClassKey,
+      });
+    }
 
     await this.audit.record({
       action: existingNumber ? 'MATCH' : 'CLASSIFY',
@@ -1370,6 +1423,62 @@ export class MerchantUploadsService {
     if (input.partSource === 'AFTERMARKET' && !input.brand?.trim())
       reasons.push('Aftermarket part needs brand/manufacturer');
     return reasons;
+  }
+
+  /**
+   * Fills shipping metrics on a part matched to an existing catalog record.
+   *
+   * Only null fields are written. A later upload must never overwrite a weight
+   * that already came from a measurement or a higher-confidence source, since
+   * that value is already being quoted against.
+   */
+  private async backfillShippingMetrics(
+    part: {
+      id: string;
+      weight: number | null;
+      weightConfidence: number | null;
+      dimensions: unknown;
+      partClassKey: string | null;
+    },
+    incoming: {
+      weightKg: number | null;
+      weightConfidence: number | null;
+      dimensionsCm: { lengthCm: number; widthCm: number; heightCm: number } | null;
+      partClassKey: string;
+    },
+  ) {
+    const data: Record<string, unknown> = {};
+
+    if (part.weight === null && incoming.weightKg !== null) {
+      data.weight = incoming.weightKg;
+      data.weightSource = 'SPREADSHEET';
+      data.weightConfidence = incoming.weightConfidence;
+    }
+
+    const existingDims = parseDimensionsJson(part.dimensions);
+    if (!existingDims && incoming.dimensionsCm) {
+      data.dimensions = incoming.dimensionsCm;
+    }
+
+    if (!part.partClassKey) data.partClassKey = incoming.partClassKey;
+
+    if (Object.keys(data).length === 0) return;
+
+    const billable = deriveBillableWeight({
+      actualKg: (data.weight as number | undefined) ?? part.weight,
+      dimensionsCm:
+        (data.dimensions as typeof incoming.dimensionsCm | undefined) ??
+        existingDims,
+    });
+    if (billable) {
+      data.dimensionalWeightKg = billable.volumetricKg;
+      data.billableWeightKg = billable.billableKg;
+    }
+
+    await this.prisma.canonicalPart.update({
+      where: { id: part.id },
+      data: data as any,
+    });
   }
 
   private async createUploadRow(

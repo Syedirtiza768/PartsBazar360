@@ -3,9 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { INTERNAL_API_URL } from "@/lib/api";
 import { absoluteUrl, getSiteUrl } from "@/lib/seo";
-import { ImageGallery } from "@/components/ImageGallery";
 import { CompatibilitySection } from "@/components/CompatibilitySection";
-import { BuyBox, StickyMobileBar } from "@/components/BuyBox";
+import { PartDetailLive } from "@/components/PartDetailLive";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { SalvagePanel } from "@/components/SalvagePanel";
@@ -209,18 +208,10 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
       />
 
       {/*
-        Grid placement keeps a sensible mobile order (gallery → buy box →
-        details) while the buy box occupies a sticky right rail on desktop.
+        Gallery + buy box live in a client shell that reconciles shipping /
+        infographic after background enrichment; details stay as RSC children.
       */}
-      <div className="mt-5 grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0">
-          <ImageGallery images={images} title={part.title} />
-        </div>
-
-        <aside className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2" aria-label="Purchase options">
-          <BuyBox part={part} />
-        </aside>
-
+      <PartDetailLive part={part}>
         <div className="min-w-0 space-y-10">
           {(part.salvageUnits?.length || part.partType === "SALVAGE_OEM") && (
             <SalvagePanel units={part.salvageUnits || []} />
@@ -293,6 +284,12 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                 </SpecRow>
               )}
               {part.weight ? <SpecRow label="Weight">{part.weight} kg</SpecRow> : null}
+              {part.shipping && (
+                <SpecRow label="Billable weight">
+                  {part.shipping.billableWeightKg} kg
+                  {part.shipping.state !== "exact" ? " (estimate)" : ""}
+                </SpecRow>
+              )}
               {part.oeNumbers && part.oeNumbers.length > 0 && (
                 <SpecRow label="OE numbers">
                   <span className="part-number break-all">{part.oeNumbers.join(", ")}</span>
@@ -357,13 +354,11 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
             </p>
           </section>
         </div>
-      </div>
+      </PartDetailLive>
 
       <div className="mt-14">
         <RecentlyViewed excludeId={part.id} />
       </div>
-
-      <StickyMobileBar part={part} />
     </div>
   );
 }

@@ -14,6 +14,14 @@ export type ShippingQuote = {
     sellerName: string;
     amount: number;
     matchedCountry: boolean;
+    /**
+     * True when the shipment exceeds courier limits. `amount` is then only the
+     * price at that ceiling, and checkout is blocked pending a manual freight
+     * quote — so this must be surfaced before the buyer reaches Pay.
+     */
+    requiresFreightQuote?: boolean;
+    quotedWeightKg?: number;
+    estimated?: boolean;
   }>;
 };
 

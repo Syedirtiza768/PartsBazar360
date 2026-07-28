@@ -106,6 +106,28 @@ export interface ItemSpecifics {
   categoryType?: string | null;
 }
 
+/**
+ * Resolved shipping metrics for a part. Always present and always populated —
+ * an unknown weight falls back to a part-class estimate server-side so the PDP
+ * never has to render a spinner where a shipping figure belongs.
+ *
+ * `state` is 'exact' when both weight and dimensions are measured, 'pending'
+ * while background enrichment is refining them, and 'estimated' otherwise.
+ */
+export interface PartShipping {
+  state: "exact" | "estimated" | "pending";
+  weightKg: number;
+  billableWeightKg: number;
+  volumetricWeightKg?: number | null;
+  weightBasis: "ACTUAL" | "VOLUMETRIC";
+  source: "SPREADSHEET" | "SELLER" | "MEASURED" | "SIBLING_MPN" | "AI" | "CLASS_DEFAULT";
+  confidence?: number | null;
+  partClassKey?: string;
+  dimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number } | null;
+  dimensionsEstimated?: boolean;
+  requiresFreightQuote: boolean;
+}
+
 export interface Part {
   id: string;
   title: string;
@@ -117,9 +139,19 @@ export interface Part {
   oemCrossReferences?: OemCrossReference[];
   category?: string | null;
   weight?: number | null;
+  shipping?: PartShipping | null;
+  enrichmentStatus?: string | null;
+  enrichmentVersion?: number | null;
   oeNumbers?: string[];
   fitmentFlags?: string[];
   imageUrls?: string[];
+  /**
+   * Generated spec card for high-value parts, served as SVG from the API and
+   * already hoisted to the front of `imageUrls`. Exposed separately so callers
+   * can tell it apart from a seller photo.
+   */
+  infographicUrl?: string | null;
+  infographicAlt?: string | null;
   listingUrl?: string | null;
   ebayItemId?: string | null;
   compatibility?: CompatibilityRow[];

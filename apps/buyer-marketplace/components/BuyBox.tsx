@@ -8,7 +8,6 @@ import { Badge } from "@repo/ui/badge";
 import {
   CarIcon,
   ShieldCheckIcon,
-  TruckIcon,
   RotateCcwIcon,
   MessageIcon,
   CopyIcon,
@@ -28,6 +27,7 @@ import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
 import { WatchlistButton } from "./WatchlistButton";
+import { ShippingSummaryRow } from "./ShippingSummaryRow";
 import type { Part, Offer } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -417,10 +417,7 @@ export function BuyBox({ part }: { part: Part }) {
 
       {/* Trust rows */}
       <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-[13px] text-slate-600">
-        <li className="flex items-start gap-2.5">
-          <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          Weight-based worldwide shipping, calculated per seller at checkout.
-        </li>
+        <ShippingSummaryRow part={part} shipping={part.shipping} />
         <li className="flex items-start gap-2.5">
           <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
           Fitment evidence and condition are disclosed on every listing — what you see is what

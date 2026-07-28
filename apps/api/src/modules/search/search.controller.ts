@@ -1,7 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
+  Header,
   Param,
+  Post,
   Query,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +13,13 @@ import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
 import { MvlOeCatalogService } from './mvl-oe-catalog.service';
 import { sanitizeSearchItems } from './buyer-visible-offers.util';
+import { buildPartShippingSummary } from '../checkout/part-shipping-summary.util';
+import { EnrichmentService } from '../enrichment/enrichment.service';
+import { renderInfographicSvg } from '../enrichment/infographic-renderer';
+import {
+  normalizeSpec,
+  type InfographicSpec,
+} from '../enrichment/infographic-spec';
 import {
   normalizeMvlToken,
   modelLookupVariants,
@@ -58,6 +68,7 @@ export class SearchController {
     private readonly prisma: PrismaService,
     private readonly febestWebsite: FebestWebsiteService,
     private readonly mvlOeCatalog: MvlOeCatalogService,
+    private readonly enrichment: EnrichmentService,
   ) {}
 
   // Fitment-first search when a vehicleConfigId is provided; otherwise falls
@@ -93,6 +104,12 @@ export class SearchController {
       const visible = sanitizeSearchItems(result.items);
       const enriched =
         await this.febestWebsite.attachImagesToSearchItems(visible);
+      // Speculative: warm the parts a buyer is about to open, at low priority
+      // so a real PDP view still jumps the queue. Never awaited.
+      void this.enrichment.requestEnrichmentByIds(
+        enriched.map((item: { id?: string }) => item.id || ''),
+        { reason: 'search_results', priority: 20, limit: 8 },
+      );
       return {
         items: enriched,
         total: result.total,
@@ -114,6 +131,10 @@ export class SearchController {
     });
     const visible = sanitizeSearchItems(result.items || []);
     result.items = await this.febestWebsite.attachImagesToSearchItems(visible);
+    void this.enrichment.requestEnrichmentByIds(
+      (result.items || []).map((item: { id?: string }) => item.id || ''),
+      { reason: 'search_results', priority: 20, limit: 8 },
+    );
     return result;
   }
 
@@ -611,16 +632,38 @@ export class SearchController {
       normalizedMaterial = String(normalizedItemSpecifics.material);
     }
 
+    // Cache-aside: this view is what triggers enrichment, but the response never
+    // waits on it. Not awaited, and the service swallows its own failures.
+    void this.enrichment.requestEnrichment(part, { reason: 'pdp_view' });
+
+    // The infographic leads the gallery. sortOrder already puts it first in the
+    // common case, but the FEBEST live path prepends its own scrape, so hoist it
+    // explicitly rather than relying on merge order.
+    const infographic = (partWithOffers.media || []).find(
+      (m) => m.mediaType === 'INFOGRAPHIC',
+    );
+    if (infographic?.url) {
+      imageUrls = [
+        infographic.url,
+        ...imageUrls.filter((url) => url !== infographic.url),
+      ];
+    }
+
     return {
       ...partWithOffers,
       itemSpecifics: normalizedItemSpecifics,
       position: normalizedPosition,
       vehicleSystem: normalizedVehicleSystem,
       material: normalizedMaterial,
+      // Always resolvable, so the PDP can render a shipping figure on first
+      // paint instead of waiting on background enrichment.
+      shipping: buildPartShippingSummary(part),
       // Strip stored compatibility from the FEBEST live path so the client
       // never treats DB cache as authoritative for these parts.
       compatibility: mvlVerifiedTable,
       imageUrls,
+      infographicUrl: infographic?.url ?? null,
+      infographicAlt: infographic?.altText ?? null,
       listingUrl,
       compatibleVehicles,
       compatibilityTable: mvlVerifiedTable,
@@ -659,5 +702,116 @@ export class SearchController {
           : null,
       })),
     };
+  }
+
+  /**
+   * Minimal projection used by the PDP to reconcile a part after background
+   * enrichment finishes. Deliberately excludes offers, fitment and the FEBEST
+   * live scrape so it stays cheap enough to poll every couple of seconds.
+   */
+  @Get('parts/:id/enrichment')
+  async getPartEnrichment(@Param('id') id: string) {
+    const part = await this.prisma.canonicalPart.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        weight: true,
+        weightSource: true,
+        weightConfidence: true,
+        partClassKey: true,
+        dimensions: true,
+        itemSpecifics: true,
+        enrichmentStatus: true,
+        enrichmentVersion: true,
+        enrichedAt: true,
+        media: {
+          where: { mediaType: 'INFOGRAPHIC' },
+          orderBy: { sortOrder: 'asc' },
+          take: 1,
+          select: { url: true, altText: true },
+        },
+      },
+    });
+
+    if (!part) {
+      throw new NotFoundException(`Part ${id} not found`);
+    }
+
+    return {
+      id: part.id,
+      shipping: buildPartShippingSummary(part),
+      enrichmentStatus: part.enrichmentStatus,
+      enrichmentVersion: part.enrichmentVersion,
+      enrichedAt: part.enrichedAt,
+      hasItemSpecifics: Boolean(part.itemSpecifics),
+      infographicUrl: part.media[0]?.url ?? null,
+      infographicAlt: part.media[0]?.altText ?? null,
+    };
+  }
+
+  /**
+   * Intent-based pre-warm: the buyer marketplace fires this when a product card
+   * enters the viewport or is hovered, so enrichment is already running by the
+   * time the PDP opens. Always returns immediately; the work is fire-and-forget.
+   */
+  @Post('enrichment/prewarm')
+  async prewarmEnrichment(@Body() body: { partIds?: string[] }) {
+    const partIds = Array.isArray(body?.partIds)
+      ? body.partIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+    // Cap hard: a scraped results page must not enqueue the whole catalogue.
+    const capped = [...new Set(partIds)].slice(0, 12);
+    if (!capped.length) return { accepted: 0 };
+
+    void this.enrichment.requestEnrichmentByIds(capped, {
+      reason: 'intent',
+      priority: 15,
+      limit: 8,
+    });
+
+    return { accepted: capped.length };
+  }
+
+  /**
+   * Renders the stored infographic spec to SVG on demand.
+   *
+   * Nothing is rasterised or stored: templating a card is pure string work, far
+   * cheaper than the object-storage round trip it would replace, and it means a
+   * redesign ships with a deploy instead of a batch re-render. Express adds an
+   * ETag, so repeat views settle at a 304.
+   */
+  @Get('parts/:id/infographic.svg')
+  @Header('Content-Type', 'image/svg+xml; charset=utf-8')
+  @Header(
+    'Cache-Control',
+    'public, max-age=600, stale-while-revalidate=604800',
+  )
+  async getPartInfographic(@Param('id') id: string) {
+    const part = await this.prisma.canonicalPart.findUnique({
+      where: { id },
+      select: {
+        brand: true,
+        manufacturerPartNumber: true,
+        infographicSpec: true,
+      },
+    });
+
+    // Re-normalised on read so a spec written by an older, looser generation
+    // can never emit a malformed document.
+    const spec: InfographicSpec | null = part
+      ? normalizeSpec(part.infographicSpec)
+      : null;
+    if (!spec) {
+      throw new NotFoundException(`No infographic for part ${id}`);
+    }
+
+    return renderInfographicSvg(spec, {
+      brand: part!.brand,
+      footnote: part!.manufacturerPartNumber
+        ? `Part number ${part!.manufacturerPartNumber} · Specifications supplied by the seller`
+        : 'Specifications supplied by the seller',
+    });
   }
 }

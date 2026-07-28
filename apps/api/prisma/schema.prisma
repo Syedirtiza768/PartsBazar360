@@ -206,7 +206,12 @@ model CanonicalPart {
   brand                    String?
   manufacturer             String?
   category                 String?
-  weight                   Float? // Weight in kg for shipping calculations
+  weight                   Float? // Actual weight in kg for shipping calculations
+  weightSource             String? // SPREADSHEET | SELLER | MEASURED | SIBLING_MPN | AI | CLASS_DEFAULT
+  weightConfidence         Float?
+  partClassKey             String? // resolved shipping class (see checkout/part-class-weights.ts)
+  dimensionalWeightKg      Float? // volumetric weight from dimensions
+  billableWeightKg         Float? // max(actual, volumetric) — precomputed for quotes
   oeNumbers                String[]
   fitmentFlags             String[]
   imageUrls                String[] @default([])
@@ -234,6 +239,14 @@ model CanonicalPart {
   itemSpecifics            Json?
   enrichedAt               DateTime? // when itemSpecifics were last enriched (tracking)
   enrichmentSource         String? // which enrichment campaign wrote itemSpecifics (e.g. llm:mimo, febest.de)
+  enrichmentStatus         String   @default("NONE") // NONE | QUEUED | RUNNING | DONE | FAILED | DEFERRED
+  enrichmentVersion        Int      @default(0) // bumped when prompts/pipeline change, to trigger re-runs
+  // Infographic content only (headline/specs/highlights), not a rendered image.
+  // The SVG is templated on demand, so redesigns never require a re-render or
+  // a second LLM call. See enrichment/infographic-renderer.ts.
+  infographicSpec          Json?
+  infographicVersion       Int      @default(0) // spec-shape generation, bumped to force regeneration
+  infographicGeneratedAt   DateTime?
   material                 String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
@@ -251,6 +264,9 @@ model CanonicalPart {
   redirectsTo    CanonicalPartRedirect[] @relation("RedirectTo")
   reviewTasks    ReviewTask[]
   auditEvents    AuditEvent[]
+
+  @@index([enrichmentStatus])
+  @@index([partClassKey])
 }
 
 model CatalogPartNumber {
