@@ -253,9 +253,28 @@ export const MODELS: Record<string, ModelConfig> = {
   },
 
   // ── Image Generation ──────────────────────────────────────────────────────
+  'google/gemini-2.5-flash-image': {
+    id: 'google/gemini-2.5-flash-image',
+    name: 'Gemini 2.5 Flash Image',
+    provider: 'Google',
+    inputCostPer1M: 0.3,
+    outputCostPer1M: 2.5,
+    supportsImageInput: true,
+    supportsImageOutput: true,
+    supportsTools: false,
+    supportsStructuredOutput: false,
+    contextWindow: 32_768,
+    strengths: ['Image generation', 'image-to-image editing', 'fast'],
+    weaknesses: [
+      'Lower quality than premium',
+      'limited text rendering in images',
+    ],
+    avgLatencyMs: 5000,
+    reliabilityScore: 0.78,
+  },
   'google/gemini-2.5-flash-preview-image': {
     id: 'google/gemini-2.5-flash-preview-image',
-    name: 'Gemini 2.5 Flash Image',
+    name: 'Gemini 2.5 Flash Image (preview id)',
     provider: 'Google',
     inputCostPer1M: 0.3,
     outputCostPer1M: 2.5,

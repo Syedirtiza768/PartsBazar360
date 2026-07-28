@@ -8,6 +8,9 @@ export interface EnrichmentSnapshot {
   enrichmentVersion: number;
   enrichedAt: string | null;
   hasItemSpecifics: boolean;
+  itemSpecifics?: Record<string, unknown> | null;
+  locationDiagramUrl: string | null;
+  locationDiagramAlt: string | null;
   infographicUrl: string | null;
   infographicAlt: string | null;
 }

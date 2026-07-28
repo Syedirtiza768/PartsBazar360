@@ -80,8 +80,11 @@ services:
       SHIPPING_MAX_PARCEL_KG: ${SHIPPING_MAX_PARCEL_KG:-30}
       SHIPPING_ESTIMATE_MARGIN_PCT: ${SHIPPING_ESTIMATE_MARGIN_PCT:-15}
       SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR: ${SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR:-0.8}
+      ENRICHMENT_MEDIA_DIR: /app/data/enrichment
       SCHEMA_MODE: ${SCHEMA_MODE:-migrate}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+    volumes:
+      - enrichment_media:/app/data/enrichment
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
       interval: 10s
@@ -127,6 +130,9 @@ services:
       ENRICHMENT_ESCALATION_MODEL: ${ENRICHMENT_ESCALATION_MODEL:-}
       INFOGRAPHIC_MIN_PRICE_USD: ${INFOGRAPHIC_MIN_PRICE_USD:-300}
       INFOGRAPHIC_MODEL: ${INFOGRAPHIC_MODEL:-}
+      LOCATION_DIAGRAM_MIN_PRICE_USD: ${LOCATION_DIAGRAM_MIN_PRICE_USD:-300}
+      LOCATION_DIAGRAM_MODEL: ${LOCATION_DIAGRAM_MODEL:-}
+      ENRICHMENT_MEDIA_DIR: /app/data/enrichment
       # Needed to drop the buyer ISR cache once a part is enriched.
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
       BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
@@ -134,6 +140,8 @@ services:
       SHIPPING_MAX_PARCEL_KG: ${SHIPPING_MAX_PARCEL_KG:-30}
       SHIPPING_ESTIMATE_MARGIN_PCT: ${SHIPPING_ESTIMATE_MARGIN_PCT:-15}
       SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR: ${SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR:-0.8}
+    volumes:
+      - enrichment_media:/app/data/enrichment
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,6 +246,7 @@ volumes:
   postgres_data:
   redis_data:
   opensearch_data:
+  enrichment_media:
 
 networks:
   app-network:

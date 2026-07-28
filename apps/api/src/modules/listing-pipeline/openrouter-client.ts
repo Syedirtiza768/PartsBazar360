@@ -17,17 +17,25 @@ export interface CallOptions {
   messages: OpenRouterMessage[];
   temperature?: number;
   maxTokens?: number;
+  modalities?: Array<'text' | 'image'>;
+  imageConfig?: {
+    aspect_ratio?: string;
+    image_size?: string;
+  };
   responseFormat?: {
     type: 'json_object' | 'json_schema';
     json_schema?: unknown;
   };
   maxRetries?: number;
+  /** When true, an image payload satisfies the response even without text. */
+  allowEmptyText?: boolean;
 }
 
 export interface CallResult {
   content: string;
   usage: ModelUsageRecord;
   raw: OpenRouterResponse;
+  imageDataUrl?: string | null;
 }
 
 /**
@@ -66,6 +74,18 @@ export class OpenRouterClient {
     );
   }
 
+  /**
+   * Image-generation call. Sets modalities to image+text and tolerates an
+   * image-only assistant message (common for Gemini image models).
+   */
+  async callImage(opts: CallOptions): Promise<CallResult> {
+    return this.call({
+      ...opts,
+      modalities: opts.modalities ?? ['image', 'text'],
+      allowEmptyText: true,
+    });
+  }
+
   private async doCall(opts: CallOptions): Promise<CallResult> {
     const body: OpenRouterRequest = {
       model: opts.model.id,
@@ -76,6 +96,12 @@ export class OpenRouterClient {
 
     if (opts.responseFormat) {
       body.response_format = opts.responseFormat;
+    }
+    if (opts.modalities?.length) {
+      body.modalities = opts.modalities;
+    }
+    if (opts.imageConfig) {
+      body.image_config = opts.imageConfig;
     }
 
     const res = await fetch(OPENROUTER_BASE, {
@@ -106,7 +132,11 @@ export class OpenRouterClient {
     const msg = data.choices?.[0]?.message;
 
     const content = msg?.content?.trim() || msg?.reasoning?.trim() || '';
-    if (!content) {
+    const imageDataUrl = OpenRouterClient.extractImageDataUrl(msg);
+    if (!content && !imageDataUrl) {
+      throw new Error('Empty response from OpenRouter');
+    }
+    if (!content && !opts.allowEmptyText) {
       throw new Error('Empty response from OpenRouter');
     }
 
@@ -128,7 +158,29 @@ export class OpenRouterClient {
     this.totalCost += cost;
     this.callLog.push(usage);
 
-    return { content, usage, raw: data };
+    return { content, usage, raw: data, imageDataUrl };
+  }
+
+  static extractImageDataUrl(
+    msg:
+      | {
+          images?: Array<{
+            image_url?: { url: string };
+            imageUrl?: { url: string };
+          }>;
+        }
+      | null
+      | undefined,
+  ): string | null {
+    const images = msg?.images;
+    if (!Array.isArray(images) || !images.length) return null;
+    for (const image of images) {
+      const url = image?.image_url?.url || image?.imageUrl?.url;
+      if (typeof url === 'string' && url.startsWith('data:image/')) {
+        return url;
+      }
+    }
+    return null;
   }
 
   private isRetryable(err: Error): boolean {

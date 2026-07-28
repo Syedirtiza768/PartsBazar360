@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma.service';
 import { isExactWeightSource } from '../checkout/billable-weight.util';
 
 /** Current prompt/pipeline generation. Bump to re-enrich the whole catalog. */
-export const ENRICHMENT_VERSION = 1;
+export const ENRICHMENT_VERSION = 2;
 
 export interface EnrichmentCandidate {
   id: string;
@@ -41,9 +41,11 @@ export class EnrichmentService {
   }
 
   /**
-   * True when a part is missing data the pipeline can supply. A part with a
-   * measured weight and real dimensions is already better than anything the
-   * model would produce, so it is left alone.
+   * True when a part is missing data the pipeline can supply.
+   *
+   * Once a part is DONE at the current enrichment version, we stop re-queueing
+   * even if the weight came from AI — re-running the same pipeline just burns
+   * budget. Missing item specifics are still a reason to run (or re-run).
    */
   needsEnrichment(part: EnrichmentCandidate): boolean {
     if ((part.enrichmentVersion ?? 0) < ENRICHMENT_VERSION) {
@@ -51,6 +53,9 @@ export class EnrichmentService {
       return true;
     }
     if (part.enrichmentStatus === 'FAILED') return false;
+    if (part.enrichmentStatus === 'DONE') {
+      return !part.itemSpecifics;
+    }
     if (!part.itemSpecifics) return true;
 
     const hasTrustedWeight =

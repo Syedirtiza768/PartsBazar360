@@ -77,10 +77,10 @@ export function useEnrichmentReconcile(part: Part): ReconciledPartView {
   }, [part.id, part.enrichmentStatus, part.shipping?.state]);
 
   const shipping = snapshot?.shipping ?? part.shipping;
-  const images = mergeInfographic(
-    part.imageUrls || [],
+  const images = mergeLeadImages(part.imageUrls || [], [
+    snapshot?.locationDiagramUrl ?? part.locationDiagramUrl,
     snapshot?.infographicUrl ?? part.infographicUrl,
-  );
+  ]);
 
   return {
     shipping,
@@ -90,10 +90,15 @@ export function useEnrichmentReconcile(part: Part): ReconciledPartView {
   };
 }
 
-function mergeInfographic(
+function mergeLeadImages(
   images: string[],
-  infographicUrl: string | null | undefined,
+  leadUrls: Array<string | null | undefined>,
 ): string[] {
-  if (!infographicUrl) return images;
-  return [infographicUrl, ...images.filter((url) => url !== infographicUrl)];
+  let next = images;
+  // Apply in reverse so the first lead ends up at index 0.
+  for (const url of [...leadUrls].reverse()) {
+    if (!url) continue;
+    next = [url, ...next.filter((u) => u !== url)];
+  }
+  return next;
 }

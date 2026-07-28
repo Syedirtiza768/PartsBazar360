@@ -7,7 +7,9 @@ import {
   Post,
   Query,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
+import { createReadStream } from 'fs';
 import { OpenSearchService } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
@@ -20,6 +22,10 @@ import {
   normalizeSpec,
   type InfographicSpec,
 } from '../enrichment/infographic-spec';
+import {
+  locationDiagramExists,
+  locationDiagramFilePath,
+} from '../enrichment/location-diagram';
 import {
   normalizeMvlToken,
   modelLookupVariants,
@@ -636,17 +642,22 @@ export class SearchController {
     // waits on it. Not awaited, and the service swallows its own failures.
     void this.enrichment.requestEnrichment(part, { reason: 'pdp_view' });
 
-    // The infographic leads the gallery. sortOrder already puts it first in the
-    // common case, but the FEBEST live path prepends its own scrape, so hoist it
-    // explicitly rather than relying on merge order.
+    // The location diagram and SVG infographic lead the gallery. sortOrder
+    // already puts them first in the common case, but the FEBEST live path
+    // prepends its own scrape, so hoist explicitly rather than relying on merge.
+    const locationDiagram = (partWithOffers.media || []).find(
+      (m) => m.mediaType === 'LOCATION_DIAGRAM',
+    );
     const infographic = (partWithOffers.media || []).find(
       (m) => m.mediaType === 'INFOGRAPHIC',
     );
-    if (infographic?.url) {
-      imageUrls = [
-        infographic.url,
-        ...imageUrls.filter((url) => url !== infographic.url),
-      ];
+    for (const lead of [infographic, locationDiagram]) {
+      if (lead?.url) {
+        imageUrls = [
+          lead.url,
+          ...imageUrls.filter((url) => url !== lead.url),
+        ];
+      }
     }
 
     return {
@@ -662,6 +673,8 @@ export class SearchController {
       // never treats DB cache as authoritative for these parts.
       compatibility: mvlVerifiedTable,
       imageUrls,
+      locationDiagramUrl: locationDiagram?.url ?? null,
+      locationDiagramAlt: locationDiagram?.altText ?? null,
       infographicUrl: infographic?.url ?? null,
       infographicAlt: infographic?.altText ?? null,
       listingUrl,
@@ -727,10 +740,12 @@ export class SearchController {
         enrichmentVersion: true,
         enrichedAt: true,
         media: {
-          where: { mediaType: 'INFOGRAPHIC' },
+          where: {
+            mediaType: { in: ['LOCATION_DIAGRAM', 'INFOGRAPHIC'] },
+          },
           orderBy: { sortOrder: 'asc' },
-          take: 1,
-          select: { url: true, altText: true },
+          take: 4,
+          select: { url: true, altText: true, mediaType: true },
         },
       },
     });
@@ -739,6 +754,11 @@ export class SearchController {
       throw new NotFoundException(`Part ${id} not found`);
     }
 
+    const locationDiagram = part.media.find(
+      (m) => m.mediaType === 'LOCATION_DIAGRAM',
+    );
+    const infographic = part.media.find((m) => m.mediaType === 'INFOGRAPHIC');
+
     return {
       id: part.id,
       shipping: buildPartShippingSummary(part),
@@ -746,8 +766,11 @@ export class SearchController {
       enrichmentVersion: part.enrichmentVersion,
       enrichedAt: part.enrichedAt,
       hasItemSpecifics: Boolean(part.itemSpecifics),
-      infographicUrl: part.media[0]?.url ?? null,
-      infographicAlt: part.media[0]?.altText ?? null,
+      itemSpecifics: part.itemSpecifics,
+      locationDiagramUrl: locationDiagram?.url ?? null,
+      locationDiagramAlt: locationDiagram?.altText ?? null,
+      infographicUrl: infographic?.url ?? null,
+      infographicAlt: infographic?.altText ?? null,
     };
   }
 
@@ -813,5 +836,23 @@ export class SearchController {
         ? `Part number ${part!.manufacturerPartNumber} · Specifications supplied by the seller`
         : 'Specifications supplied by the seller',
     });
+  }
+
+  /**
+   * Serves the AI-generated location / OEM-callout diagram PNG written by the
+   * enrichment worker to the shared media volume.
+   */
+  @Get('parts/:id/location-diagram.png')
+  @Header('Content-Type', 'image/png')
+  @Header(
+    'Cache-Control',
+    'public, max-age=600, stale-while-revalidate=604800',
+  )
+  async getPartLocationDiagram(@Param('id') id: string) {
+    if (!(await locationDiagramExists(id))) {
+      throw new NotFoundException(`No location diagram for part ${id}`);
+    }
+    const stream = createReadStream(locationDiagramFilePath(id));
+    return new StreamableFile(stream);
   }
 }

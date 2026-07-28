@@ -273,12 +273,24 @@ export interface OpenRouterRequest {
   messages: OpenRouterMessage[];
   temperature?: number;
   max_tokens?: number;
+  modalities?: Array<'text' | 'image'>;
+  image_config?: {
+    aspect_ratio?: string;
+    image_size?: string;
+  };
   response_format?: {
     type: 'json_object' | 'json_schema';
     json_schema?: unknown;
   };
   tools?: unknown[];
   tool_choice?: string;
+}
+
+export interface OpenRouterImagePart {
+  type?: string;
+  image_url?: { url: string };
+  /** Some SDK shapes use camelCase. */
+  imageUrl?: { url: string };
 }
 
 export interface OpenRouterResponse {
@@ -289,6 +301,7 @@ export interface OpenRouterResponse {
       content: string | null;
       reasoning?: string | null;
       tool_calls?: unknown[];
+      images?: OpenRouterImagePart[];
     };
     finish_reason: string;
   }>;

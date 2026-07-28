@@ -51,9 +51,8 @@ describe('EnrichmentService', () => {
       ).toBe(true);
     });
 
-    it('enriches a part whose weight came from a previous AI run', () => {
+    it('enriches a part whose weight came from AI until the run completes', () => {
       const { service } = build();
-      // AI is not an exact source, so a better source is still worth seeking.
       expect(
         service.needsEnrichment({
           ...current,
@@ -61,8 +60,23 @@ describe('EnrichmentService', () => {
           weight: 2,
           weightSource: 'AI',
           itemSpecifics: { partType: 'x' },
+          enrichmentStatus: 'NONE',
         }),
       ).toBe(true);
+    });
+
+    it('does not re-enrich a DONE AI-weight part with item specifics', () => {
+      const { service } = build();
+      expect(
+        service.needsEnrichment({
+          ...current,
+          id: 'p1',
+          weight: 2,
+          weightSource: 'AI',
+          itemSpecifics: { partType: 'x' },
+          enrichmentStatus: 'DONE',
+        }),
+      ).toBe(false);
     });
 
     it('enriches when item specifics are missing', () => {
