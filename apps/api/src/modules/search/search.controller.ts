@@ -8,6 +8,7 @@ import {
 import { OpenSearchService } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
+import { MvlOeCatalogService } from './mvl-oe-catalog.service';
 import { sanitizeSearchItems } from './buyer-visible-offers.util';
 import {
   normalizeMvlToken,
@@ -25,7 +26,7 @@ type CompatRow = {
   epid?: string | null;
 };
 
-const MVL_MARKETS = ['DE', 'UK', 'AU', 'US'] as const;
+const MVL_MARKETS = ['US', 'DE', 'UK', 'AU'] as const;
 
 /** Maps human-readable listing-pipeline field names → camelCase keys. */
 const FIELD_TO_KEY: Record<string, string> = {
@@ -56,6 +57,7 @@ export class SearchController {
     private readonly searchService: OpenSearchService,
     private readonly prisma: PrismaService,
     private readonly febestWebsite: FebestWebsiteService,
+    private readonly mvlOeCatalog: MvlOeCatalogService,
   ) {}
 
   // Fitment-first search when a vehicleConfigId is provided; otherwise falls
@@ -133,7 +135,8 @@ export class SearchController {
   /**
    * Validate Year/Make/Model rows against MVL in one (or few) batched queries
    * instead of findFirst-per-row-per-market. Preserves market preference order
-   * DE → UK → AU → US and modelLookupVariants priority.
+   * US → DE → UK → AU and modelLookupVariants priority.
+   * Buyer catalog is US marketplace; prefer US ePID rows when verifying.
    */
   private async mvlVerifyRows(rows: CompatRow[]): Promise<CompatRow[]> {
     type LookupKey = { year: number; nMake: string; nModel: string };
@@ -321,7 +324,7 @@ export class SearchController {
     // Flatten each fitment's vehicle chain into a friendly display string
     // (e.g. "2010-2015 Audi Q7") for the product page, without exposing the
     // full relational shape to the frontend.
-    const compatibleVehicles = partWithOffers.fitments.map((f) => {
+    let compatibleVehicles = partWithOffers.fitments.map((f) => {
       const gen = f.vehicleConfig.generation;
       const model = gen.model;
       const make = model.make;
@@ -479,13 +482,85 @@ export class SearchController {
       }
     }
 
+    // OE-catalog enrichment from MVL: when an OE part only has sparse
+    // donor/title fitment (e.g. a single salvage year), expand to the full
+    // chassis generation in MVL (trims/engines/years) — same shape as OEM
+    // dealer catalog tables. Skipped when FEBEST already supplied live rows.
+    if (!enrichmentLive) {
+      const salvageSeeds = (
+        partWithOffers.salvageUnits?.length
+          ? partWithOffers.salvageUnits
+          : partWithOffers.offers.flatMap((o) => o.salvageUnits || [])
+      )
+        .map((unit) => unit.donorVehicle)
+        .filter(Boolean)
+        .map((donor) => ({
+          year: donor!.modelYear,
+          make: donor!.make?.displayName || donor!.make?.name || null,
+          model: donor!.model,
+          trim: donor!.trim,
+          engine: donor!.engine,
+        }));
+
+      const oeEnrichment = await this.mvlOeCatalog.enrichForPart({
+        oeNumbers: partWithOffers.oeNumbers,
+        genuineOemPartNumber: partWithOffers.genuineOemPartNumber,
+        manufacturerPartNumber: partWithOffers.manufacturerPartNumber,
+        partSource: partWithOffers.partSource,
+        seeds: [
+          ...compatibilityTable,
+          ...compatibleVehicles.map((v) => ({
+            year: v.startYear,
+            make: v.make,
+            model: v.model,
+          })),
+          ...salvageSeeds,
+        ],
+        existingRows: compatibilityTable,
+      });
+
+      if (oeEnrichment?.expanded) {
+        enrichmentSource = oeEnrichment.platform
+          ? `mvl_catalog:${oeEnrichment.platform}`
+          : 'mvl_catalog';
+        enrichmentLive = true;
+        compatibilityTable = oeEnrichment.rows.map((row) => ({
+          year: row.year,
+          make: row.make,
+          model: row.model,
+          trim: row.trim,
+          engine: row.engine,
+          source: row.source,
+          mvlVerified: true,
+          epid: row.epid ?? null,
+        }));
+        compatibleVehicles = oeEnrichment.compatibleVehicles;
+      }
+    }
+
     // MVL validation: verify compatibility rows against the MVL vehicle
     // catalog in batched queries. Only MVL-verified rows are shown to buyers
     // so the PDP compatibility table always reflects catalog-validated fitment.
+    // Rows already stamped mvlVerified from OE-catalog expansion skip re-check.
     const ROW_VERIFY_CAP = 400;
-    const toVerify = compatibilityTable.slice(0, ROW_VERIFY_CAP);
-    const verifiedRows = await this.mvlVerifyRows(toVerify);
-    let mvlVerifiedTable = verifiedRows.filter((r) => r.mvlVerified);
+    const alreadyVerified = compatibilityTable.filter(
+      (r) => r.mvlVerified === true,
+    );
+    const needsVerify = compatibilityTable
+      .filter((r) => r.mvlVerified !== true)
+      .slice(0, ROW_VERIFY_CAP);
+    const verifiedRows = await this.mvlVerifyRows(needsVerify);
+    let mvlVerifiedTable = [
+      ...alreadyVerified,
+      ...verifiedRows.filter((r) => r.mvlVerified),
+    ].sort((a, b) => {
+      const ay =
+        typeof a.year === 'number' ? a.year : parseInt(String(a.year), 10);
+      const by =
+        typeof b.year === 'number' ? b.year : parseInt(String(b.year), 10);
+      if (ay !== by) return (ay || 0) - (by || 0);
+      return String(a.trim || '').localeCompare(String(b.trim || ''));
+    });
 
     // If nothing verifies (e.g. MVL has no data for this market yet), fall back
     // to the fitment-derived expansion so the page isn't empty — but mark

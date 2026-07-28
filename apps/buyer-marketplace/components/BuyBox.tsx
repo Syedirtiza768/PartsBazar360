@@ -94,7 +94,7 @@ function FitmentChecker({ part }: { part: Part }) {
     );
   }
 
-  const state = fitmentForConfig(part, activeVehicle.configId);
+  const state = fitmentForConfig(part, activeVehicle.configId, activeVehicle);
   const copy = FITMENT_COPY[state];
   const vehicleName = vehicleShortLabel(activeVehicle);
 

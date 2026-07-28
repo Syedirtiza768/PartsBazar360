@@ -11,7 +11,11 @@ import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
  */
 export function CartLineFitment({ partId }: { partId?: string }) {
   const { activeVehicle, ready } = useGarage();
-  const state = usePartFitment(partId, ready ? activeVehicle?.configId : null);
+  const state = usePartFitment(
+    partId,
+    ready ? activeVehicle?.configId : null,
+    activeVehicle,
+  );
 
   if (!activeVehicle || !state) return null;
 

@@ -63,7 +63,7 @@ export function ProductCard({
       : fitmentContext === "verified"
         ? "verified"
         : ready && activeVehicle
-          ? fitmentForConfig(part, activeVehicle.configId)
+          ? fitmentForConfig(part, activeVehicle.configId, activeVehicle)
           : null;
 
   return (

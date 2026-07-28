@@ -62,6 +62,7 @@ export function CompatibilitySection({
   }, [tableRows, query]);
 
   const visible = showAll ? filtered : filtered.slice(0, 10);
+  const hasMvlCatalog = tableRows.some((r) => r.source === "mvl_catalog");
   const hasAnything = verified.length > 0 || advisory.length > 0 || tableRows.length > 0;
 
   return (
@@ -196,7 +197,12 @@ export function CompatibilitySection({
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.trim || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.engine || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5">
-                            {item.mvlVerified === true ? (
+                            {item.mvlVerified === true &&
+                            item.source === "mvl_catalog" ? (
+                              <Badge tone="success" size="sm">
+                                MVL catalog
+                              </Badge>
+                            ) : item.mvlVerified === true ? (
                               <Badge tone="success" size="sm">
                                 MVL verified
                               </Badge>
@@ -237,9 +243,9 @@ export function CompatibilitySection({
 
           <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
             <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            Compatibility data comes from structured seller fitment and listing metadata. When in
-            doubt, the OE number is the ground truth — match it against your vehicle&apos;s parts
-            catalog or ask our team.
+            {hasMvlCatalog
+              ? "Compatibility is expanded from the OE number\u2019s donor vehicle to the matching MVL chassis generation (all listed trims/engines/years). When in doubt, match the OE number against your vehicle\u2019s parts catalog or ask our team."
+              : "Compatibility data comes from structured seller fitment and listing metadata. When in doubt, the OE number is the ground truth — match it against your vehicle\u2019s parts catalog or ask our team."}
           </p>
         </>
       )}
