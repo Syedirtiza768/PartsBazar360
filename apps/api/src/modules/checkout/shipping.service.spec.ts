@@ -39,4 +39,53 @@ describe('ShippingService', () => {
     expect(quote.billableWeightGrams).toBe(2400);
     expect(quote.amount).toBe(383.4);
   });
+
+  it('applies UAE flat rates by size tier', () => {
+    expect(
+      service.quoteSellerShipping([{ weight: 1, quantity: 1 }], 'UAE'),
+    ).toMatchObject({
+      matchedCountry: true,
+      serviceType: 'UAE FLAT (small)',
+      amount: 20,
+    });
+
+    expect(
+      service.quoteSellerShipping(
+        [{ weight: 5, quantity: 1 }],
+        'United Arab Emirates',
+      ),
+    ).toMatchObject({
+      matchedCountry: true,
+      serviceType: 'UAE FLAT (medium)',
+      amount: 50,
+    });
+
+    expect(
+      service.quoteSellerShipping([{ weight: 20, quantity: 1 }], 'AE'),
+    ).toMatchObject({
+      matchedCountry: true,
+      serviceType: 'UAE FLAT (large)',
+      amount: 75,
+    });
+
+    expect(
+      service.quoteSellerShipping([{ weight: 40, quantity: 1 }], 'Emirates'),
+    ).toMatchObject({
+      matchedCountry: true,
+      serviceType: 'UAE FLAT (heavy)',
+      amount: 150,
+    });
+  });
+
+  it('treats missing weight as 1kg for UAE small tier', () => {
+    const quote = service.quoteSellerShipping(
+      [{ quantity: 1 }],
+      'United Arab Emirates',
+    );
+    expect(quote).toMatchObject({
+      totalWeightGrams: 1000,
+      amount: 20,
+      serviceType: 'UAE FLAT (small)',
+    });
+  });
 });

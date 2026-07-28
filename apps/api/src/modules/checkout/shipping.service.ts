@@ -1,6 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { EMX_RATE_BANDS, EMX_RATE_SHEET } from './emx-rate-sheet';
 
+/** UAE domestic flat rates by parcel weight (kg). */
+const UAE_FLAT_TIERS = [
+  { maxKg: 2, amount: 20, label: 'small' },
+  { maxKg: 10, amount: 50, label: 'medium' },
+  { maxKg: 25, amount: 75, label: 'large' },
+  { maxKg: Number.POSITIVE_INFINITY, amount: 150, label: 'heavy' },
+] as const;
+
+const UAE_COUNTRY_ALIASES = new Set([
+  'uae',
+  'u.a.e',
+  'u.a.e.',
+  'ae',
+  'united arab emirates',
+  'emirates',
+]);
+
 @Injectable()
 export class ShippingService {
   private readonly rateBands = [...EMX_RATE_BANDS];
@@ -18,8 +35,22 @@ export class ShippingService {
     destinationCountry: string,
   ) {
     const totalWeightGrams = this.totalWeightGrams(items);
-    const billableWeightGrams = this.billableWeight(totalWeightGrams);
     const countryKey = this.normalizeCountry(destinationCountry);
+
+    if (this.isUae(countryKey)) {
+      const tier = this.uaeFlatTier(totalWeightGrams);
+      return {
+        destinationCountry: destinationCountry.trim(),
+        currency: 'AED',
+        serviceType: `UAE FLAT (${tier.label})`,
+        matchedCountry: true,
+        totalWeightGrams,
+        billableWeightGrams: totalWeightGrams,
+        amount: tier.amount,
+      };
+    }
+
+    const billableWeightGrams = this.billableWeight(totalWeightGrams);
     const row = this.rowsByCountry.get(countryKey);
     const rates = row?.rates ?? this.averageRates;
 
@@ -86,7 +117,8 @@ export class ShippingService {
         (value): value is number => typeof value === 'number',
       );
       const avg =
-        values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+        values.reduce((sum, value) => sum + value, 0) /
+        Math.max(1, values.length);
       out[band] = this.round(avg);
     }
     return out;
@@ -94,6 +126,18 @@ export class ShippingService {
 
   private normalizeCountry(country: string) {
     return country.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  private isUae(countryKey: string) {
+    return UAE_COUNTRY_ALIASES.has(countryKey);
+  }
+
+  private uaeFlatTier(totalWeightGrams: number) {
+    const weightKg = Math.max(totalWeightGrams, 0) / 1000;
+    return (
+      UAE_FLAT_TIERS.find((tier) => weightKg <= tier.maxKg) ??
+      UAE_FLAT_TIERS[UAE_FLAT_TIERS.length - 1]
+    );
   }
 
   private round(value: number) {
