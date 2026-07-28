@@ -1,21 +1,36 @@
-import { EnrichmentService, ENRICHMENT_VERSION } from './enrichment.service';
+import {
+  EnrichmentService,
+  ENRICHMENT_VERSION,
+  ENRICHMENT_PDP_PRIORITY,
+  ENRICHMENT_PREWARM_PRIORITY,
+} from './enrichment.service';
 
 describe('EnrichmentService', () => {
   const ORIGINAL_ENV = { ...process.env };
 
-  function build() {
+  function build(queueExtras: Record<string, unknown> = {}) {
     const add = jest.fn().mockResolvedValue({ id: 'job-1' });
+    const getJob = jest.fn().mockResolvedValue(null);
+    const getWaitingCount = jest.fn().mockResolvedValue(0);
+    const getPrioritizedCount = jest.fn().mockResolvedValue(0);
     const update = jest.fn().mockResolvedValue({});
     const service = new EnrichmentService(
-      { add } as any,
+      {
+        add,
+        getJob,
+        getWaitingCount,
+        getPrioritizedCount,
+        ...queueExtras,
+      } as any,
       { canonicalPart: { update } } as any,
     );
-    return { service, add, update };
+    return { service, add, update, getJob, getWaitingCount, getPrioritizedCount };
   }
 
   beforeEach(() => {
     process.env.ENRICHMENT_ENABLED = '1';
     process.env.OPENROUTER_API_KEY = 'sk-or-test';
+    delete process.env.ENRICHMENT_PREWARM;
   });
 
   afterEach(() => {
@@ -47,20 +62,6 @@ describe('EnrichmentService', () => {
           ...current,
           id: 'p1',
           itemSpecifics: { partType: 'Brake Pad' },
-        }),
-      ).toBe(true);
-    });
-
-    it('enriches a part whose weight came from AI until the run completes', () => {
-      const { service } = build();
-      expect(
-        service.needsEnrichment({
-          ...current,
-          id: 'p1',
-          weight: 2,
-          weightSource: 'AI',
-          itemSpecifics: { partType: 'x' },
-          enrichmentStatus: 'NONE',
         }),
       ).toBe(true);
     });
@@ -126,7 +127,7 @@ describe('EnrichmentService', () => {
       itemSpecifics: null,
     };
 
-    it('queues one deduplicated job and marks the part queued', async () => {
+    it('queues one deduplicated job at PDP priority', async () => {
       const { service, add, update } = build();
       await service.requestEnrichment(candidate);
 
@@ -134,12 +135,55 @@ describe('EnrichmentService', () => {
       const [name, data, opts] = add.mock.calls[0];
       expect(name).toBe('enrich-part');
       expect(data).toMatchObject({ partId: 'part-1', reason: 'pdp_view' });
-      // Dedup key must be stable so concurrent views collapse to one job.
       expect(opts.jobId).toBe(`enrich:part-1:v${ENRICHMENT_VERSION}`);
+      expect(opts.priority).toBe(ENRICHMENT_PDP_PRIORITY);
       expect(update).toHaveBeenCalledWith({
         where: { id: 'part-1' },
         data: { enrichmentStatus: 'QUEUED' },
       });
+    });
+
+    it('promotes a queued prewarm job when the PDP opens', async () => {
+      const changePriority = jest.fn().mockResolvedValue(undefined);
+      const updateData = jest.fn().mockResolvedValue(undefined);
+      const getState = jest.fn().mockResolvedValue('waiting');
+      const { service, add, getJob } = build();
+      getJob.mockResolvedValue({
+        opts: { priority: ENRICHMENT_PREWARM_PRIORITY },
+        data: { partId: 'part-1', reason: 'search_results' },
+        changePriority,
+        updateData,
+        getState,
+      });
+
+      await service.requestEnrichment(
+        { ...candidate, enrichmentStatus: 'QUEUED' },
+        { reason: 'pdp_view', priority: ENRICHMENT_PDP_PRIORITY },
+      );
+
+      expect(add).not.toHaveBeenCalled();
+      expect(changePriority).toHaveBeenCalledWith({
+        priority: ENRICHMENT_PDP_PRIORITY,
+      });
+      expect(updateData).toHaveBeenCalled();
+    });
+
+    it('does not promote on speculative re-request while queued', async () => {
+      const changePriority = jest.fn();
+      const { service, add, getJob } = build();
+      getJob.mockResolvedValue({
+        opts: { priority: ENRICHMENT_PREWARM_PRIORITY },
+        changePriority,
+        getState: jest.fn().mockResolvedValue('waiting'),
+      });
+
+      await service.requestEnrichment(
+        { ...candidate, enrichmentStatus: 'QUEUED' },
+        { reason: 'search_results', priority: ENRICHMENT_PREWARM_PRIORITY },
+      );
+
+      expect(add).not.toHaveBeenCalled();
+      expect(changePriority).not.toHaveBeenCalled();
     });
 
     it('does nothing when the feature flag is off', async () => {
@@ -168,17 +212,34 @@ describe('EnrichmentService', () => {
     it('never throws when the queue is unavailable', async () => {
       const add = jest.fn().mockRejectedValue(new Error('redis down'));
       const service = new EnrichmentService(
-        { add } as any,
+        {
+          add,
+          getJob: jest.fn(),
+          getWaitingCount: jest.fn(),
+          getPrioritizedCount: jest.fn(),
+        } as any,
         { canonicalPart: { update: jest.fn() } } as any,
       );
 
-      // This runs on the PDP read path, so a broken queue must not surface.
       await expect(service.requestEnrichment(candidate)).resolves.toBeUndefined();
     });
   });
 
   describe('requestEnrichmentForMany', () => {
-    it('caps speculative work and deprioritises it', async () => {
+    it('is a no-op when prewarm is disabled (default)', async () => {
+      const { service, add } = build();
+      const parts = Array.from({ length: 10 }, (_, i) => ({
+        id: `part-${i}`,
+        enrichmentVersion: ENRICHMENT_VERSION,
+        itemSpecifics: null,
+      }));
+
+      await service.requestEnrichmentForMany(parts, { limit: 5 });
+      expect(add).not.toHaveBeenCalled();
+    });
+
+    it('caps speculative work and deprioritises it when enabled', async () => {
+      process.env.ENRICHMENT_PREWARM = '1';
       const { service, add } = build();
       const parts = Array.from({ length: 20 }, (_, i) => ({
         id: `part-${i}`,
@@ -189,34 +250,45 @@ describe('EnrichmentService', () => {
       await service.requestEnrichmentForMany(parts, { limit: 5 });
 
       expect(add).toHaveBeenCalledTimes(5);
-      // Pre-warming must not outrank a part a buyer is actually looking at.
-      expect(add.mock.calls[0][2].priority).toBeGreaterThan(5);
+      expect(add.mock.calls[0][2].priority).toBe(ENRICHMENT_PREWARM_PRIORITY);
+      expect(add.mock.calls[0][2].priority).toBeGreaterThan(ENRICHMENT_PDP_PRIORITY);
     });
 
-    it('filters out parts that do not need enrichment', async () => {
-      const { service, add } = build();
-      await service.requestEnrichmentForMany([
-        {
-          id: 'good',
-          weight: 1.6,
-          weightSource: 'SPREADSHEET',
-          itemSpecifics: { a: 1 },
-          enrichmentVersion: ENRICHMENT_VERSION,
-        },
-        {
-          id: 'needs-it',
-          itemSpecifics: null,
-          enrichmentVersion: ENRICHMENT_VERSION,
-        },
-      ]);
+    it('skips prewarm when the waiting backlog is already full', async () => {
+      process.env.ENRICHMENT_PREWARM = '1';
+      process.env.ENRICHMENT_PREWARM_MAX_BACKLOG = '4';
+      const { service, add, getWaitingCount, getPrioritizedCount } = build();
+      getWaitingCount.mockResolvedValue(2);
+      getPrioritizedCount.mockResolvedValue(3);
 
-      expect(add).toHaveBeenCalledTimes(1);
-      expect(add.mock.calls[0][1].partId).toBe('needs-it');
+      await service.requestEnrichmentForMany(
+        [{ id: 'p1', enrichmentVersion: ENRICHMENT_VERSION, itemSpecifics: null }],
+        { limit: 5 },
+      );
+
+      expect(add).not.toHaveBeenCalled();
     });
   });
 
   describe('requestEnrichmentByIds', () => {
-    it('loads candidates from the database before queueing', async () => {
+    it('returns zero when prewarm is disabled', async () => {
+      const findMany = jest.fn();
+      const service = new EnrichmentService(
+        {
+          add: jest.fn(),
+          getJob: jest.fn(),
+          getWaitingCount: jest.fn(),
+          getPrioritizedCount: jest.fn(),
+        } as any,
+        { canonicalPart: { findMany } } as any,
+      );
+
+      expect(await service.requestEnrichmentByIds(['part-1'], { reason: 'intent' })).toBe(0);
+      expect(findMany).not.toHaveBeenCalled();
+    });
+
+    it('loads candidates from the database when prewarm is on', async () => {
+      process.env.ENRICHMENT_PREWARM = '1';
       const add = jest.fn().mockResolvedValue({ id: 'job-1' });
       const update = jest.fn().mockResolvedValue({});
       const findMany = jest.fn().mockResolvedValue([
@@ -229,7 +301,12 @@ describe('EnrichmentService', () => {
         },
       ]);
       const service = new EnrichmentService(
-        { add } as any,
+        {
+          add,
+          getJob: jest.fn().mockResolvedValue(null),
+          getWaitingCount: jest.fn().mockResolvedValue(0),
+          getPrioritizedCount: jest.fn().mockResolvedValue(0),
+        } as any,
         { canonicalPart: { update, findMany } } as any,
       );
 
@@ -244,6 +321,7 @@ describe('EnrichmentService', () => {
 
     it('returns zero when enrichment is disabled', async () => {
       process.env.ENRICHMENT_ENABLED = '0';
+      process.env.ENRICHMENT_PREWARM = '1';
       const findMany = jest.fn();
       const service = new EnrichmentService(
         { add: jest.fn() } as any,

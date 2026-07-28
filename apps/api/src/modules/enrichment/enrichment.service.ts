@@ -7,6 +7,10 @@ import { isExactWeightSource } from '../checkout/billable-weight.util';
 /** Current prompt/pipeline generation. Bump to re-enrich the whole catalog. */
 export const ENRICHMENT_VERSION = 2;
 
+/** BullMQ: lower number = higher priority. PDP must always beat prewarm. */
+export const ENRICHMENT_PDP_PRIORITY = 1;
+export const ENRICHMENT_PREWARM_PRIORITY = 50;
+
 export interface EnrichmentCandidate {
   id: string;
   weight?: number | null;
@@ -20,10 +24,10 @@ export interface EnrichmentCandidate {
 /**
  * Decides what needs enriching and queues it.
  *
- * Enqueueing happens on the PDP read path, so it must never slow a response or
- * throw: every failure is swallowed and the part simply keeps its deterministic
- * class estimate. Deduplication is by part id, so a part being viewed a thousand
- * times concurrently produces exactly one job.
+ * Speculative pre-warm (search / hover) is OFF by default: flooding the queue
+ * burns budget and parks real PDP views behind dozens of parts nobody opened.
+ * When a buyer opens a listing we either enqueue at top priority or promote an
+ * existing prewarm job so the page they are looking at finishes first.
  */
 @Injectable()
 export class EnrichmentService {
@@ -38,6 +42,24 @@ export class EnrichmentService {
     return (
       process.env.ENRICHMENT_ENABLED === '1' && Boolean(process.env.OPENROUTER_API_KEY)
     );
+  }
+
+  /** Speculative search/hover warm-up. Default off — enable with ENRICHMENT_PREWARM=1. */
+  private get prewarmEnabled(): boolean {
+    return process.env.ENRICHMENT_PREWARM === '1';
+  }
+
+  private get prewarmMaxBacklog(): number {
+    const raw = Number(process.env.ENRICHMENT_PREWARM_MAX_BACKLOG || 4);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 4;
+  }
+
+  private jobIdFor(partId: string): string {
+    return `enrich:${partId}:v${ENRICHMENT_VERSION}`;
+  }
+
+  private isPdpReason(reason?: string): boolean {
+    return !reason || reason === 'pdp_view';
   }
 
   /**
@@ -65,6 +87,48 @@ export class EnrichmentService {
     return !hasTrustedWeight;
   }
 
+  /** Waiting + prioritized jobs that have not started yet. */
+  private async waitingBacklog(): Promise<number> {
+    const [waiting, prioritized] = await Promise.all([
+      this.queue.getWaitingCount(),
+      this.queue.getPrioritizedCount(),
+    ]);
+    return waiting + prioritized;
+  }
+
+  /**
+   * If a prewarm job is already sitting in the queue, bump it to PDP priority
+   * so the listing the buyer opened runs next.
+   */
+  private async promoteQueuedJob(
+    partId: string,
+    priority: number,
+    reason: string,
+  ): Promise<boolean> {
+    const job = await this.queue.getJob(this.jobIdFor(partId));
+    if (!job) return false;
+
+    const state = await job.getState();
+    if (state === 'active' || state === 'completed' || state === 'failed') {
+      return false;
+    }
+
+    const currentPriority = job.opts.priority ?? ENRICHMENT_PREWARM_PRIORITY;
+    if (priority < currentPriority) {
+      await job.changePriority({ priority });
+      await job.updateData({
+        ...(job.data as object),
+        partId,
+        reason,
+        promotedAt: new Date().toISOString(),
+      });
+      this.logger.log(
+        `Promoted enrichment ${partId} priority ${currentPriority} → ${priority} (${reason})`,
+      );
+    }
+    return true;
+  }
+
   /**
    * Queues enrichment for a part if it needs it. Fire-and-forget by design —
    * callers must not await this on a request path.
@@ -75,31 +139,34 @@ export class EnrichmentService {
   ): Promise<void> {
     if (!this.enabled) return;
     if (!this.needsEnrichment(part)) return;
-    // Already queued or running: the dedup key would collide anyway, but this
-    // avoids the round trip.
-    if (part.enrichmentStatus === 'QUEUED' || part.enrichmentStatus === 'RUNNING') {
+
+    const reason = opts.reason || 'pdp_view';
+    const isPdp = this.isPdpReason(reason);
+    const priority = opts.priority ?? (isPdp ? ENRICHMENT_PDP_PRIORITY : ENRICHMENT_PREWARM_PRIORITY);
+
+    // Mid-flight: leave it alone — promotion cannot interrupt an OpenRouter call.
+    if (part.enrichmentStatus === 'RUNNING') return;
+
+    // Already queued: PDP views promote; speculative callers no-op.
+    if (part.enrichmentStatus === 'QUEUED') {
+      if (isPdp) {
+        try {
+          const promoted = await this.promoteQueuedJob(part.id, priority, reason);
+          if (!promoted) {
+            // Orphaned QUEUED row with no Redis job — re-enqueue.
+            await this.enqueue(part.id, priority, reason);
+          }
+        } catch (err: any) {
+          this.logger.warn(
+            `Failed to promote enrichment for ${part.id}: ${err?.message || err}`,
+          );
+        }
+      }
       return;
     }
 
     try {
-      await this.queue.add(
-        'enrich-part',
-        { partId: part.id, reason: opts.reason || 'pdp_view' },
-        {
-          // One in-flight job per part, however many buyers are looking at it.
-          jobId: `enrich:${part.id}:v${ENRICHMENT_VERSION}`,
-          priority: opts.priority ?? 5,
-          attempts: 2,
-          backoff: { type: 'exponential', delay: 5_000 },
-          removeOnComplete: 500,
-          removeOnFail: 200,
-        },
-      );
-
-      await this.prisma.canonicalPart.update({
-        where: { id: part.id },
-        data: { enrichmentStatus: 'QUEUED' },
-      });
+      await this.enqueue(part.id, priority, reason);
     } catch (err: any) {
       // Never let enrichment bookkeeping break a product page.
       this.logger.warn(
@@ -108,18 +175,60 @@ export class EnrichmentService {
     }
   }
 
-  /** Bulk pre-warm used by search results and hover intent. */
+  private async enqueue(
+    partId: string,
+    priority: number,
+    reason: string,
+  ): Promise<void> {
+    await this.queue.add(
+      'enrich-part',
+      { partId, reason },
+      {
+        jobId: this.jobIdFor(partId),
+        priority,
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: 500,
+        removeOnFail: 200,
+      },
+    );
+
+    await this.prisma.canonicalPart.update({
+      where: { id: partId },
+      data: { enrichmentStatus: 'QUEUED' },
+    });
+  }
+
+  /**
+   * Bulk pre-warm used by search results and hover intent.
+   * Disabled unless ENRICHMENT_PREWARM=1, and refused when the queue is already
+   * busy so speculative work cannot bury live PDP jobs.
+   */
   async requestEnrichmentForMany(
     parts: EnrichmentCandidate[],
     opts: { priority?: number; reason?: string; limit?: number } = {},
   ): Promise<void> {
     if (!this.enabled) return;
-    const limit = opts.limit ?? 8;
+    if (!this.prewarmEnabled) return;
+
+    try {
+      const backlog = await this.waitingBacklog();
+      if (backlog >= this.prewarmMaxBacklog) {
+        this.logger.debug(
+          `Skipping prewarm: backlog ${backlog} ≥ ${this.prewarmMaxBacklog}`,
+        );
+        return;
+      }
+    } catch (err: any) {
+      this.logger.warn(`Prewarm backlog check failed: ${err?.message || err}`);
+      return;
+    }
+
+    const limit = opts.limit ?? 3;
     const targets = parts.filter((p) => this.needsEnrichment(p)).slice(0, limit);
     for (const part of targets) {
       await this.requestEnrichment(part, {
-        // Speculative work must never outrank a part a buyer is actually viewing.
-        priority: opts.priority ?? 20,
+        priority: opts.priority ?? ENRICHMENT_PREWARM_PRIORITY,
         reason: opts.reason || 'prewarm',
       });
     }
@@ -135,10 +244,11 @@ export class EnrichmentService {
     opts: { priority?: number; reason?: string; limit?: number } = {},
   ): Promise<number> {
     if (!this.enabled) return 0;
+    if (!this.prewarmEnabled) return 0;
     const unique = [...new Set(partIds.filter(Boolean))];
     if (!unique.length) return 0;
 
-    const limit = opts.limit ?? 8;
+    const limit = opts.limit ?? 3;
     const parts = await this.prisma.canonicalPart.findMany({
       where: { id: { in: unique.slice(0, limit * 2) } },
       select: {

@@ -110,11 +110,10 @@ export class SearchController {
       const visible = sanitizeSearchItems(result.items);
       const enriched =
         await this.febestWebsite.attachImagesToSearchItems(visible);
-      // Speculative: warm the parts a buyer is about to open, at low priority
-      // so a real PDP view still jumps the queue. Never awaited.
+      // Speculative warm-up is gated inside EnrichmentService (off by default).
       void this.enrichment.requestEnrichmentByIds(
         enriched.map((item: { id?: string }) => item.id || ''),
-        { reason: 'search_results', priority: 20, limit: 8 },
+        { reason: 'search_results', priority: 50, limit: 3 },
       );
       return {
         items: enriched,
@@ -139,7 +138,7 @@ export class SearchController {
     result.items = await this.febestWebsite.attachImagesToSearchItems(visible);
     void this.enrichment.requestEnrichmentByIds(
       (result.items || []).map((item: { id?: string }) => item.id || ''),
-      { reason: 'search_results', priority: 20, limit: 8 },
+      { reason: 'search_results', priority: 50, limit: 3 },
     );
     return result;
   }
@@ -640,7 +639,12 @@ export class SearchController {
 
     // Cache-aside: this view is what triggers enrichment, but the response never
     // waits on it. Not awaited, and the service swallows its own failures.
-    void this.enrichment.requestEnrichment(part, { reason: 'pdp_view' });
+    // Cache-aside: this view is what triggers enrichment, but the response never
+    // waits on it. PDP uses top queue priority and promotes any existing prewarm.
+    void this.enrichment.requestEnrichment(part, {
+      reason: 'pdp_view',
+      priority: 1,
+    });
 
     // The location diagram and SVG infographic lead the gallery. sortOrder
     // already puts them first in the common case, but the FEBEST live path
@@ -790,8 +794,8 @@ export class SearchController {
 
     void this.enrichment.requestEnrichmentByIds(capped, {
       reason: 'intent',
-      priority: 15,
-      limit: 8,
+      priority: 50,
+      limit: 3,
     });
 
     return { accepted: capped.length };
