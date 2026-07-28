@@ -702,7 +702,7 @@ export function Header({ categories }: { categories: Facet[] }) {
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-stone-300 bg-white px-3 py-2.5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-graphite-600">Display currency</p>
-              <p className="mt-0.5 text-[11px] text-graphite-600">Checkout is still charged in AED</p>
+              <p className="mt-0.5 text-[11px] text-graphite-600">Stripe settles to AED</p>
             </div>
             <CurrencySwitcher />
           </div>

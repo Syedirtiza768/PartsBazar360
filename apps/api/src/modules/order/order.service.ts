@@ -12,6 +12,7 @@ export class OrderService {
     cartItems: any[],
     shippingAddress: any,
     shippingTotalsBySeller: Record<string, number>,
+    currency = 'AED',
   ) {
     // We group cart items by Seller ID to split them into SellerOrders
     const itemsBySeller = cartItems.reduce(
@@ -33,6 +34,7 @@ export class OrderService {
         data: {
           buyerId,
           totalAmount: 0, // Will update after summation
+          currency,
           shippingAddress,
           status: 'PENDING_PAYMENT',
         },

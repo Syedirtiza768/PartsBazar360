@@ -11,6 +11,12 @@ import { OrderService } from '../order/order.service';
 import { ShippingService } from './shipping.service';
 import { StripeService } from './stripe.service';
 import { PrismaService } from '../../prisma.service';
+import {
+  SETTLEMENT_CURRENCY,
+  convertAmount,
+  resolveChargeCurrency,
+  type ChargeCurrency,
+} from './currency.util';
 
 @Injectable()
 export class CheckoutService {
@@ -29,6 +35,7 @@ export class CheckoutService {
     cartId: string,
     buyer: { buyerId: string; email: string; name?: string },
     shippingAddress: Record<string, unknown>,
+    chargeCurrencyInput?: string | null,
   ) {
     if (!buyer.buyerId) {
       throw new UnauthorizedException('Sign in required to checkout');
@@ -39,6 +46,7 @@ export class CheckoutService {
       );
     }
 
+    const chargeCurrency = resolveChargeCurrency(chargeCurrencyInput);
     const cart = await this.cartService.getCart(cartId);
 
     if (cart.items.length === 0) {
@@ -80,7 +88,8 @@ export class CheckoutService {
     }
 
     const destinationCountry = this.getDestinationCountry(shippingAddress);
-    const itemsBySeller = this.groupItemsBySeller(cart.items);
+    const pricedItems = this.toChargeCurrencyItems(cart.items, chargeCurrency);
+    const itemsBySeller = this.groupItemsBySeller(pricedItems);
 
     const shippingTotalsBySeller: Record<string, number> = {};
     for (const [sellerId, items] of Object.entries(itemsBySeller)) {
@@ -88,19 +97,30 @@ export class CheckoutService {
         weight: i.sellerOffer.canonicalPart?.weight ?? undefined,
         quantity: i.quantity,
       }));
-      shippingTotalsBySeller[sellerId] =
-        this.shippingService.calculateSellerShippingTotal(
-          formattedItemsForShipping,
-          destinationCountry,
-        );
+      const shippingAed = this.shippingService.calculateSellerShippingTotal(
+        formattedItemsForShipping,
+        destinationCountry,
+      );
+      shippingTotalsBySeller[sellerId] = convertAmount(
+        shippingAed,
+        SETTLEMENT_CURRENCY,
+        chargeCurrency,
+      );
     }
 
-    // 3. Create Multi-Seller Order
+    const orderAddress = {
+      ...shippingAddress,
+      chargeCurrency,
+      settlementCurrency: SETTLEMENT_CURRENCY,
+    };
+
+    // 3. Create Multi-Seller Order in the buyer charge currency
     const order = await this.orderService.createMultiSellerOrder(
       buyer.buyerId,
-      cart.items,
-      shippingAddress,
+      pricedItems,
+      orderAddress,
       shippingTotalsBySeller,
+      chargeCurrency,
     );
 
     // 4. Create local payment record + Stripe Checkout Session (hosted — card never hits our servers)
@@ -168,7 +188,7 @@ export class CheckoutService {
     });
 
     this.logger.log(
-      `Checkout completed for Cart ${cartId}. Order ${order.id} → Stripe ${checkoutSession.id}`,
+      `Checkout completed for Cart ${cartId}. Order ${order.id} charged in ${chargeCurrency} → Stripe ${checkoutSession.id}`,
     );
 
     return {
@@ -179,16 +199,23 @@ export class CheckoutService {
         status: 'PENDING',
       },
       checkoutUrl: checkoutSession.url,
-      message: 'Redirect to Stripe Checkout to complete payment.',
+      chargeCurrency,
+      settlementCurrency: SETTLEMENT_CURRENCY,
+      message: `Redirect to Stripe Checkout to complete payment in ${chargeCurrency}.`,
     };
   }
 
-  async quoteShipping(cartId: string, destinationCountry: string) {
+  async quoteShipping(
+    cartId: string,
+    destinationCountry: string,
+    chargeCurrencyInput?: string | null,
+  ) {
     const country = destinationCountry?.trim() ?? '';
     if (!country) {
       throw new BadRequestException('Shipping country is required');
     }
 
+    const chargeCurrency = resolveChargeCurrency(chargeCurrencyInput);
     const cart = await this.cartService.getCart(cartId);
     if (cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
@@ -203,6 +230,11 @@ export class CheckoutService {
         })),
         country,
       );
+      const amount = convertAmount(
+        quote.amount,
+        SETTLEMENT_CURRENCY,
+        chargeCurrency,
+      );
 
       return {
         sellerId,
@@ -211,17 +243,28 @@ export class CheckoutService {
           'Marketplace seller',
         itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
         ...quote,
+        currency: chargeCurrency,
+        amount,
+        amountAed: quote.amount,
       };
     });
 
     const subtotal = cart.items.reduce(
-      (sum, item) => sum + item.quantity * item.sellerOffer.price,
+      (sum, item) =>
+        sum +
+        item.quantity *
+          convertAmount(
+            item.sellerOffer.price,
+            item.sellerOffer.currency,
+            chargeCurrency,
+          ),
       0,
     );
     const shippingTotal = sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0);
 
     return {
-      currency: 'AED',
+      currency: chargeCurrency,
+      settlementCurrency: SETTLEMENT_CURRENCY,
       destinationCountry: country,
       subtotal,
       shippingTotal,
@@ -346,6 +389,55 @@ export class CheckoutService {
       throw new BadRequestException('Shipping country is required');
     }
     return country;
+  }
+
+  private toChargeCurrencyItems<
+    T extends {
+      quantity: number;
+      sellerOffer: {
+        price: number;
+        currency?: string | null;
+        marketplaceFee?: number | null;
+        sellerProceeds?: number | null;
+        sellerBasePrice?: number | null;
+      };
+    },
+  >(items: T[], chargeCurrency: ChargeCurrency) {
+    return items.map((item) => {
+      const from = item.sellerOffer.currency || SETTLEMENT_CURRENCY;
+      return {
+        ...item,
+        sellerOffer: {
+          ...item.sellerOffer,
+          price: convertAmount(item.sellerOffer.price, from, chargeCurrency),
+          marketplaceFee:
+            item.sellerOffer.marketplaceFee == null
+              ? item.sellerOffer.marketplaceFee
+              : convertAmount(
+                  item.sellerOffer.marketplaceFee,
+                  from,
+                  chargeCurrency,
+                ),
+          sellerProceeds:
+            item.sellerOffer.sellerProceeds == null
+              ? item.sellerOffer.sellerProceeds
+              : convertAmount(
+                  item.sellerOffer.sellerProceeds,
+                  from,
+                  chargeCurrency,
+                ),
+          sellerBasePrice:
+            item.sellerOffer.sellerBasePrice == null
+              ? item.sellerOffer.sellerBasePrice
+              : convertAmount(
+                  item.sellerOffer.sellerBasePrice,
+                  from,
+                  chargeCurrency,
+                ),
+          currency: chargeCurrency,
+        },
+      };
+    });
   }
 
   private groupItemsBySeller<T extends { sellerOffer: { sellerId: string } }>(

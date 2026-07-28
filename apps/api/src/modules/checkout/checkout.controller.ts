@@ -9,13 +9,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { CheckoutService } from './checkout.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { CHARGE_CURRENCIES } from './currency.util';
 
 class CheckoutDto {
   @IsOptional()
@@ -24,6 +31,14 @@ class CheckoutDto {
 
   @IsObject()
   shippingAddress!: Record<string, unknown>;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsIn([...CHARGE_CURRENCIES])
+  chargeCurrency?: string;
 }
 
 class ShippingQuoteDto {
@@ -31,6 +46,14 @@ class ShippingQuoteDto {
   @IsString()
   @IsNotEmpty({ message: 'Shipping country is required' })
   country!: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsIn([...CHARGE_CURRENCIES])
+  currency?: string;
 }
 
 @Controller('checkout')
@@ -72,7 +95,11 @@ export class CheckoutController {
     @Param('cartId') cartId: string,
     @Body() body: ShippingQuoteDto,
   ) {
-    return this.checkoutService.quoteShipping(cartId, body.country);
+    return this.checkoutService.quoteShipping(
+      cartId,
+      body.country,
+      body.currency,
+    );
   }
 
   @Post(':cartId')
@@ -90,6 +117,7 @@ export class CheckoutController {
         name: body.name,
       },
       body.shippingAddress,
+      body.chargeCurrency,
     );
   }
 }

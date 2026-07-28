@@ -36,6 +36,7 @@ type FormState = {
 
 type ShippingQuote = {
   currency: string;
+  settlementCurrency?: string;
   destinationCountry: string;
   shippingTotal: number;
   totalAmount: number;
@@ -133,7 +134,7 @@ function SummaryCard({
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <h2 className="text-base font-bold text-slate-900">Order summary</h2>
       <p className="mt-1 text-xs text-graphite-600">
-        Showing {displayCurrency}. Stripe charges in {settlementCurrency}.
+        Charged in {displayCurrency} via Stripe. Merchant settlement is {settlementCurrency}.
       </p>
       <ul className="mt-3 space-y-2.5">
         {items.map((item) => (
@@ -173,7 +174,7 @@ function SummaryCard({
       </dl>
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-        Shipping is quoted in AED. Converted amounts above are estimates for browsing.
+        Shipping is calculated in AED, then converted into your selected charge currency.
       </p>
     </div>
   );
@@ -184,7 +185,7 @@ export default function CheckoutPage() {
   const { cart, subtotal, refresh } = useCart();
   const { activeVehicle, ready: garageReady } = useGarage();
   const { user, ready: authReady, isAuthenticated, authHeaders } = useAuth();
-  const { format, settlementCurrency } = useCurrency();
+  const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -236,7 +237,7 @@ export default function CheckoutPage() {
         "Content-Type": "application/json",
         ...authHeaders(),
       },
-      body: JSON.stringify({ country }),
+      body: JSON.stringify({ country, currency: displayCurrency }),
     })
       .then(async (res) => {
         const data = await res.json();
@@ -256,7 +257,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [step, cart.id, form.country, authHeaders]);
+  }, [step, cart.id, form.country, displayCurrency, authHeaders]);
 
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
@@ -302,6 +303,7 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           name: form.name,
+          chargeCurrency: displayCurrency,
           shippingAddress: {
             line1: form.line1,
             line2: form.line2 || undefined,
@@ -633,8 +635,8 @@ export default function CheckoutPage() {
 
             <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
               <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              You&apos;ll be redirected to Stripe Checkout. Card details stay with Stripe; payment is
-              charged in {settlementCurrency}. Display currency conversions are estimates only.
+              You&apos;ll be redirected to Stripe Checkout and pay in {displayCurrency}. Card details
+              stay with Stripe; PartsBazar360 settles in {settlementCurrency}.
             </p>
           </div>
         )}

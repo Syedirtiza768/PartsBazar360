@@ -98,7 +98,7 @@ export function CurrencySwitcher({
             </button>
           ))}
           <p className="border-t border-stone-200 px-3 py-2 text-[11px] leading-snug text-graphite-600">
-            Prices convert for browsing. Checkout is charged in AED via Stripe.
+            Browse and pay in this currency. Stripe settles to AED for PartsBazar360.
           </p>
         </div>
       )}
