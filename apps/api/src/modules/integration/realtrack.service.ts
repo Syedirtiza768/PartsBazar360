@@ -63,7 +63,7 @@ export class RealTrackService {
   private async requestJson(path: string, retry = 0): Promise<any> {
     await this.authenticate();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 90_000);
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
