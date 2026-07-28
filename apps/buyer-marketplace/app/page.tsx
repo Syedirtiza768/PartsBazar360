@@ -16,7 +16,10 @@ import { CategoryIcon } from "@/components/CategoryIcon";
 import { HeroSearch } from "@/components/HeroSearch";
 import { ProductCard } from "@/components/ProductCard";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { VehiclePicker } from "@/components/VehiclePicker";
+import {
+  VehiclePicker,
+  type VehicleMakeOption,
+} from "@/components/VehiclePicker";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
 // Keep the route dynamic so Docker/CI builds do not require a live API, while
@@ -44,6 +47,23 @@ async function getFacets(): Promise<FacetsResponse> {
     return response.ok ? response.json() : { brands: [], categories: [], makes: [] };
   } catch {
     return { brands: [], categories: [], makes: [] };
+  }
+}
+
+/** Prefetch picker makes during SSR so Make is populated on first paint.
+ *  Short timeout: a cold Prisma filter must not stall the whole homepage —
+ *  the client picker falls back to its own fetch with a loading state. */
+async function getVehicleMakes(): Promise<VehicleMakeOption[]> {
+  try {
+    const response = await fetch(`${INTERNAL_API_URL}/vehicles/makes`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
   }
 }
 
@@ -83,7 +103,11 @@ function SectionHead({
 }
 
 export default async function Home() {
-  const [featured, facets] = await Promise.all([getFeaturedParts(), getFacets()]);
+  const [featured, facets, vehicleMakes] = await Promise.all([
+    getFeaturedParts(),
+    getFacets(),
+    getVehicleMakes(),
+  ]);
 
   return (
     <div>
@@ -147,7 +171,10 @@ export default async function Home() {
               </div>
               <span className="shrink-0 font-mono text-xs font-bold text-graphite-600">01—04</span>
             </div>
-            <VehiclePicker variant="hero" />
+            <VehiclePicker
+              variant="hero"
+              initialMakes={vehicleMakes.length > 0 ? vehicleMakes : undefined}
+            />
           </div>
         </div>
       </section>

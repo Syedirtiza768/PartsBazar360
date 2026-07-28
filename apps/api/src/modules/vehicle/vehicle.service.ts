@@ -69,6 +69,7 @@ export class VehicleService {
           },
         },
       },
+      select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
     this.makesCache = { data, expires: Date.now() + CACHE_TTL_MS };
@@ -90,6 +91,7 @@ export class VehicleService {
           },
         },
       },
+      select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
     this.modelsCache.set(makeId, { data, expires: Date.now() + CACHE_TTL_MS });
@@ -105,6 +107,7 @@ export class VehicleService {
         modelId,
         configurations: { some: { fitments: { some: SEARCH_GRADE_FITMENT } } },
       },
+      select: { id: true, name: true, startYear: true, endYear: true },
       orderBy: { name: 'asc' },
     });
     this.gensCache.set(modelId, { data, expires: Date.now() + CACHE_TTL_MS });
@@ -117,6 +120,12 @@ export class VehicleService {
 
     const data = await this.prisma.vehicleConfiguration.findMany({
       where: { generationId, fitments: { some: SEARCH_GRADE_FITMENT } },
+      select: {
+        id: true,
+        trim: true,
+        engine: true,
+        transmission: true,
+      },
     });
     this.configsCache.set(generationId, {
       data,

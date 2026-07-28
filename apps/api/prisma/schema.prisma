@@ -431,6 +431,8 @@ model VehicleModel {
   name        String
   generations VehicleGeneration[]
   make        VehicleMake         @relation(fields: [makeId], references: [id])
+
+  @@index([makeId])
 }
 
 model VehicleGeneration {
@@ -441,6 +443,8 @@ model VehicleGeneration {
   endYear        Int?
   configurations VehicleConfiguration[]
   model          VehicleModel           @relation(fields: [modelId], references: [id])
+
+  @@index([modelId])
 }
 
 model VehicleConfiguration {
@@ -460,6 +464,8 @@ model VehicleConfiguration {
   fitments     Fitment[]
   userVehicles UserVehicle[]
   generation   VehicleGeneration @relation(fields: [generationId], references: [id])
+
+  @@index([generationId])
 }
 
 /// eBay Motors Vehicle List (MVL) — US / DE / UK / AU catalogs for verified fitment.
