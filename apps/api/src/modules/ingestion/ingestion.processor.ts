@@ -1,6 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
+import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { RealTrackService } from '../integration/realtrack.service';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
@@ -41,6 +43,7 @@ import {
 })
 export class IngestionProcessor extends WorkerHost {
   private readonly logger = new Logger(IngestionProcessor.name);
+  private readonly redis: Redis;
 
   constructor(
     private readonly realTrackService: RealTrackService,
@@ -50,6 +53,11 @@ export class IngestionProcessor extends WorkerHost {
     private readonly mvlFitment: MvlFitmentService,
   ) {
     super();
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number(process.env.REDIS_PORT || 6379),
+      maxRetriesPerRequest: null,
+    });
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
@@ -82,51 +90,111 @@ export class IngestionProcessor extends WorkerHost {
     storeId: string,
     listingLimit?: number,
     storeSlug?: string,
+    syncRunId?: string,
   ) {
     const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
     const canonicalStoreId = target.storeId!;
+    const redisKey = `sync:progress:${syncRunId || 'standalone'}:${canonicalStoreId}`;
+
+    // Resume: check Redis for last completed page
     let page = 1;
+    const savedPage = await this.redis.get(`${redisKey}:lastPage`);
+    if (savedPage && Number(savedPage) > 1) {
+      page = Number(savedPage) + 1;
+      this.logger.log(
+        `[${syncRunId}] Resuming ${target.name} from page ${page} (last completed: ${savedPage})`,
+      );
+    }
+
     let discovered = 0;
     let imported = 0;
     let skippedWrongStore = 0;
     let skippedInactiveOrZero = 0;
+    let skippedNonEnglish = 0;
     const errors: Array<{ listingId?: string; message: string }> = [];
+
+    // Save initial state
+    await this.redis.hset(redisKey, {
+      store: target.name,
+      storeId: canonicalStoreId,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    });
+
     while (true) {
       const remaining = listingLimit ? listingLimit - discovered : 200;
       if (listingLimit && remaining <= 0) break;
-      const result = await this.realTrackService.fetchListings({
-        page,
-        limit: Math.min(200, remaining),
-        storeId: canonicalStoreId,
-        // Do not pass storeSlug when storeId is known — SalvageA slug can return empty.
-      });
-      if (result.items.length === 0) break;
-      discovered += result.items.length;
-      for (const summary of result.items) {
-        try {
-          // Use summary data directly — detail endpoint is unreliable
-          const outcome = await this.processListing(
-            summary,
-            canonicalStoreId,
-          );
-          if (outcome === 'skipped_wrong_store') skippedWrongStore++;
-          else if (outcome === 'skipped_inactive_or_zero_stock')
-            skippedInactiveOrZero++;
-          else if (outcome === 'imported') imported++;
-        } catch (error) {
-          errors.push({
-            listingId: summary.id,
-            message: error instanceof Error ? error.message : String(error),
-          });
-          this.logger.warn(
-            `Listing ${summary.id} failed without stopping store sync`,
-          );
+
+      try {
+        const result = await this.realTrackService.fetchListings({
+          page,
+          limit: Math.min(200, remaining),
+          storeId: canonicalStoreId,
+        });
+        if (result.items.length === 0) break;
+        discovered += result.items.length;
+
+        for (const summary of result.items) {
+          try {
+            const outcome = await this.processListing(
+              summary,
+              canonicalStoreId,
+            );
+            if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+            else if (outcome === 'skipped_inactive_or_zero_stock')
+              skippedInactiveOrZero++;
+            else if (outcome === 'skipped_non_english_title')
+              skippedNonEnglish++;
+            else if (outcome === 'imported') imported++;
+          } catch (error) {
+            errors.push({
+              listingId: summary.id,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
+
+        // Save progress after each page (resume point)
+        await this.redis.set(`${redisKey}:lastPage`, page, 'EX', 86400);
+        await this.redis.hset(redisKey, {
+          page: String(page),
+          discovered: String(discovered),
+          imported: String(imported),
+          skippedWrongStore: String(skippedWrongStore),
+          skippedInactiveOrZero: String(skippedInactiveOrZero),
+          skippedNonEnglish: String(skippedNonEnglish),
+          errors: String(errors.length),
+          updatedAt: new Date().toISOString(),
+        });
+
+        this.logger.log(
+          `[${syncRunId}] ${target.name} page ${page}: imported=${imported} discovered=${discovered} skipped(inactive=${skippedInactiveOrZero}, nonEn=${skippedNonEnglish})`,
+        );
+
+        if (discovered >= result.total || result.items.length < result.limit)
+          break;
+        page++;
+      } catch (error) {
+        this.logger.error(
+          `[${syncRunId}] ${target.name} page ${page} failed: ${error.message}`,
+        );
+        // Save the failed page so we can retry from it
+        await this.redis.hset(redisKey, {
+          status: 'error',
+          lastError: error.message,
+          failedPage: String(page),
+        });
+        throw error;
       }
-      if (discovered >= result.total || result.items.length < result.limit)
-        break;
-      page++;
     }
+
+    await this.redis.hset(redisKey, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      finalImported: String(imported),
+      finalDiscovered: String(discovered),
+    });
+
     return {
       storeId: canonicalStoreId,
       seller: target.name,
@@ -135,6 +203,7 @@ export class IngestionProcessor extends WorkerHost {
       listingsImported: imported,
       skippedWrongStore,
       skippedInactiveOrZero,
+      skippedNonEnglish,
       errors,
     };
   }
@@ -262,26 +331,44 @@ export class IngestionProcessor extends WorkerHost {
 
   /** Sync only the two RealTrack marketplace sellers in parallel. */
   private async syncMarketplaceRealTrackStores() {
+    // Check for an existing incomplete run to resume
+    let syncRunId = await this.redis.get('sync:activeRunId');
+    const isResume = !!syncRunId;
+    if (!syncRunId) {
+      syncRunId = randomUUID().slice(0, 8);
+      await this.redis.set('sync:activeRunId', syncRunId, 'EX', 86400);
+    }
+
     this.logger.log(
-      'Starting marketplace RealTrack sync (Salvage + Blackline in parallel)...',
+      `\n${'='.repeat(60)}\n  SYNC RUN: ${syncRunId}${isResume ? ' (RESUME)' : ' (NEW)'}\n  Monitor: GET /operations/sync/progress/${syncRunId}\n${'='.repeat(60)}`,
     );
+
     const results = await Promise.all(
       REALTRACK_MARKETPLACE_SELLERS.map((store) => {
         this.logger.log(
-          `Syncing ${store.name} ← storeId ${store.storeId} (parallel)`,
+          `[${syncRunId}] Syncing ${store.name} ← storeId ${store.storeId} (parallel)`,
         );
         return this.syncStoreComplete(
           store.storeId!,
           undefined,
           store.storeSlug || undefined,
+          syncRunId!,
         );
       }),
     );
+
     this.logger.log(
-      `All stores synced. Running bulk OpenSearch reindex...`,
+      `[${syncRunId}] All stores synced. Running bulk OpenSearch reindex...`,
     );
     await this.bulkReindex();
-    return { status: 'completed', results };
+
+    // Clear active run
+    await this.redis.del('sync:activeRunId');
+
+    this.logger.log(
+      `\n${'='.repeat(60)}\n  SYNC RUN ${syncRunId} COMPLETE\n${'='.repeat(60)}`,
+    );
+    return { status: 'completed', syncRunId, results };
   }
 
   /** Wipe and rebuild the OpenSearch index from all active DB offers. */

@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 import { PrismaService } from '../../prisma.service';
 import {
   REALTRACK_MARKETPLACE_SELLERS,
@@ -18,11 +19,18 @@ import {
 @Controller('operations')
 export class OperationsController {
   private readonly logger = new Logger(OperationsController.name);
+  private readonly redis: Redis;
 
   constructor(
     @InjectQueue('ingestion') private readonly ingestionQueue: Queue,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number(process.env.REDIS_PORT || 6379),
+      maxRetriesPerRequest: null,
+    });
+  }
 
   @Get('dashboard')
   async getDashboard() {
@@ -179,6 +187,16 @@ export class OperationsController {
       'Triggering marketplace RealTrack sync (Salvage + Blackline only)',
     );
 
+    // Check if a sync is already running
+    const activeRunId = await this.redis.get('sync:activeRunId');
+    if (activeRunId) {
+      return {
+        message: 'Sync already in progress',
+        syncRunId: activeRunId,
+        monitorUrl: `/operations/sync/progress/${activeRunId}`,
+      };
+    }
+
     const job = await this.ingestionQueue.add('sync-marketplace-realtrack', {});
 
     return {
@@ -189,6 +207,40 @@ export class OperationsController {
         name: s.name,
         storeId: s.storeId,
       })),
+      monitor: 'GET /operations/sync/progress/:syncRunId (runId appears in worker logs)',
     };
+  }
+
+  @Get('sync/progress/:syncRunId')
+  async getSyncProgress(@Param('syncRunId') syncRunId: string) {
+    const stores = REALTRACK_MARKETPLACE_SELLERS;
+    const progress: Record<string, any> = {};
+
+    for (const store of stores) {
+      const key = `sync:progress:${syncRunId}:${store.storeId}`;
+      const data = await this.redis.hgetall(key);
+      const lastPage = await this.redis.get(`${key}:lastPage`);
+      progress[store.name] = {
+        ...data,
+        lastCompletedPage: lastPage ? Number(lastPage) : null,
+      };
+    }
+
+    const activeRunId = await this.redis.get('sync:activeRunId');
+    return {
+      syncRunId,
+      isActive: activeRunId === syncRunId,
+      stores: progress,
+    };
+  }
+
+  @Get('sync/active')
+  async getActiveSync() {
+    const activeRunId = await this.redis.get('sync:activeRunId');
+    if (!activeRunId) {
+      return { active: false, message: 'No sync running' };
+    }
+    // Return progress for active run
+    return this.getSyncProgress(activeRunId);
   }
 }
