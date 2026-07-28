@@ -260,25 +260,44 @@ export class IngestionProcessor extends WorkerHost {
     }
   }
 
-  /** Sync only the two RealTrack marketplace sellers, each to its own storeId. */
+  /** Sync only the two RealTrack marketplace sellers in parallel. */
   private async syncMarketplaceRealTrackStores() {
     this.logger.log(
-      'Starting marketplace RealTrack sync (Salvage + Blackline only)...',
+      'Starting marketplace RealTrack sync (Salvage + Blackline in parallel)...',
     );
-    const results: Array<
-      Awaited<ReturnType<IngestionProcessor['syncStoreComplete']>>
-    > = [];
-    for (const store of REALTRACK_MARKETPLACE_SELLERS) {
-      this.logger.log(`Syncing ${store.name} ← storeId ${store.storeId}`);
-      results.push(
-        await this.syncStoreComplete(
+    const results = await Promise.all(
+      REALTRACK_MARKETPLACE_SELLERS.map((store) => {
+        this.logger.log(
+          `Syncing ${store.name} ← storeId ${store.storeId} (parallel)`,
+        );
+        return this.syncStoreComplete(
           store.storeId!,
           undefined,
           store.storeSlug || undefined,
-        ),
-      );
-    }
+        );
+      }),
+    );
+    this.logger.log(
+      `All stores synced. Running bulk OpenSearch reindex...`,
+    );
+    await this.bulkReindex();
     return { status: 'completed', results };
+  }
+
+  /** Wipe and rebuild the OpenSearch index from all active DB offers. */
+  private async bulkReindex() {
+    const { execSync } = require('child_process');
+    try {
+      this.logger.log('Starting bulk OpenSearch reindex...');
+      const output = execSync(
+        'node /app/scripts/reindex-active-from-db.mjs',
+        { timeout: 600_000, encoding: 'utf-8' },
+      );
+      const lastLine = output.trim().split('\n').pop();
+      this.logger.log(`Bulk reindex complete: ${lastLine}`);
+    } catch (error) {
+      this.logger.error(`Bulk reindex failed: ${error.message}`);
+    }
   }
 
   /**
@@ -658,39 +677,37 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
-    await this.searchService.indexPart({
-      id: canonicalPart.id,
-      title: canonicalPart.title,
-      brand: canonicalPart.brand,
-      category: canonicalPart.category,
-      oeNumbers: canonicalPart.oeNumbers,
-      // Index the OE numbers as primary part numbers too, so a normalized
-      // exact match (the `normalizedPartNumbers.keyword` term clause) resolves
-      // ingested parts — not just the fuzzy multi_match on `oeNumbers`. The
-      // RealTrack/eBay feed carries no interchange (OEM_CROSS_REFERENCE)
-      // numbers, so there are none to index here; interchange search for
-      // ingested parts needs a cross-reference source first.
-      partNumbers: (canonicalPart.oeNumbers || []).map((oe) => ({
-        displayNumber: oe,
-        normalizedNumber: normalizePartNumber(oe),
-        numberType: 'OEM',
-      })),
-      imageUrls: canonicalPart.imageUrls,
-      listingUrl: canonicalPart.listingUrl,
-      ebayItemId: canonicalPart.ebayItemId,
-      compatibility: canonicalPart.compatibility,
-      createdAt: canonicalPart.createdAt,
-      fitments,
-      offers: [
-        {
-          id: offer.id,
-          price: offer.price,
-          condition: offer.condition,
-          sellerId: offer.sellerId,
-          sellerName: seller.name,
-        },
-      ],
-    });
+    // Skip per-listing OpenSearch indexing during bulk sync — a single
+    // bulk reindex runs after all stores finish (much faster overall).
+    if (!process.env.SKIP_OS_INDEX_ON_INGEST) {
+      await this.searchService.indexPart({
+        id: canonicalPart.id,
+        title: canonicalPart.title,
+        brand: canonicalPart.brand,
+        category: canonicalPart.category,
+        oeNumbers: canonicalPart.oeNumbers,
+        partNumbers: (canonicalPart.oeNumbers || []).map((oe) => ({
+          displayNumber: oe,
+          normalizedNumber: normalizePartNumber(oe),
+          numberType: 'OEM',
+        })),
+        imageUrls: canonicalPart.imageUrls,
+        listingUrl: canonicalPart.listingUrl,
+        ebayItemId: canonicalPart.ebayItemId,
+        compatibility: canonicalPart.compatibility,
+        createdAt: canonicalPart.createdAt,
+        fitments,
+        offers: [
+          {
+            id: offer.id,
+            price: offer.price,
+            condition: offer.condition,
+            sellerId: offer.sellerId,
+            sellerName: seller.name,
+          },
+        ],
+      });
+    }
 
     await this.prisma.rawStagingListing.update({
       where: { sourceListingId: listing.id },
