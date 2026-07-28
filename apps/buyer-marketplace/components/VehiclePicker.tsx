@@ -66,21 +66,28 @@ export function VehiclePicker({
 
   const [status, setStatus] = useState<Status>("loading");
 
-  const load = async <T,>(url: string, set: (items: T[]) => void) => {
+  const load = async <T,>(url: string, set: (items: T[]) => void, signal?: AbortSignal) => {
     setStatus("loading");
     try {
-      const res = await fetch(`${API_BASE_URL}${url}`);
+      const res = await fetch(`${API_BASE_URL}${url}`, {
+        cache: "force-cache",
+        next: { revalidate: 300 },
+        signal,
+      });
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const data = await res.json();
       set(Array.isArray(data) ? data : []);
       setStatus("idle");
-    } catch {
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setStatus("error");
     }
   };
 
   useEffect(() => {
-    load<Make>("/vehicles/makes", setMakes);
+    const ac = new AbortController();
+    load<Make>("/vehicles/makes", setMakes, ac.signal);
+    return () => ac.abort();
   }, []);
 
   useEffect(() => {
@@ -90,7 +97,10 @@ export function VehiclePicker({
     setModelId("");
     setGenId("");
     setConfigId("");
-    if (makeId) load<Model>(`/vehicles/makes/${makeId}/models`, setModels);
+    if (!makeId) return;
+    const ac = new AbortController();
+    load<Model>(`/vehicles/makes/${makeId}/models`, setModels, ac.signal);
+    return () => ac.abort();
   }, [makeId]);
 
   useEffect(() => {
@@ -98,13 +108,19 @@ export function VehiclePicker({
     setConfigs([]);
     setGenId("");
     setConfigId("");
-    if (modelId) load<Generation>(`/vehicles/models/${modelId}/generations`, setGenerations);
+    if (!modelId) return;
+    const ac = new AbortController();
+    load<Generation>(`/vehicles/models/${modelId}/generations`, setGenerations, ac.signal);
+    return () => ac.abort();
   }, [modelId]);
 
   useEffect(() => {
     setConfigs([]);
     setConfigId("");
-    if (genId) load<Config>(`/vehicles/generations/${genId}/configurations`, setConfigs);
+    if (!genId) return;
+    const ac = new AbortController();
+    load<Config>(`/vehicles/generations/${genId}/configurations`, setConfigs, ac.signal);
+    return () => ac.abort();
   }, [genId]);
 
   const buildVehicle = (): Omit<SavedVehicle, "id" | "addedAt"> | null => {

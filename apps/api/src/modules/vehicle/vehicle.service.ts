@@ -30,12 +30,32 @@ const SEARCH_GRADE_FITMENT = {
   canonicalPart: { offers: { some: BUYER_VISIBLE_OFFER } },
 };
 
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  expires: number;
+}
+
 @Injectable()
 export class VehicleService {
+  private makesCache: CacheEntry<unknown[]> | null = null;
+  private modelsCache = new Map<string, CacheEntry<unknown[]>>();
+  private gensCache = new Map<string, CacheEntry<unknown[]>>();
+  private configsCache = new Map<string, CacheEntry<unknown[]>>();
+
   constructor(private prisma: PrismaService) {}
 
+  private getCached<T>(entry: CacheEntry<T> | null | undefined): T | null {
+    if (entry && entry.expires > Date.now()) return entry.data;
+    return null;
+  }
+
   async getMakes() {
-    return this.prisma.vehicleMake.findMany({
+    const cached = this.getCached(this.makesCache);
+    if (cached) return cached;
+
+    const data = await this.prisma.vehicleMake.findMany({
       where: {
         models: {
           some: {
@@ -51,10 +71,15 @@ export class VehicleService {
       },
       orderBy: { name: 'asc' },
     });
+    this.makesCache = { data, expires: Date.now() + CACHE_TTL_MS };
+    return data;
   }
 
   async getModelsByMake(makeId: string) {
-    return this.prisma.vehicleModel.findMany({
+    const cached = this.getCached(this.modelsCache.get(makeId));
+    if (cached) return cached;
+
+    const data = await this.prisma.vehicleModel.findMany({
       where: {
         makeId,
         generations: {
@@ -67,21 +92,36 @@ export class VehicleService {
       },
       orderBy: { name: 'asc' },
     });
+    this.modelsCache.set(makeId, { data, expires: Date.now() + CACHE_TTL_MS });
+    return data;
   }
 
   async getGenerationsByModel(modelId: string) {
-    return this.prisma.vehicleGeneration.findMany({
+    const cached = this.getCached(this.gensCache.get(modelId));
+    if (cached) return cached;
+
+    const data = await this.prisma.vehicleGeneration.findMany({
       where: {
         modelId,
         configurations: { some: { fitments: { some: SEARCH_GRADE_FITMENT } } },
       },
       orderBy: { name: 'asc' },
     });
+    this.gensCache.set(modelId, { data, expires: Date.now() + CACHE_TTL_MS });
+    return data;
   }
 
   async getConfigurationsByGeneration(generationId: string) {
-    return this.prisma.vehicleConfiguration.findMany({
+    const cached = this.getCached(this.configsCache.get(generationId));
+    if (cached) return cached;
+
+    const data = await this.prisma.vehicleConfiguration.findMany({
       where: { generationId, fitments: { some: SEARCH_GRADE_FITMENT } },
     });
+    this.configsCache.set(generationId, {
+      data,
+      expires: Date.now() + CACHE_TTL_MS,
+    });
+    return data;
   }
 }
