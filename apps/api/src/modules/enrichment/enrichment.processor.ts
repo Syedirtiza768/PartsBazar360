@@ -160,6 +160,22 @@ export class EnrichmentProcessor extends WorkerHost {
 
       let rtPayload: unknown;
       try {
+        try {
+          const budget = await this.realTrack.fetchTradingEnrichmentBudget();
+          const remaining = Number(budget?.remaining);
+          if (Number.isFinite(remaining) && remaining <= 0) {
+            await this.setStatus(partId, 'DEFERRED');
+            this.logger.warn(
+              `RealTrack enrichment budget exhausted — deferring ${partId}`,
+            );
+            return { deferred: true, reason: 'budget_exhausted' };
+          }
+        } catch (budgetErr: any) {
+          this.logger.debug(
+            `Budget check skipped: ${budgetErr?.message || budgetErr}`,
+          );
+        }
+
         rtPayload = await this.realTrack.fetchTradingEnrichment(rtListingId);
       } catch (err: any) {
         const msg = err?.message || String(err);
@@ -197,9 +213,15 @@ export class EnrichmentProcessor extends WorkerHost {
           ? (part.itemSpecifics as Record<string, unknown>)
           : null);
 
+      // Trading gallery is authoritative — put it first, keep any extras.
       const imageUrls =
         mapped.imageUrls && mapped.imageUrls.length
-          ? [...new Set([...(mapped.imageUrls || []), ...(part.imageUrls || [])])]
+          ? [
+              ...mapped.imageUrls,
+              ...(part.imageUrls || []).filter(
+                (u) => !mapped.imageUrls!.includes(u),
+              ),
+            ]
           : null;
 
       // Diagrams still use OpenRouter; gated separately so RT failures don't
@@ -235,15 +257,17 @@ export class EnrichmentProcessor extends WorkerHost {
         where: { id: partId },
         data: {
           partClassKey,
-          ...(mapped.brand && !part.brand ? { brand: mapped.brand } : {}),
-          ...(mapped.description && !part.description
-            ? { description: mapped.description }
-            : {}),
+          ...(mapped.brand ? { brand: mapped.brand } : {}),
+          // Trading description is the full eBay HTML — prefer it whenever present.
+          ...(mapped.description ? { description: mapped.description } : {}),
           ...(mapped.manufacturerPartNumber
             ? { manufacturerPartNumber: mapped.manufacturerPartNumber }
             : {}),
           ...(mapped.oeNumbers?.length ? { oeNumbers: mapped.oeNumbers } : {}),
           ...(imageUrls ? { imageUrls } : {}),
+          ...(mapped.compatibility
+            ? { compatibility: mapped.compatibility as any }
+            : {}),
           ...(!weightIsTrusted && mapped.weightKg
             ? {
                 weight: mapped.weightKg,

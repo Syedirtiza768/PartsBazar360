@@ -39,16 +39,47 @@ describe('realtrack-enrichment.mapper', () => {
     expect(mapped.dimensionsCm?.lengthCm).toBeCloseTo(26 * 2.54, 2);
   });
 
-  it('reads nested data envelopes', () => {
+  it('maps the verified live trading-enrichment envelope', () => {
     const mapped = mapTradingEnrichmentPayload({
       data: {
-        weightKg: 12.5,
-        weightUnit: 'kg',
-        itemSpecifics: [{ field: 'Part Type', value: 'Axle Carrier' }],
+        enrichedAt: '2026-07-28T23:32:23.960Z',
+        source: 'trading_api',
+        imageUrls: ['https://i.ebayimg.com/a.jpg', 'https://i.ebayimg.com/b.jpg'],
+        compatibility: {
+          compatibleProducts: [
+            {
+              compatibilityProperties: [
+                { name: 'Year', value: '2007' },
+                { name: 'Make', value: 'Mercedes-Benz' },
+              ],
+            },
+          ],
+        },
+        description: '&lt;div&gt;Used OEM part&lt;/div&gt;',
+        itemSpecifics: {
+          Brand: ['Mercedes-Benz'],
+          'Manufacturer Part Number': ['A2045461243'],
+          'OE/OEM Part Number': ['A2045461243', '2045461243'],
+          Placement: ['Front Left'],
+        },
       },
+      cached: true,
+      budget: { used: 41, remaining: 4459, limit: 4500, resetDate: '2026-07-28' },
     });
-    expect(mapped.weightKg).toBe(12.5);
-    expect(mapped.itemSpecifics?.partType).toBe('Axle Carrier');
+
+    expect(mapped.rawCached).toBe(true);
+    expect(mapped.budgetRemaining).toBe(4459);
+    expect(mapped.brand).toBe('Mercedes-Benz');
+    expect(mapped.manufacturerPartNumber).toBe('A2045461243');
+    expect(mapped.oeNumbers).toEqual(
+      expect.arrayContaining(['A2045461243', '2045461243']),
+    );
+    expect(mapped.position).toBe('Front Left');
+    expect(mapped.description).toBe('<div>Used OEM part</div>');
+    expect(mapped.imageUrls).toHaveLength(2);
+    expect(mapped.compatibility).toMatchObject({
+      compatibleProducts: expect.any(Array),
+    });
   });
 });
 

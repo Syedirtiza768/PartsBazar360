@@ -21,7 +21,9 @@ export interface RealTrackEnrichmentMapped {
   dimensionsCm: DimensionsCm | null;
   imageUrls: string[] | null;
   brand: string | null;
+  compatibility: unknown | null;
   rawCached: boolean | null;
+  budgetRemaining: number | null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -38,11 +40,36 @@ function pickString(...values: unknown[]): string | null {
   return null;
 }
 
+/** Undo one layer of HTML entity encoding (some Trading payloads are escaped). */
+export function decodeHtmlEntities(input: string): string {
+  if (!/&(?:lt|gt|quot|#39|amp);/i.test(input)) return input;
+  return input
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/gi, '&');
+}
+
 function fieldKey(name: string): string {
   return (
     ITEM_SPECIFIC_FIELD_TO_KEY[name] ||
     name.charAt(0).toLowerCase() + name.slice(1).replace(/\s+/g, '')
   );
+}
+
+function normalizeSpecificValue(key: string, value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  const strings = value.map(String).filter((s) => s.trim());
+  if (!strings.length) return null;
+  // Multi-value fields (Features, OE lists) keep a readable join; singles take [0].
+  if (
+    strings.length > 1 &&
+    /feature|oe|oem|number|compatible/i.test(key)
+  ) {
+    return strings.join(', ');
+  }
+  return strings[0];
 }
 
 /** Normalize item specifics from map or [{name|field, value|values}] arrays. */
@@ -62,10 +89,12 @@ export function normalizeItemSpecifics(
         row.value ??
         row.Value ??
         row.normalizedValue ??
-        (Array.isArray(row.values) ? row.values[0] : null) ??
-        (Array.isArray(row.Value) ? row.Value[0] : null);
+        row.values ??
+        null;
       if (value == null || value === '') continue;
-      map[fieldKey(name)] = Array.isArray(value) ? value[0] : value;
+      const normalized = normalizeSpecificValue(name, value);
+      if (normalized == null || normalized === '') continue;
+      map[fieldKey(name)] = normalized;
     }
     return Object.keys(map).length ? map : null;
   }
@@ -75,7 +104,9 @@ export function normalizeItemSpecifics(
   const map: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (v == null || v === '') continue;
-    map[fieldKey(k)] = Array.isArray(v) ? v[0] : v;
+    const normalized = normalizeSpecificValue(k, v);
+    if (normalized == null || normalized === '') continue;
+    map[fieldKey(k)] = normalized;
   }
   return Object.keys(map).length ? map : null;
 }
@@ -162,35 +193,53 @@ function extractImages(payload: Record<string, unknown>): string[] | null {
 function extractOeNumbers(
   specifics: Record<string, unknown> | null,
   payload: Record<string, unknown>,
+  rawSpecifics: unknown,
 ): string[] | null {
-  const fromPayload = payload.oeNumbers;
-  if (Array.isArray(fromPayload) && fromPayload.length) {
-    return fromPayload.map(String).filter(Boolean);
+  const collected: string[] = [];
+  const push = (v: unknown) => {
+    if (Array.isArray(v)) {
+      for (const x of v) if (x != null && String(x).trim()) collected.push(String(x).trim());
+    } else if (typeof v === 'string' && v.trim()) {
+      for (const part of v.split(/[,;|]/)) {
+        if (part.trim()) collected.push(part.trim());
+      }
+    }
+  };
+
+  push(payload.oeNumbers);
+  push(payload.oeNumber);
+  push(payload.oemNumber);
+
+  const rawObj = asRecord(rawSpecifics);
+  if (rawObj) {
+    for (const [k, v] of Object.entries(rawObj)) {
+      if (/oe|oem|mpn|manufacturer part/i.test(k)) push(v);
+    }
   }
-  const single = pickString(
-    payload.oeNumber,
-    payload.oemNumber,
-    specifics?.oeNumber,
-    specifics?.OE_numbers,
-    specifics?.mpn,
-  );
-  return single ? [single] : null;
+  push(specifics?.oeNumber);
+  push(specifics?.OE_numbers);
+  push(specifics?.mpn);
+
+  const unique = [...new Set(collected)];
+  return unique.length ? unique : null;
 }
 
 export function mapTradingEnrichmentPayload(
   payload: unknown,
 ): RealTrackEnrichmentMapped {
   const root = asRecord(payload) || {};
-  // Some APIs nest under `data` / `enrichment` / `listing`.
+  // Verified live shape nests under `data`; `cached` + `budget` sit on the root.
   const body =
     asRecord(root.data) ||
     asRecord(root.enrichment) ||
     asRecord(root.listing) ||
     root;
 
-  const itemSpecifics = normalizeItemSpecifics(
-    body.itemSpecifics ?? body.ItemSpecifics ?? body.specifics,
-  );
+  const rawSpecifics = body.itemSpecifics ?? body.ItemSpecifics ?? body.specifics;
+  const itemSpecifics = normalizeItemSpecifics(rawSpecifics);
+
+  const descriptionRaw = pickString(body.description, body.descriptionHtml);
+  const budget = asRecord(root.budget);
 
   return {
     itemSpecifics,
@@ -206,17 +255,20 @@ export function mapTradingEnrichmentPayload(
       body.mpn,
       itemSpecifics?.mpn,
     ),
-    oeNumbers: extractOeNumbers(itemSpecifics, body),
-    description: pickString(body.description, body.descriptionHtml),
+    oeNumbers: extractOeNumbers(itemSpecifics, body, rawSpecifics),
+    description: descriptionRaw ? decodeHtmlEntities(descriptionRaw) : null,
     weightKg: extractWeight(body),
     dimensionsCm: extractDimensions(body),
     imageUrls: extractImages(body),
     brand: pickString(body.brand, itemSpecifics?.brandType, itemSpecifics?.brand),
+    compatibility: body.compatibility ?? null,
     rawCached:
-      typeof body.cached === 'boolean'
-        ? body.cached
-        : typeof root.cached === 'boolean'
-          ? root.cached
+      typeof root.cached === 'boolean'
+        ? root.cached
+        : typeof body.cached === 'boolean'
+          ? body.cached
           : null,
+    budgetRemaining:
+      typeof budget?.remaining === 'number' ? budget.remaining : null,
   };
 }

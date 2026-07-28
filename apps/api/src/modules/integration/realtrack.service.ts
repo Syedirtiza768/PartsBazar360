@@ -184,7 +184,7 @@ export class RealTrackService {
             Authorization: `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ids: listingIds }),
+          body: JSON.stringify({ listingIds }),
           signal: controller.signal,
         },
       );
