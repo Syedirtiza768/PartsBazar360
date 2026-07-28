@@ -154,7 +154,6 @@ export interface Part {
   infographicAlt?: string | null;
   locationDiagramUrl?: string | null;
   locationDiagramAlt?: string | null;
-  infographicAlt?: string | null;
   listingUrl?: string | null;
   ebayItemId?: string | null;
   compatibility?: CompatibilityRow[];
