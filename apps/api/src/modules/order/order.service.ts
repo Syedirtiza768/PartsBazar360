@@ -94,7 +94,7 @@ export class OrderService {
       // Update parent order total
       return tx.order.update({
         where: { id: parentOrder.id },
-        data: { totalAmount: parentOrderTotal },
+        data: { totalAmount: Math.round(parentOrderTotal * 100) / 100 },
         include: { sellerOrders: { include: { items: true } } },
       });
     });

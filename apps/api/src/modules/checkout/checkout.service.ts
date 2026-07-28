@@ -15,6 +15,7 @@ import {
   SETTLEMENT_CURRENCY,
   convertAmount,
   resolveChargeCurrency,
+  roundMoney,
   type ChargeCurrency,
 } from './currency.util';
 
@@ -260,15 +261,17 @@ export class CheckoutService {
           ),
       0,
     );
-    const shippingTotal = sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0);
+    const shippingTotal = roundMoney(
+      sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0),
+    );
 
     return {
       currency: chargeCurrency,
       settlementCurrency: SETTLEMENT_CURRENCY,
       destinationCountry: country,
-      subtotal,
+      subtotal: roundMoney(subtotal),
       shippingTotal,
-      totalAmount: subtotal + shippingTotal,
+      totalAmount: roundMoney(subtotal + shippingTotal),
       sellerQuotes,
     };
   }
