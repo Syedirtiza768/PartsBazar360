@@ -15,6 +15,7 @@ import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
 import { CatalogImportModule } from './modules/catalog-import/catalog-import.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ListingPipelineModule } from './modules/listing-pipeline/listing-pipeline.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuthModule } from './modules/auth/auth.module';
     MerchantModule,
     CatalogImportModule,
     AuthModule,
+    ListingPipelineModule,
   ],
   controllers: [AppController],
   providers: [AppService],

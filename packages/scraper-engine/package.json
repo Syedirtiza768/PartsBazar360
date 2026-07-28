@@ -1,0 +1,27 @@
+{
+  "name": "@repo/scraper-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Anti-detection scraping engine: adaptive rate limiting, fingerprint rotation, block detection, strategy escalation, checkpointed resume. Operational tooling for PartsBazar360 ingestion.",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./adapters/ebay-store": "./src/adapters/ebay-store.js"
+  },
+  "scripts": {
+    "scrape:ebay-store": "node cli/ebay-store.js",
+    "selftest": "node test/selftest.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  }
+}

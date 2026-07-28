@@ -32,6 +32,19 @@ type FormState = {
   postalCode: string;
 };
 
+type ShippingQuote = {
+  currency: string;
+  destinationCountry: string;
+  shippingTotal: number;
+  totalAmount: number;
+  sellerQuotes: Array<{
+    sellerId: string;
+    sellerName: string;
+    amount: number;
+    matchedCountry: boolean;
+  }>;
+};
+
 const EMPTY_FORM: FormState = {
   name: "",
   line1: "",
@@ -99,7 +112,19 @@ function Steps({ current }: { current: 1 | 2 }) {
   );
 }
 
-function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtotal: number; currency: string | null }) {
+function SummaryCard({
+  items,
+  subtotal,
+  currency,
+  shippingQuote,
+  shippingLoading,
+}: {
+  items: CartItem[];
+  subtotal: number;
+  currency: string | null;
+  shippingQuote: ShippingQuote | null;
+  shippingLoading: boolean;
+}) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <h2 className="text-base font-bold text-slate-900">Order summary</h2>
@@ -122,12 +147,26 @@ function SummaryCard({ items, subtotal, currency }: { items: CartItem[]; subtota
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Shipping</dt>
-          <dd className="text-graphite-600">Per seller, added to total</dd>
+          <dd className="text-right text-graphite-600">
+            {shippingLoading
+              ? "Calculating…"
+              : shippingQuote
+                ? formatPrice(shippingQuote.shippingTotal, shippingQuote.currency)
+                : "Enter country to estimate"}
+          </dd>
         </div>
+        {shippingQuote && (
+          <div className="flex justify-between gap-3 border-t border-slate-100 pt-2">
+            <dt className="font-semibold text-slate-900">Estimated total</dt>
+            <dd className="price text-sm">
+              {formatPrice(shippingQuote.totalAmount, shippingQuote.currency)}
+            </dd>
+          </div>
+        )}
       </dl>
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-        Final weight-based shipping is calculated per seller shipment when the order is placed.
+        EMX shipping is quoted per seller shipment using the destination country and parcel weight.
       </p>
     </div>
   );
@@ -147,6 +186,9 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  const [shippingQuote, setShippingQuote] = useState<ShippingQuote | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
 
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
@@ -166,6 +208,47 @@ export default function CheckoutPage() {
     }));
     setPrefilled(true);
   }, [user, prefilled]);
+
+  useEffect(() => {
+    if (step !== 2 || !cart.id) return;
+    const country = form.country.trim();
+    if (!country) {
+      setShippingQuote(null);
+      setShippingError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setShippingLoading(true);
+    setShippingError(null);
+
+    fetch(`${API_BASE_URL}/checkout/${cart.id}/shipping-quote`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+      },
+      body: JSON.stringify({ country }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Unable to quote shipping.");
+        if (!cancelled) setShippingQuote(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setShippingQuote(null);
+          setShippingError(err instanceof Error ? err.message : "Unable to quote shipping.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setShippingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, cart.id, form.country, authHeaders]);
 
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
@@ -487,6 +570,37 @@ export default function CheckoutPage() {
               </div>
             )}
 
+            {shippingError && (
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                role="status"
+              >
+                {shippingError}
+              </div>
+            )}
+
+            {shippingQuote && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
+                <h2 className="text-base font-semibold text-slate-900">Shipping estimate</h2>
+                <p className="mt-1 text-sm text-graphite-600">
+                  Estimated for {shippingQuote.destinationCountry}, split per seller shipment.
+                </p>
+                <ul className="mt-4 space-y-2 text-sm">
+                  {shippingQuote.sellerQuotes.map((quote) => (
+                    <li key={quote.sellerId} className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 text-graphite-700">
+                        {quote.sellerName}
+                        {!quote.matchedCountry ? " (average fallback rate)" : ""}
+                      </span>
+                      <span className="price shrink-0">
+                        {formatPrice(quote.amount, shippingQuote.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
@@ -499,9 +613,12 @@ export default function CheckoutPage() {
               <Button size="lg" onClick={placeOrder} loading={submitting} fullWidth className="sm:w-auto">
                 {/* The full label runs to three lines in a 288px button, so
                     phones get the amount and desktops get the full sentence. */}
-                <span className="sm:hidden">Pay {formatPrice(subtotal, currency)}</span>
+                <span className="sm:hidden">
+                  Pay {formatPrice(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
+                </span>
                 <span className="hidden sm:inline">
-                  Pay with Stripe — {formatPrice(subtotal, currency)} + shipping
+                  Pay with Stripe —{" "}
+                  {formatPrice(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
                 </span>
               </Button>
             </div>
@@ -515,7 +632,13 @@ export default function CheckoutPage() {
         )}
 
         <aside className="lg:sticky lg:top-28" aria-label="Order summary">
-          <SummaryCard items={items} subtotal={subtotal} currency={currency} />
+          <SummaryCard
+            items={items}
+            subtotal={subtotal}
+            currency={currency}
+            shippingQuote={shippingQuote}
+            shippingLoading={shippingLoading}
+          />
         </aside>
       </div>
     </div>

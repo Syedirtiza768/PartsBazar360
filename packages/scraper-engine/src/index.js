@@ -1,0 +1,11 @@
+export { ScrapeEngine } from './core/engine.js';
+export { Checkpoint } from './core/checkpoint.js';
+export { AdaptiveRateLimiter, parseRetryAfter } from './core/ratelimit.js';
+export { assessPage } from './core/blockdetect.js';
+export { StrategyLadder } from './core/strategy-ladder.js';
+export { SessionManager } from './core/session.js';
+export { samplePersona, buildHeaders, contextOptions, stealthInitScript } from './core/fingerprint.js';
+export * as humanize from './core/humanize.js';
+export { fetchStrategy } from './core/strategies/fetch.js';
+export { headlessStrategy, headedStrategy, cdpStrategy, makeBrowserStrategy } from './core/strategies/browser.js';
+export { ebayStoreAdapter, extractIdsFromHtml, DEFAULT_KEYWORDS } from './adapters/ebay-store.js';

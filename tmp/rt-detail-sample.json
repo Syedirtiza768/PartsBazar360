@@ -1,0 +1,1372 @@
+{
+  "diagnosedAt": "2026-07-22T21:37:12.745Z",
+  "targetScan": {
+    "blackline": {
+      "storeId": "d16199c4-55b5-429e-ad27-892bed94e00d",
+      "rows": [
+        {
+          "statusFilter": null,
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "active",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ENDED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ended",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "INACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "UNPUBLISHED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "OUT_OF_STOCK",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "search=a",
+          "http": 200,
+          "total": 0
+        }
+      ]
+    },
+    "kSalvage": {
+      "storeId": "eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0",
+      "rows": [
+        {
+          "statusFilter": null,
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "active",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ENDED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ended",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "INACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "UNPUBLISHED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "OUT_OF_STOCK",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "search=a",
+          "http": 200,
+          "total": 0
+        }
+      ]
+    },
+    "salvageA": {
+      "storeId": "3b84b063-3811-481f-a61d-f7846a03558f",
+      "rows": [
+        {
+          "statusFilter": null,
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "active",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ENDED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "ended",
+          "http": 200,
+          "total": 4267
+        },
+        {
+          "statusFilter": "INACTIVE",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "UNPUBLISHED",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "OUT_OF_STOCK",
+          "http": 200,
+          "total": 0
+        },
+        {
+          "statusFilter": "search=a",
+          "http": 200,
+          "total": 0
+        }
+      ]
+    }
+  },
+  "globalVsSum": {
+    "globalTotal": 0,
+    "sumOfStoreTotals": 105590,
+    "perStore": [
+      {
+        "storeId": "79f249a5-31e0-42a8-978c-a99b0665c61b",
+        "total": 0
+      },
+      {
+        "storeId": "fa528c8a-f249-4816-94f6-f2ce8b932449",
+        "total": 37199
+      },
+      {
+        "storeId": "d16199c4-55b5-429e-ad27-892bed94e00d",
+        "total": 0
+      },
+      {
+        "storeId": "5fc75f19-31f3-44e4-b1ae-6545055f7945",
+        "total": 0
+      },
+      {
+        "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+        "total": 36360
+      },
+      {
+        "storeId": "eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0",
+        "total": 0
+      },
+      {
+        "storeId": "cc658cc0-ab21-4519-9f06-4aea8ff6a809",
+        "total": 11431
+      },
+      {
+        "storeId": "7658e52e-4dd6-48a7-ad78-6933630bdac7",
+        "total": 5000
+      },
+      {
+        "storeId": "cfcc4a9c-c41b-4166-ab41-989c00a6fad1",
+        "total": 0
+      },
+      {
+        "storeId": "8d7d8b23-d769-4ed5-91e2-e26d14a45215",
+        "total": 15600
+      },
+      {
+        "storeId": "70ad5c44-6424-4998-815c-99adf28c2487",
+        "total": 0
+      },
+      {
+        "storeId": "3b84b063-3811-481f-a61d-f7846a03558f",
+        "total": 0
+      }
+    ]
+  },
+  "blacklineUnknownId": {
+    "status": 404,
+    "message": "Published listing not found"
+  },
+  "liveStoreSample": {
+    "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+    "listTotal": 36360,
+    "samples": [
+      {
+        "list": {
+          "id": "3af7d7ab-c144-40ea-9261-3b205e5affb0",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Alloggiamento presa Mercedes-Benz Classe SLK cinque pin A2105454228",
+          "sku": "Mercedes - CLK 200 - Black - S - D5-19",
+          "ebayItemId": "168472002210",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "69.06",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.it/itm/Alloggiamento-presa-Mercedes-Benz-Classe-SLK-cinque-pin-A2105454228-/168472002210",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 1,
+          "collectedImageCount": 1,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_4b0f4a9d.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": null,
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "weak_images",
+              "message": "Fewer than 3 images — add more for better conversion",
+              "severity": "warning"
+            },
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detail": {
+          "id": "3af7d7ab-c144-40ea-9261-3b205e5affb0",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Alloggiamento presa Mercedes-Benz Classe SLK cinque pin A2105454228",
+          "sku": "Mercedes - CLK 200 - Black - S - D5-19",
+          "ebayItemId": "168472002210",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "69.06",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.it/itm/Alloggiamento-presa-Mercedes-Benz-Classe-SLK-cinque-pin-A2105454228-/168472002210",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 1,
+          "collectedImageCount": 1,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_4b0f4a9d.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": null,
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "weak_images",
+              "message": "Fewer than 3 images — add more for better conversion",
+              "severity": "warning"
+            },
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detailHttp": 200
+      },
+      {
+        "list": {
+          "id": "7d33492a-2dbf-427e-b590-840c5e89fe26",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Volkswagen Passat Kühlmittelleitung 06J121075B 2006-2015",
+          "sku": "VW-8604-White-m-Cooling-045",
+          "ebayItemId": "168474960514",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "51.58",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Volkswagen-Passat-Kuhlmittelleitung-06J121075B-2006-2015-/168474960514",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_1_6daff6c1.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_2_ea31b76c.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_3_20386f0f.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_4_2623ebd2.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_5_a3be39a2.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Gebraucht",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detail": {
+          "id": "7d33492a-2dbf-427e-b590-840c5e89fe26",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Volkswagen Passat Kühlmittelleitung 06J121075B 2006-2015",
+          "sku": "VW-8604-White-m-Cooling-045",
+          "ebayItemId": "168474960514",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "51.58",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Volkswagen-Passat-Kuhlmittelleitung-06J121075B-2006-2015-/168474960514",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_1_6daff6c1.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_2_ea31b76c.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_3_20386f0f.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_4_2623ebd2.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-41640/BLA-41640_5_a3be39a2.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Gebraucht",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detailHttp": 200
+      },
+      {
+        "list": {
+          "id": "ae21ebed-97af-4973-9b51-c0cc4b508ac6",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Fiat Diesel Fuel Injector 55233955",
+          "sku": "FT-0241-LBlue-s-Fuel-037",
+          "ebayItemId": "168474960359",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "395.19",
+          "currency": "AUD",
+          "listingUrl": "https://www.ebay.com/itm/Fiat-Diesel-Fuel-Injector-55233955-/168474960359",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_1_be0031c1.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_22_27144f10.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_2_9d944bff.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_3_e780b561.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_4_eb07fd71.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Used",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detail": {
+          "id": "ae21ebed-97af-4973-9b51-c0cc4b508ac6",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Fiat Diesel Fuel Injector 55233955",
+          "sku": "FT-0241-LBlue-s-Fuel-037",
+          "ebayItemId": "168474960359",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "395.19",
+          "currency": "AUD",
+          "listingUrl": "https://www.ebay.com/itm/Fiat-Diesel-Fuel-Injector-55233955-/168474960359",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_1_be0031c1.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_22_27144f10.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_2_9d944bff.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_3_e780b561.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-40493/BLA-40493_4_eb07fd71.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Used",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detailHttp": 200
+      },
+      {
+        "list": {
+          "id": "e4b7c1ec-227f-420f-99af-5dff4529021c",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Tubo freno Febi Bilstein 1984-1989 Mercedes-Benz 190D 1234280635",
+          "sku": "1234280635",
+          "ebayItemId": "168474960174",
+          "listingStatus": "active",
+          "quantityAvailable": 2,
+          "price": "34.09",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Tubo-freno-Febi-Bilstein-1984-1989-Mercedes-Benz-190D-1234280635-/168474960174",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 1,
+          "collectedImageCount": 3,
+          "ebayImageCount": 3,
+          "sampleImages": [
+            "https://i.ebayimg.com/images/g/4BwAAeSw12VqCx7i/s-l140.jpg",
+            "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/4BwAAeSw12VqCx7i/$_1.JPG?set_id=8800005007",
+            "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/4BwAAeSw12VqCx7i/$_1.JPG"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Nuovo",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "weak_images",
+              "message": "Fewer than 3 images — add more for better conversion",
+              "severity": "warning"
+            },
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (2 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detail": {
+          "id": "e4b7c1ec-227f-420f-99af-5dff4529021c",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Tubo freno Febi Bilstein 1984-1989 Mercedes-Benz 190D 1234280635",
+          "sku": "1234280635",
+          "ebayItemId": "168474960174",
+          "listingStatus": "active",
+          "quantityAvailable": 2,
+          "price": "34.09",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Tubo-freno-Febi-Bilstein-1984-1989-Mercedes-Benz-190D-1234280635-/168474960174",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 1,
+          "collectedImageCount": 3,
+          "ebayImageCount": 3,
+          "sampleImages": [
+            "https://i.ebayimg.com/images/g/4BwAAeSw12VqCx7i/s-l140.jpg",
+            "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/4BwAAeSw12VqCx7i/$_1.JPG?set_id=8800005007",
+            "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/4BwAAeSw12VqCx7i/$_1.JPG"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Nuovo",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "weak_images",
+              "message": "Fewer than 3 images — add more for better conversion",
+              "severity": "warning"
+            },
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (2 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detailHttp": 200
+      },
+      {
+        "list": {
+          "id": "9dfef072-86c8-4cbf-854d-081034449b0e",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Clip scatola riscaldamento Mercedes-Benz E320 1996-2002 A2018350134",
+          "sku": "Mercedes - CLK 200 - Black - S - Tail Lights2",
+          "ebayItemId": "168474958926",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "69.06",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Clip-scatola-riscaldamento-Mercedes-Benz-E320-1996-2002-A2018350134-/168474958926",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_4b0f4a9d.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_10_e48fef6a.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_ff9228db.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_13_6c04ade0.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_17_52a26a1c.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Usato",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detail": {
+          "id": "9dfef072-86c8-4cbf-854d-081034449b0e",
+          "storeId": "65aff8ec-21ee-460f-af17-20daa0b843c1",
+          "title": "Clip scatola riscaldamento Mercedes-Benz E320 1996-2002 A2018350134",
+          "sku": "Mercedes - CLK 200 - Black - S - Tail Lights2",
+          "ebayItemId": "168474958926",
+          "listingStatus": "active",
+          "quantityAvailable": 1,
+          "price": "69.06",
+          "currency": "EUR",
+          "listingUrl": "https://www.ebay.com/itm/Clip-scatola-riscaldamento-Mercedes-Benz-E320-1996-2002-A2018350134-/168474958926",
+          "topLevelKeys": [
+            "accountDisplayName",
+            "catalogProductId",
+            "categoryId",
+            "categoryName",
+            "compatibility",
+            "condition",
+            "createdAt",
+            "currency",
+            "description",
+            "ebayAccountId",
+            "ebayEndTime",
+            "ebayItemId",
+            "ebayLastModifiedAt",
+            "ebayListingChannelId",
+            "ebayStartTime",
+            "healthFlags",
+            "id",
+            "imageUrls",
+            "itemSpecifics",
+            "lastSyncedAt",
+            "listingFormat",
+            "listingPolicies",
+            "listingStatus",
+            "listingUrl",
+            "location",
+            "marketplaceId",
+            "offerId",
+            "organizationId",
+            "performanceMetrics",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "rawEbayResponse",
+            "shippingDetails",
+            "sku",
+            "storeId",
+            "title",
+            "updatedAt"
+          ],
+          "hasDescription": false,
+          "descriptionLen": 0,
+          "hasItemSpecifics": true,
+          "hasRawEbay": true,
+          "rawEbayTopKeys": [
+            "item",
+            "syncSource"
+          ],
+          "rawEbayItemKeys": [
+            "categoryId",
+            "condition",
+            "currency",
+            "endTime",
+            "imageUrl",
+            "imageUrls",
+            "itemId",
+            "listingFormat",
+            "listingStatus",
+            "listingUrl",
+            "price",
+            "quantityAvailable",
+            "quantitySold",
+            "sku",
+            "startTime",
+            "title",
+            "viewCount",
+            "watchCount"
+          ],
+          "imageUrlsCount": 24,
+          "collectedImageCount": 24,
+          "ebayImageCount": 0,
+          "sampleImages": [
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_4b0f4a9d.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_10_e48fef6a.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_12_ff9228db.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_13_6c04ade0.jpg",
+            "https://images.gridxconnect.io/gxc/63267bc3-3730-4c88-8710-77db616dbd60/BLA-23879/BLA-23879_17_52a26a1c.jpg"
+          ],
+          "compatCount": 0,
+          "compatType": null,
+          "compatSample": null,
+          "condition": "Usato",
+          "brand": null,
+          "mpn": null,
+          "healthFlags": [
+            {
+              "code": "missing_item_specifics",
+              "message": "No item specifics defined",
+              "severity": "warning"
+            },
+            {
+              "code": "low_stock",
+              "message": "Low stock (1 remaining)",
+              "severity": "warning"
+            },
+            {
+              "code": "no_engagement",
+              "message": "No views or sales recorded",
+              "severity": "info"
+            }
+          ]
+        },
+        "detailHttp": 200
+      }
+    ]
+  }
+}

@@ -79,16 +79,8 @@ export class CheckoutService {
       reservedOffers.push(item.sellerOfferId);
     }
 
-    // 2. Calculate Shipping per Seller
-    const itemsBySeller = cart.items.reduce(
-      (acc, item) => {
-        const sellerId = item.sellerOffer.sellerId;
-        if (!acc[sellerId]) acc[sellerId] = [];
-        acc[sellerId].push(item);
-        return acc;
-      },
-      {} as Record<string, typeof cart.items>,
-    );
+    const destinationCountry = this.getDestinationCountry(shippingAddress);
+    const itemsBySeller = this.groupItemsBySeller(cart.items);
 
     const shippingTotalsBySeller: Record<string, number> = {};
     for (const [sellerId, items] of Object.entries(itemsBySeller)) {
@@ -99,6 +91,7 @@ export class CheckoutService {
       shippingTotalsBySeller[sellerId] =
         this.shippingService.calculateSellerShippingTotal(
           formattedItemsForShipping,
+          destinationCountry,
         );
     }
 
@@ -187,6 +180,48 @@ export class CheckoutService {
       },
       checkoutUrl: checkoutSession.url,
       message: 'Redirect to Stripe Checkout to complete payment.',
+    };
+  }
+
+  async quoteShipping(cartId: string, destinationCountry: string) {
+    const cart = await this.cartService.getCart(cartId);
+    if (cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const itemsBySeller = this.groupItemsBySeller(cart.items);
+    const sellerQuotes = Object.entries(itemsBySeller).map(([sellerId, items]) => {
+      const quote = this.shippingService.quoteSellerShipping(
+        items.map((item) => ({
+          weight: item.sellerOffer.canonicalPart?.weight ?? undefined,
+          quantity: item.quantity,
+        })),
+        destinationCountry,
+      );
+
+      return {
+        sellerId,
+        sellerName:
+          items[0]?.sellerOffer.seller?.name ||
+          'Marketplace seller',
+        itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+        ...quote,
+      };
+    });
+
+    const subtotal = cart.items.reduce(
+      (sum, item) => sum + item.quantity * item.sellerOffer.price,
+      0,
+    );
+    const shippingTotal = sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0);
+
+    return {
+      currency: 'AED',
+      destinationCountry: destinationCountry.trim(),
+      subtotal,
+      shippingTotal,
+      totalAmount: subtotal + shippingTotal,
+      sellerQuotes,
     };
   }
 
@@ -295,5 +330,30 @@ export class CheckoutService {
       }
       return updated;
     });
+  }
+
+  private getDestinationCountry(shippingAddress: Record<string, unknown>) {
+    const country =
+      typeof shippingAddress.country === 'string'
+        ? shippingAddress.country.trim()
+        : '';
+    if (!country) {
+      throw new BadRequestException('Shipping country is required');
+    }
+    return country;
+  }
+
+  private groupItemsBySeller<T extends { sellerOffer: { sellerId: string } }>(
+    items: T[],
+  ) {
+    return items.reduce(
+      (acc, item) => {
+        const sellerId = item.sellerOffer.sellerId;
+        if (!acc[sellerId]) acc[sellerId] = [];
+        acc[sellerId].push(item);
+        return acc;
+      },
+      {} as Record<string, T[]>,
+    );
   }
 }

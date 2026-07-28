@@ -1,0 +1,11 @@
+PARTSBAZAR360 – (IRTIZA BUILD) COMMENTS / FEEDBACK
+There should be a button in the header/navigation that would auto select the currency based on the IP address, but also has the option to change the currency by the user.
+Need to check the accuracy of the match from this section
+Was unable to apply the Aftermarket filter in this section, and when the other filters applied, no products were shown
+https://partsbazar360.com/buyer/part/e0bb5741-99f9-4246-98d0-5b46c942f310/
+Need to add fitment info properly showing all the vehicles it is compatible with
+While comparing same product here: https://jaguar.oempartsonline.com/oem-parts/jaguar-side-duct-t2h4903
+This is Item ID of eBay, anyone can add it after ebay.com/itm/(marketplace ID) and it would show the exact product there. Need to check with Mr. Hassan if we would want to show eBay item ID on partsbazar360.com products.
+We might need guest checkout for people who do not prefer to register an account, also the option to login with Google, Facebook, Apple ID (for Apple devices)
+Integration with Tabby, Tamara is required
+Update shipping costs from the file shared

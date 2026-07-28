@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""
+Build compatibility rows from MVL database for salvage parts.
+Processes in batches with progress reporting.
+"""
+import os, sys, re, json, psycopg2
+
+DB_URL = os.environ.get('DATABASE_URL', 'postgresql://partsbazar_user:partsbazar_password@localhost:5432/partsbazar_db')
+SELLER_ID = 'seller-salvage-auto-parts'
+BATCH = 500
+
+MAKES = {
+    'audi': 'AUDI', 'bmw': 'BMW', 'jaguar': 'JAGUAR', 'lexus': 'LEXUS',
+    'mercedes': 'MERCEDESBENZ', 'ford': 'FORD', 'chevrolet': 'CHEVROLET', 'chevy': 'CHEVROLET',
+    'toyota': 'TOYOTA', 'nissan': 'NISSAN', 'honda': 'HONDA', 'dodge': 'DODGE',
+    'volkswagen': 'VOLKSWAGEN', 'vw': 'VOLKSWAGEN', 'mazda': 'MAZDA', 'cadillac': 'CADILLAC',
+    'porsche': 'PORSCHE', 'gmc': 'GMC', 'buick': 'BUICK', 'chrysler': 'CHRYSLER',
+    'jeep': 'JEEP', 'kia': 'KIA', 'hyundai': 'HYUNDAI', 'infiniti': 'INFINITI',
+    'acura': 'ACURA', 'subaru': 'SUBARU', 'mitsubishi': 'MITSUBISHI', 'volvo': 'VOLVO',
+    'land rover': 'LANDROVER', 'range rover': 'RANGEROVER', 'mini': 'MINI',
+    'maserati': 'MASERATI', 'bentley': 'BENTLEY', 'rolls royce': 'ROLLSROYCE',
+    'ram': 'RAM', 'fiat': 'FIAT', 'saab': 'SAAB', 'pontiac': 'PONTIAC',
+    'scion': 'SCION', 'suzuki': 'SUZUKI', 'tesla': 'TESLA', 'genesis': 'GENESIS',
+    'isuzu': 'ISUZU', 'lincoln': 'LINCOLN', 'peugeot': 'PEUGEOT', 'renault': 'RENAULT',
+    'citroen': 'CITROEN', 'alfa romeo': 'ALFAROMEO', 'ferrari': 'FERRARI',
+    'lamborghini': 'LAMBORGHINI', 'aston martin': 'ASTONMARTIN', 'changan': 'CHANGAN',
+    'geely': 'GEELY', 'great wall': 'GREATWALL', 'byd': 'BYD', 'chery': 'CHERY',
+    'freightliner': 'FREIGHTLINER', 'peterbilt': 'PETERBILT', 'kenworth': 'KENWORTH',
+}
+
+def parse_title(title):
+    """Extract year and normalized make from title."""
+    # Year
+    m = re.search(r'(\d{4})\s*[-–]\s*(\d{4})', title)
+    if m:
+        yr1, yr2 = int(m.group(1)), int(m.group(2))
+    else:
+        m = re.search(r'(\d{4})', title)
+        if m:
+            yr1 = yr2 = int(m.group(1))
+        else:
+            return None, None, None
+    
+    # Make - try longest matches first
+    tl = title.lower()
+    norm_make = None
+    for make_str in sorted(MAKES.keys(), key=len, reverse=True):
+        if re.search(r'\b' + re.escape(make_str) + r'\b', tl):
+            norm_make = MAKES[make_str]
+            break
+    
+    return yr1, yr2, norm_make
+
+def main():
+    conn = psycopg2.connect(DB_URL)
+    cur = conn.cursor()
+    
+    # Pre-load MVL into memory by make+year for fast lookup
+    print("Loading MVL database into memory...")
+    cur.execute("""
+        SELECT "normalizedMake", year, make, model, COALESCE(trim,''), COALESCE(engine,'')
+        FROM "MvlVehicle" WHERE market = 'US'
+    """)
+    mvl = {}
+    for row in cur:
+        key = (row[0], row[1])  # (normalizedMake, year)
+        if key not in mvl:
+            mvl[key] = []
+        mvl[key].append({
+            'year': row[1], 'make': row[2], 'model': row[3],
+            'trim': row[4], 'engine': row[5]
+        })
+    print(f"Loaded {len(mvl)} make+year combinations from MVL")
+    
+    # Get salvage parts without compatibility
+    cur.execute("""
+        SELECT cp.id, cp.title
+        FROM "CanonicalPart" cp
+        JOIN "SellerOffer" so ON so."canonicalPartId" = cp.id
+        WHERE so."sellerId" = %s
+        AND (cp.compatibility IS NULL OR cp.compatibility::text IN ('null', '[]', ''))
+        ORDER BY cp.id
+    """, (SELLER_ID,))
+    parts = cur.fetchall()
+    print(f"Found {len(parts)} salvage parts without compatibility")
+    
+    updated = 0
+    skipped = 0
+    
+    for i, (part_id, title) in enumerate(parts, 1):
+        yr1, yr2, norm_make = parse_title(title)
+        if not yr1 or not norm_make:
+            skipped += 1
+            continue
+        
+        # Collect all matching MVL rows for the year range
+        compat = []
+        for yr in range(yr1, yr2 + 1):
+            key = (norm_make, yr)
+            if key in mvl:
+                compat.extend(mvl[key])
+        
+        if not compat:
+            skipped += 1
+            continue
+        
+        # Deduplicate and limit
+        seen = set()
+        unique_compat = []
+        for row in compat:
+            k = (row['year'], row['make'], row['model'], row['trim'], row['engine'])
+            if k not in seen and len(unique_compat) < 200:
+                seen.add(k)
+                unique_compat.append(row)
+        
+        if unique_compat:
+            cur.execute('UPDATE "CanonicalPart" SET compatibility = %s WHERE id = %s',
+                       (json.dumps(unique_compat), part_id))
+            updated += 1
+        
+        if updated % BATCH == 0 and updated > 0:
+            conn.commit()
+            print(f"Progress: {i}/{len(parts)} - Updated: {updated}, Skipped: {skipped}")
+    
+    conn.commit()
+    print(f"\nDone! Updated {updated} parts with compatibility, skipped {skipped}")
+    
+    cur.close()
+    conn.close()
+
+if __name__ == '__main__':
+    main()

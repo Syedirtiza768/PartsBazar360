@@ -24,6 +24,7 @@
     "seed:cleanup-auth": "node dist/src/seed-cleanup-auth.cli.js",
     "seed:realtrack-dynatrade": "node dist/src/seed-realtrack-dynatrade.cli.js",
     "seed:salvagea": "node dist/src/seed-salvagea.cli.js",
+    "seed:blackline": "node dist/src/seed-blackline.cli.js",
     "export:salvage": "node dist/src/export-salvage.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
     "import:mvl": "node scripts/import-us-mvl.mjs",

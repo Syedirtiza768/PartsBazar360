@@ -1,0 +1,991 @@
+{
+  "headers": [
+    "CODE",
+    "BRAND",
+    "PART NUMBER",
+    "QTY",
+    "MOQ",
+    "PRICE USD",
+    "PRICE AED"
+  ],
+  "dataRows": 6795,
+  "blankCounts": [
+    {
+      "header": "CODE",
+      "blanks": 0
+    },
+    {
+      "header": "BRAND",
+      "blanks": 0
+    },
+    {
+      "header": "PART NUMBER",
+      "blanks": 0
+    },
+    {
+      "header": "QTY",
+      "blanks": 0
+    },
+    {
+      "header": "MOQ",
+      "blanks": 0
+    },
+    {
+      "header": "PRICE USD",
+      "blanks": 0
+    },
+    {
+      "header": "PRICE AED",
+      "blanks": 0
+    }
+  ],
+  "distinctBrands": 52,
+  "topBrands": [
+    {
+      "value": "MITSUBISHI",
+      "count": 1645
+    },
+    {
+      "value": "TOYOTA",
+      "count": 959
+    },
+    {
+      "value": "HONDA",
+      "count": 761
+    },
+    {
+      "value": "SUBARU",
+      "count": 655
+    },
+    {
+      "value": "NISSAN",
+      "count": 571
+    },
+    {
+      "value": "MERCEDES BENZ",
+      "count": 478
+    },
+    {
+      "value": "VAG",
+      "count": 404
+    },
+    {
+      "value": "MAZDA",
+      "count": 346
+    },
+    {
+      "value": "SUZUKI",
+      "count": 247
+    },
+    {
+      "value": "GENERAL MOTORS",
+      "count": 222
+    },
+    {
+      "value": "MOBIS",
+      "count": 192
+    },
+    {
+      "value": "GATES",
+      "count": 101
+    },
+    {
+      "value": "RENAULT",
+      "count": 49
+    },
+    {
+      "value": "PORSCHE",
+      "count": 32
+    },
+    {
+      "value": "BMW",
+      "count": 26
+    },
+    {
+      "value": "DENSO",
+      "count": 24
+    },
+    {
+      "value": "BOSCH",
+      "count": 19
+    },
+    {
+      "value": "PEUGEOT/CITROEN",
+      "count": 10
+    },
+    {
+      "value": "NGK",
+      "count": 6
+    },
+    {
+      "value": "KOYO",
+      "count": 4
+    },
+    {
+      "value": "LAND ROVER",
+      "count": 4
+    },
+    {
+      "value": "FORD",
+      "count": 3
+    },
+    {
+      "value": "GMB",
+      "count": 3
+    },
+    {
+      "value": "INA",
+      "count": 2
+    },
+    {
+      "value": "MEYLE",
+      "count": 2
+    },
+    {
+      "value": "OPTIBELT",
+      "count": 2
+    },
+    {
+      "value": "SKF",
+      "count": 2
+    },
+    {
+      "value": "TAIHO",
+      "count": 2
+    },
+    {
+      "value": "ASHIKA",
+      "count": 1
+    },
+    {
+      "value": "ASIAN PARTS",
+      "count": 1
+    },
+    {
+      "value": "AUTOMEGA",
+      "count": 1
+    },
+    {
+      "value": "BREMBO",
+      "count": 1
+    },
+    {
+      "value": "FBK",
+      "count": 1
+    },
+    {
+      "value": "HELLA",
+      "count": 1
+    },
+    {
+      "value": "JIKIU",
+      "count": 1
+    },
+    {
+      "value": "LUK",
+      "count": 1
+    },
+    {
+      "value": "MAGNETI MARELLI",
+      "count": 1
+    },
+    {
+      "value": "MANN",
+      "count": 1
+    },
+    {
+      "value": "MASUMA",
+      "count": 1
+    },
+    {
+      "value": "NISSENS",
+      "count": 1
+    }
+  ],
+  "allBrandCounts": [
+    {
+      "value": "MITSUBISHI",
+      "count": 1645
+    },
+    {
+      "value": "TOYOTA",
+      "count": 959
+    },
+    {
+      "value": "HONDA",
+      "count": 761
+    },
+    {
+      "value": "SUBARU",
+      "count": 655
+    },
+    {
+      "value": "NISSAN",
+      "count": 571
+    },
+    {
+      "value": "MERCEDES BENZ",
+      "count": 478
+    },
+    {
+      "value": "VAG",
+      "count": 404
+    },
+    {
+      "value": "MAZDA",
+      "count": 346
+    },
+    {
+      "value": "SUZUKI",
+      "count": 247
+    },
+    {
+      "value": "GENERAL MOTORS",
+      "count": 222
+    },
+    {
+      "value": "MOBIS",
+      "count": 192
+    },
+    {
+      "value": "GATES",
+      "count": 101
+    },
+    {
+      "value": "RENAULT",
+      "count": 49
+    },
+    {
+      "value": "PORSCHE",
+      "count": 32
+    },
+    {
+      "value": "BMW",
+      "count": 26
+    },
+    {
+      "value": "DENSO",
+      "count": 24
+    },
+    {
+      "value": "BOSCH",
+      "count": 19
+    },
+    {
+      "value": "PEUGEOT/CITROEN",
+      "count": 10
+    },
+    {
+      "value": "NGK",
+      "count": 6
+    },
+    {
+      "value": "KOYO",
+      "count": 4
+    },
+    {
+      "value": "LAND ROVER",
+      "count": 4
+    },
+    {
+      "value": "FORD",
+      "count": 3
+    },
+    {
+      "value": "GMB",
+      "count": 3
+    },
+    {
+      "value": "INA",
+      "count": 2
+    },
+    {
+      "value": "MEYLE",
+      "count": 2
+    },
+    {
+      "value": "OPTIBELT",
+      "count": 2
+    },
+    {
+      "value": "SKF",
+      "count": 2
+    },
+    {
+      "value": "TAIHO",
+      "count": 2
+    },
+    {
+      "value": "ASHIKA",
+      "count": 1
+    },
+    {
+      "value": "ASIAN PARTS",
+      "count": 1
+    },
+    {
+      "value": "AUTOMEGA",
+      "count": 1
+    },
+    {
+      "value": "BREMBO",
+      "count": 1
+    },
+    {
+      "value": "FBK",
+      "count": 1
+    },
+    {
+      "value": "HELLA",
+      "count": 1
+    },
+    {
+      "value": "JIKIU",
+      "count": 1
+    },
+    {
+      "value": "LUK",
+      "count": 1
+    },
+    {
+      "value": "MAGNETI MARELLI",
+      "count": 1
+    },
+    {
+      "value": "MANN",
+      "count": 1
+    },
+    {
+      "value": "MASUMA",
+      "count": 1
+    },
+    {
+      "value": "NISSENS",
+      "count": 1
+    },
+    {
+      "value": "NK",
+      "count": 1
+    },
+    {
+      "value": "NSK",
+      "count": 1
+    },
+    {
+      "value": "NTY",
+      "count": 1
+    },
+    {
+      "value": "PIERBURG",
+      "count": 1
+    },
+    {
+      "value": "RBI",
+      "count": 1
+    },
+    {
+      "value": "RIK",
+      "count": 1
+    },
+    {
+      "value": "ROCKY",
+      "count": 1
+    },
+    {
+      "value": "SCT",
+      "count": 1
+    },
+    {
+      "value": "SWAG",
+      "count": 1
+    },
+    {
+      "value": "TOP DRIVE",
+      "count": 1
+    },
+    {
+      "value": "TSK",
+      "count": 1
+    },
+    {
+      "value": "VOLVO",
+      "count": 1
+    }
+  ],
+  "quantity": {
+    "count": 6795,
+    "min": 1,
+    "p25": 3,
+    "median": 10,
+    "p75": 44,
+    "max": 16103,
+    "mean": 123.54231052244297
+  },
+  "moq": {
+    "count": 6795,
+    "min": 1,
+    "p25": 1,
+    "median": 1,
+    "p75": 1,
+    "max": 10,
+    "mean": 1.611037527593819
+  },
+  "priceUsd": {
+    "count": 6795,
+    "min": 0.02,
+    "p25": 1.78,
+    "median": 6.56,
+    "p75": 22.865000000000002,
+    "max": 3333.89,
+    "mean": 29.941945548197207
+  },
+  "priceAed": {
+    "count": 6795,
+    "min": 0.07345,
+    "p25": 6.53705,
+    "median": 24.091599999999996,
+    "p75": 83.9717125,
+    "max": 12243.711024999999,
+    "mean": 109.96179502575399
+  },
+  "zeroOrNegative": {
+    "quantity": 0,
+    "moq": 0,
+    "priceUsd": 0,
+    "priceAed": 0
+  },
+  "currencyRatio": {
+    "medianAedPerUsd": 3.6725,
+    "outliers": 0,
+    "count": 6795
+  },
+  "duplicateBrandNumberGroups": 0,
+  "duplicateBrandNumberRows": 0,
+  "duplicateBrandNumberExamples": [],
+  "normalizedNumberAcrossMultipleBrandsGroups": 0,
+  "normalizedNumberAcrossMultipleBrandsExamples": [],
+  "samplesByBrand": {
+    "BMW": [
+      {
+        "rowNumber": 5,
+        "values": [
+          1203,
+          "BMW",
+          "11147797490",
+          35,
+          1,
+          32.77,
+          120.34782500000001
+        ]
+      },
+      {
+        "rowNumber": 6,
+        "values": [
+          1203,
+          "BMW",
+          "11312457622",
+          3,
+          1,
+          290.56,
+          1067.0816
+        ]
+      },
+      {
+        "rowNumber": 7,
+        "values": [
+          1203,
+          "BMW",
+          "11317533489",
+          3,
+          1,
+          36.27,
+          133.20157500000002
+        ]
+      }
+    ],
+    "TOYOTA": [
+      {
+        "rowNumber": 5432,
+        "values": [
+          1203,
+          "TOYOTA",
+          "0411111026",
+          1,
+          1,
+          73.42,
+          269.63495
+        ]
+      },
+      {
+        "rowNumber": 5433,
+        "values": [
+          1203,
+          "TOYOTA",
+          "0411116025",
+          2,
+          1,
+          92.25,
+          338.788125
+        ]
+      },
+      {
+        "rowNumber": 5434,
+        "values": [
+          1203,
+          "TOYOTA",
+          "0411130675",
+          4,
+          1,
+          107.2,
+          393.692
+        ]
+      }
+    ],
+    "NISSAN": [
+      {
+        "rowNumber": 3851,
+        "values": [
+          1203,
+          "NISSAN",
+          "009215402A",
+          10,
+          10,
+          0.26,
+          0.95485
+        ]
+      },
+      {
+        "rowNumber": 3852,
+        "values": [
+          1203,
+          "NISSAN",
+          "01121N6051",
+          10,
+          10,
+          0.29,
+          1.0650249999999999
+        ]
+      },
+      {
+        "rowNumber": 3853,
+        "values": [
+          1203,
+          "NISSAN",
+          "01121S602E",
+          37,
+          10,
+          0.16,
+          0.5876
+        ]
+      }
+    ],
+    "MITSUBISHI": [
+      {
+        "rowNumber": 2008,
+        "values": [
+          1203,
+          "MITSUBISHI",
+          "1000A406",
+          1,
+          1,
+          168.62,
+          619.25695
+        ]
+      },
+      {
+        "rowNumber": 2009,
+        "values": [
+          1203,
+          "MITSUBISHI",
+          "1000A407",
+          103,
+          1,
+          125.62,
+          461.33945
+        ]
+      },
+      {
+        "rowNumber": 2010,
+        "values": [
+          1203,
+          "MITSUBISHI",
+          "1000A902",
+          5,
+          1,
+          118.66,
+          435.77885
+        ]
+      }
+    ],
+    "HONDA": [
+      {
+        "rowNumber": 406,
+        "values": [
+          1203,
+          "HONDA",
+          "01463SDAA01",
+          1,
+          1,
+          22.86,
+          83.95335
+        ]
+      },
+      {
+        "rowNumber": 407,
+        "values": [
+          1203,
+          "HONDA",
+          "01463STXA01",
+          3,
+          1,
+          33.29,
+          122.25752499999999
+        ]
+      },
+      {
+        "rowNumber": 408,
+        "values": [
+          1203,
+          "HONDA",
+          "04110SWA305",
+          54,
+          1,
+          1.44,
+          5.288399999999999
+        ]
+      }
+    ],
+    "SUBARU": [
+      {
+        "rowNumber": 4526,
+        "values": [
+          1203,
+          "SUBARU",
+          "010108200",
+          1664,
+          10,
+          0.19,
+          0.697775
+        ]
+      },
+      {
+        "rowNumber": 4527,
+        "values": [
+          1203,
+          "SUBARU",
+          "010510307",
+          64,
+          1,
+          0.34,
+          1.24865
+        ]
+      },
+      {
+        "rowNumber": 4528,
+        "values": [
+          1203,
+          "SUBARU",
+          "021814000",
+          19,
+          10,
+          0.28,
+          1.0283
+        ]
+      }
+    ],
+    "VAG": [
+      {
+        "rowNumber": 6392,
+        "values": [
+          1203,
+          "VAG",
+          "000010006",
+          40,
+          10,
+          0.03,
+          0.110175
+        ]
+      },
+      {
+        "rowNumber": 6393,
+        "values": [
+          1203,
+          "VAG",
+          "000915105DG",
+          3,
+          1,
+          108.58,
+          398.76005
+        ]
+      },
+      {
+        "rowNumber": 6394,
+        "values": [
+          1203,
+          "VAG",
+          "000979009EA",
+          1,
+          1,
+          15.21,
+          55.858725
+        ]
+      }
+    ],
+    "MOBIS": [
+      {
+        "rowNumber": 3653,
+        "values": [
+          1203,
+          "MOBIS",
+          "0510000181",
+          49,
+          1,
+          16.02,
+          58.83345
+        ]
+      },
+      {
+        "rowNumber": 3654,
+        "values": [
+          1203,
+          "MOBIS",
+          "0520000640",
+          32,
+          1,
+          15.17,
+          55.711825
+        ]
+      },
+      {
+        "rowNumber": 3655,
+        "values": [
+          1203,
+          "MOBIS",
+          "1338506007K",
+          5,
+          1,
+          0.08,
+          0.2938
+        ]
+      }
+    ],
+    "GENERAL MOTORS": [
+      {
+        "rowNumber": 180,
+        "values": [
+          1203,
+          "GENERAL MOTORS",
+          "02877481",
+          16,
+          1,
+          0.26,
+          0.95485
+        ]
+      },
+      {
+        "rowNumber": 181,
+        "values": [
+          1203,
+          "GENERAL MOTORS",
+          "11049134",
+          44,
+          10,
+          0.63,
+          2.313675
+        ]
+      },
+      {
+        "rowNumber": 182,
+        "values": [
+          1203,
+          "GENERAL MOTORS",
+          "11080303",
+          40,
+          10,
+          0.43,
+          1.579175
+        ]
+      }
+    ],
+    "GATES": [
+      {
+        "rowNumber": 79,
+        "values": [
+          1203,
+          "GATES",
+          "021603",
+          20,
+          1,
+          9.6,
+          35.256
+        ]
+      },
+      {
+        "rowNumber": 80,
+        "values": [
+          1203,
+          "GATES",
+          "021669",
+          3,
+          1,
+          21.18,
+          77.78354999999999
+        ]
+      },
+      {
+        "rowNumber": 81,
+        "values": [
+          1203,
+          "GATES",
+          "052840",
+          1,
+          1,
+          11.93,
+          43.812925
+        ]
+      }
+    ],
+    "BOSCH": [
+      {
+        "rowNumber": 31,
+        "values": [
+          1203,
+          "BOSCH",
+          "0250203012",
+          6,
+          1,
+          11.89,
+          43.666025
+        ]
+      },
+      {
+        "rowNumber": 32,
+        "values": [
+          1203,
+          "BOSCH",
+          "0261230208",
+          1,
+          1,
+          22.09,
+          81.125525
+        ]
+      },
+      {
+        "rowNumber": 33,
+        "values": [
+          1203,
+          "BOSCH",
+          "1987302041",
+          86,
+          1,
+          2.07,
+          7.602074999999999
+        ]
+      }
+    ],
+    "DENSO": [
+      {
+        "rowNumber": 51,
+        "values": [
+          1203,
+          "DENSO",
+          "1455300380",
+          6,
+          1,
+          1.37,
+          5.031325
+        ]
+      },
+      {
+        "rowNumber": 52,
+        "values": [
+          1203,
+          "DENSO",
+          "1455311380",
+          3,
+          1,
+          0.83,
+          3.0481749999999996
+        ]
+      },
+      {
+        "rowNumber": 53,
+        "values": [
+          1203,
+          "DENSO",
+          "1952140040",
+          17,
+          10,
+          0.1,
+          0.36725
+        ]
+      }
+    ],
+    "SKF": [
+      {
+        "rowNumber": 4524,
+        "values": [
+          1203,
+          "SKF",
+          "BT1B328236AQCL7CVC027",
+          10,
+          1,
+          14.6,
+          53.6185
+        ]
+      },
+      {
+        "rowNumber": 4525,
+        "values": [
+          1203,
+          "SKF",
+          "VKC2519",
+          1,
+          1,
+          10.6,
+          38.9285
+        ]
+      }
+    ],
+    "MEYLE": [
+      {
+        "rowNumber": 2006,
+        "values": [
+          1203,
+          "MEYLE",
+          "1008000072",
+          1,
+          1,
+          8.55,
+          31.399875
+        ]
+      },
+      {
+        "rowNumber": 2007,
+        "values": [
+          1203,
+          "MEYLE",
+          "6148000023",
+          1,
+          1,
+          4.67,
+          17.150575
+        ]
+      }
+    ],
+    "ASHIKA": [
+      {
+        "rowNumber": 2,
+        "values": [
+          1203,
+          "ASHIKA",
+          "6300033",
+          4,
+          1,
+          1.99,
+          7.308275
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,426 @@
+{
+  "token_count": 93542,
+  "distinct_inferred_prefixes": 105,
+  "prefix_counts": [
+    {
+      "prefix": "TOYOTA",
+      "count": 13005
+    },
+    {
+      "prefix": "NISSAN",
+      "count": 10581
+    },
+    {
+      "prefix": "HYUNDAI",
+      "count": 7566
+    },
+    {
+      "prefix": "FORD",
+      "count": 6980
+    },
+    {
+      "prefix": "HONDA",
+      "count": 6016
+    },
+    {
+      "prefix": "MAZDA",
+      "count": 4593
+    },
+    {
+      "prefix": "VAG",
+      "count": 4156
+    },
+    {
+      "prefix": "GENERAL MOTORS",
+      "count": 4125
+    },
+    {
+      "prefix": "MITSUBISHI",
+      "count": 4084
+    },
+    {
+      "prefix": "KIA",
+      "count": 3968
+    },
+    {
+      "prefix": "MERCEDES-BENZ",
+      "count": 3293
+    },
+    {
+      "prefix": "CHRYSLER",
+      "count": 2844
+    },
+    {
+      "prefix": "BMW",
+      "count": 2517
+    },
+    {
+      "prefix": "ALFA ROMEO",
+      "count": 2437
+    },
+    {
+      "prefix": "SUZUKI",
+      "count": 2019
+    },
+    {
+      "prefix": "CITROEN",
+      "count": 1627
+    },
+    {
+      "prefix": "RENAULT",
+      "count": 1367
+    },
+    {
+      "prefix": "SUBARU",
+      "count": 1350
+    },
+    {
+      "prefix": "LAND ROVER",
+      "count": 1113
+    },
+    {
+      "prefix": "DAIHATSU",
+      "count": 1015
+    },
+    {
+      "prefix": "VOLVO",
+      "count": 924
+    },
+    {
+      "prefix": "FIAT",
+      "count": 917
+    },
+    {
+      "prefix": "OPEL",
+      "count": 760
+    },
+    {
+      "prefix": "CHERY",
+      "count": 758
+    },
+    {
+      "prefix": "PEUGEOT",
+      "count": 731
+    },
+    {
+      "prefix": "SSANGYONG",
+      "count": 613
+    },
+    {
+      "prefix": "LANCIA",
+      "count": 543
+    },
+    {
+      "prefix": "GEELY",
+      "count": 523
+    },
+    {
+      "prefix": "CHANGAN",
+      "count": 486
+    },
+    {
+      "prefix": "GREAT WALL",
+      "count": 456
+    },
+    {
+      "prefix": "PORSCHE",
+      "count": 385
+    },
+    {
+      "prefix": "ISUZU",
+      "count": 228
+    },
+    {
+      "prefix": "JAGUAR",
+      "count": 188
+    },
+    {
+      "prefix": "LADA",
+      "count": 186
+    },
+    {
+      "prefix": "TESLA MOTORS",
+      "count": 135
+    },
+    {
+      "prefix": "BELGEE",
+      "count": 110
+    },
+    {
+      "prefix": "MERCEDES-BENZ A",
+      "count": 98
+    },
+    {
+      "prefix": "LIFAN",
+      "count": 88
+    },
+    {
+      "prefix": "BYD",
+      "count": 84
+    },
+    {
+      "prefix": "SAMSUNG",
+      "count": 61
+    },
+    {
+      "prefix": "HONGQI",
+      "count": 59
+    },
+    {
+      "prefix": "MITSUBISHI MR",
+      "count": 54
+    },
+    {
+      "prefix": "MITSUBISHI MB",
+      "count": 50
+    },
+    {
+      "prefix": "DAEWOO",
+      "count": 46
+    },
+    {
+      "prefix": "LAND ROVER LR",
+      "count": 37
+    },
+    {
+      "prefix": "MINI",
+      "count": 35
+    },
+    {
+      "prefix": "LIXIANG",
+      "count": 31
+    },
+    {
+      "prefix": "JAC",
+      "count": 22
+    },
+    {
+      "prefix": "IVECO",
+      "count": 22
+    },
+    {
+      "prefix": "GAC",
+      "count": 20
+    },
+    {
+      "prefix": "LAND ROVER RBK",
+      "count": 15
+    },
+    {
+      "prefix": "SAAB",
+      "count": 14
+    },
+    {
+      "prefix": "DAF",
+      "count": 14
+    },
+    {
+      "prefix": "BAW",
+      "count": 11
+    },
+    {
+      "prefix": "BAIC",
+      "count": 11
+    },
+    {
+      "prefix": "LAND ROVER RBX",
+      "count": 10
+    },
+    {
+      "prefix": "JETOUR",
+      "count": 10
+    },
+    {
+      "prefix": "MAN",
+      "count": 10
+    },
+    {
+      "prefix": "BOMBARDIER",
+      "count": 9
+    },
+    {
+      "prefix": "LYNK&CO",
+      "count": 8
+    },
+    {
+      "prefix": "LAND ROVER RBM",
+      "count": 8
+    },
+    {
+      "prefix": "DONGFENG",
+      "count": 8
+    },
+    {
+      "prefix": "LAND ROVER RGD",
+      "count": 6
+    },
+    {
+      "prefix": "MITSUBISHI MD",
+      "count": 6
+    },
+    {
+      "prefix": "CFMOTO",
+      "count": 6
+    },
+    {
+      "prefix": "CHEVROLET",
+      "count": 6
+    },
+    {
+      "prefix": "ROLLS-ROYCE",
+      "count": 6
+    },
+    {
+      "prefix": "JEEP",
+      "count": 5
+    },
+    {
+      "prefix": "MOSKVITCH",
+      "count": 5
+    },
+    {
+      "prefix": "LAND ROVER RGX",
+      "count": 5
+    },
+    {
+      "prefix": "ROVER",
+      "count": 5
+    },
+    {
+      "prefix": "HAIMA",
+      "count": 4
+    },
+    {
+      "prefix": "FAW",
+      "count": 4
+    },
+    {
+      "prefix": "HYUNDAI MB",
+      "count": 3
+    },
+    {
+      "prefix": "LAND ROVER ANR",
+      "count": 3
+    },
+    {
+      "prefix": "LAND ROVER NTC",
+      "count": 3
+    },
+    {
+      "prefix": "LAND ROVER QJB",
+      "count": 3
+    },
+    {
+      "prefix": "LAND ROVER TOQ",
+      "count": 3
+    },
+    {
+      "prefix": "FORD USA",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER RHF",
+      "count": 2
+    },
+    {
+      "prefix": "LOTUS",
+      "count": 2
+    },
+    {
+      "prefix": "EVOLUTE",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER RTC",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER TIQ",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER QFK",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER TVB",
+      "count": 2
+    },
+    {
+      "prefix": "LAND ROVER QFW",
+      "count": 1
+    },
+    {
+      "prefix": "MITSUBISHI MM",
+      "count": 1
+    },
+    {
+      "prefix": "PERODUA",
+      "count": 1
+    },
+    {
+      "prefix": "LAND ROVER PQG",
+      "count": 1
+    },
+    {
+      "prefix": "LAND ROVER RLB",
+      "count": 1
+    },
+    {
+      "prefix": "ZOTYE",
+      "count": 1
+    },
+    {
+      "prefix": "LAND ROVER PRF",
+      "count": 1
+    },
+    {
+      "prefix": "LAND ROVER RFM",
+      "count": 1
+    },
+    {
+      "prefix": "HYUNDAI SB",
+      "count": 1
+    },
+    {
+      "prefix": "LAND ROVER TDR",
+      "count": 1
+    },
+    {
+      "prefix": "JAGUAR JD",
+      "count": 1
+    },
+    {
+      "prefix": "MITSUBISHI MN",
+      "count": 1
+    },
+    {
+      "prefix": "VAZ",
+      "count": 1
+    },
+    {
+      "prefix": "GAZ",
+      "count": 1
+    },
+    {
+      "prefix": "SCANIA",
+      "count": 1
+    },
+    {
+      "prefix": "FOTON",
+      "count": 1
+    },
+    {
+      "prefix": "KOMATSU",
+      "count": 1
+    },
+    {
+      "prefix": "HYUNDAI MT",
+      "count": 1
+    },
+    {
+      "prefix": "JAGUAR JLM",
+      "count": 1
+    }
+  ]
+}

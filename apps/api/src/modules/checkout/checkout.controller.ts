@@ -25,6 +25,11 @@ class CheckoutDto {
   shippingAddress!: Record<string, unknown>;
 }
 
+class ShippingQuoteDto {
+  @IsString()
+  country!: string;
+}
+
 @Controller('checkout')
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
@@ -58,6 +63,15 @@ export class CheckoutController {
   }
 
   /** Authenticated checkout → Stripe hosted Checkout Session. */
+  @Post(':cartId/shipping-quote')
+  @UseGuards(JwtAuthGuard)
+  shippingQuote(
+    @Param('cartId') cartId: string,
+    @Body() body: ShippingQuoteDto,
+  ) {
+    return this.checkoutService.quoteShipping(cartId, body.country);
+  }
+
   @Post(':cartId')
   @UseGuards(JwtAuthGuard)
   async checkout(

@@ -39,3 +39,6 @@ certbot/
 # Misc
 .DS_Store
 *.pem
+
+# Scraper checkpoints and run reports
+.scraper-state/

@@ -1,0 +1,1219 @@
+{
+  "headers": [
+    "Height",
+    "Reference",
+    "Description",
+    "Stock (Sharjah)",
+    "Stock (Jebel Ali)",
+    "OEM",
+    "Price",
+    "Net Weight",
+    "Gross weight",
+    "Length",
+    "Width"
+  ],
+  "dataRows": 18519,
+  "blankCounts": [
+    {
+      "header": "Height",
+      "blanks": 0
+    },
+    {
+      "header": "Reference",
+      "blanks": 0
+    },
+    {
+      "header": "Description",
+      "blanks": 0
+    },
+    {
+      "header": "Stock (Sharjah)",
+      "blanks": 0
+    },
+    {
+      "header": "Stock (Jebel Ali)",
+      "blanks": 0
+    },
+    {
+      "header": "OEM",
+      "blanks": 0
+    },
+    {
+      "header": "Price",
+      "blanks": 0
+    },
+    {
+      "header": "Net Weight",
+      "blanks": 0
+    },
+    {
+      "header": "Gross weight",
+      "blanks": 0
+    },
+    {
+      "header": "Length",
+      "blanks": 0
+    },
+    {
+      "header": "Width",
+      "blanks": 0
+    }
+  ],
+  "distinctNormalizedReferences": 18519,
+  "duplicateReferenceGroups": 0,
+  "duplicateReferenceRows": 0,
+  "duplicateReferenceExamples": [],
+  "stockSharjah": {
+    "count": 18519,
+    "min": 0,
+    "p25": 2,
+    "median": 5,
+    "p75": 14,
+    "max": 734,
+    "mean": 13.81732274960851
+  },
+  "stockJebelAli": {
+    "count": 18519,
+    "min": 0,
+    "p25": 2,
+    "median": 24,
+    "p75": 90,
+    "max": 21902,
+    "mean": 101.44035855067769
+  },
+  "price": {
+    "count": 18519,
+    "min": 0.15,
+    "p25": 10.39,
+    "median": 22.97,
+    "p75": 50.68,
+    "max": 735.16,
+    "mean": 41.167480965494875
+  },
+  "netWeight": {
+    "count": 18519,
+    "min": 0,
+    "p25": 0.111,
+    "median": 0.346,
+    "p75": 1.1709999999999998,
+    "max": 20.35,
+    "mean": 0.90296711485502
+  },
+  "grossWeight": {
+    "count": 18519,
+    "min": 0,
+    "p25": 0.131,
+    "median": 0.376,
+    "p75": 1.242,
+    "max": 25.44,
+    "mean": 0.9616839462174013
+  },
+  "height": {
+    "count": 18519,
+    "min": 2,
+    "p25": 36,
+    "median": 50,
+    "p75": 80,
+    "max": 330,
+    "mean": 59.523246395593716
+  },
+  "length": {
+    "count": 18519,
+    "min": 12,
+    "p25": 70,
+    "median": 123,
+    "p75": 200,
+    "max": 2200,
+    "mean": 166.91619417895134
+  },
+  "width": {
+    "count": 18519,
+    "min": 8,
+    "p25": 52,
+    "median": 77,
+    "p75": 105,
+    "max": 1000,
+    "mean": 91.18418921108051
+  },
+  "zeroStock": {
+    "sharjah": 2913,
+    "jebelAli": 3819,
+    "bothWarehouses": 2286,
+    "positiveAnyWarehouse": 16233
+  },
+  "invalidOrNonPositive": {
+    "price": 0,
+    "netWeight": 12,
+    "grossWeight": 9,
+    "height": 0,
+    "length": 0,
+    "width": 0
+  },
+  "oemReferences": {
+    "tokenCount": 93542,
+    "parsedCount": 88811,
+    "unparsedCount": 4731,
+    "distinctCanonicalMakes": 43,
+    "makeCounts": [
+      {
+        "value": "Toyota",
+        "count": 13005
+      },
+      {
+        "value": "Nissan",
+        "count": 10581
+      },
+      {
+        "value": "Hyundai",
+        "count": 7571
+      },
+      {
+        "value": "Ford",
+        "count": 6982
+      },
+      {
+        "value": "Honda",
+        "count": 6016
+      },
+      {
+        "value": "Mazda",
+        "count": 4593
+      },
+      {
+        "value": "Mitsubishi",
+        "count": 4196
+      },
+      {
+        "value": "General Motors",
+        "count": 4125
+      },
+      {
+        "value": "Kia",
+        "count": 3968
+      },
+      {
+        "value": "Mercedes-Benz",
+        "count": 3391
+      },
+      {
+        "value": "Chrysler",
+        "count": 2844
+      },
+      {
+        "value": "BMW",
+        "count": 2517
+      },
+      {
+        "value": "Alfa Romeo",
+        "count": 2437
+      },
+      {
+        "value": "Suzuki",
+        "count": 2019
+      },
+      {
+        "value": "Citroen",
+        "count": 1627
+      },
+      {
+        "value": "Renault",
+        "count": 1367
+      },
+      {
+        "value": "Subaru",
+        "count": 1350
+      },
+      {
+        "value": "Land Rover",
+        "count": 1222
+      },
+      {
+        "value": "Daihatsu",
+        "count": 1015
+      },
+      {
+        "value": "Volvo",
+        "count": 924
+      },
+      {
+        "value": "Fiat",
+        "count": 917
+      },
+      {
+        "value": "Opel",
+        "count": 760
+      },
+      {
+        "value": "Chery",
+        "count": 758
+      },
+      {
+        "value": "Peugeot",
+        "count": 731
+      },
+      {
+        "value": "SsangYong",
+        "count": 613
+      },
+      {
+        "value": "Lancia",
+        "count": 543
+      },
+      {
+        "value": "Geely",
+        "count": 523
+      },
+      {
+        "value": "Changan",
+        "count": 486
+      },
+      {
+        "value": "Great Wall",
+        "count": 456
+      },
+      {
+        "value": "Porsche",
+        "count": 385
+      },
+      {
+        "value": "Isuzu",
+        "count": 228
+      },
+      {
+        "value": "Jaguar",
+        "count": 190
+      },
+      {
+        "value": "Lada",
+        "count": 186
+      },
+      {
+        "value": "Tesla",
+        "count": 135
+      },
+      {
+        "value": "Daewoo",
+        "count": 46
+      },
+      {
+        "value": "MINI",
+        "count": 35
+      },
+      {
+        "value": "JAC",
+        "count": 22
+      },
+      {
+        "value": "Saab",
+        "count": 14
+      },
+      {
+        "value": "MAN",
+        "count": 10
+      },
+      {
+        "value": "Dongfeng",
+        "count": 8
+      },
+      {
+        "value": "Chevrolet",
+        "count": 6
+      },
+      {
+        "value": "Jeep",
+        "count": 5
+      },
+      {
+        "value": "FAW",
+        "count": 4
+      }
+    ],
+    "referencesPerRow": {
+      "count": 18519,
+      "min": 1,
+      "p25": 2,
+      "median": 4,
+      "p75": 9,
+      "max": 10,
+      "mean": 5.051136670446568
+    },
+    "makesPerRow": {
+      "count": 18519,
+      "min": 0,
+      "p25": 1,
+      "median": 1,
+      "p75": 2,
+      "max": 10,
+      "mean": 1.4118472919704088
+    },
+    "rowsWithMultipleReferences": 15430,
+    "rowsWithMultipleMakes": 5640,
+    "rowsWithNoOemText": 0,
+    "unparsedExamples": [
+      {
+        "raw": "LIFAN L3501102",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7E0498202",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "SAMSUNG 48450-31010",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 2H0407021B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 2H0407022B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1Q0615426B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 3AA615426",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 3AA615426A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 3AA615426B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7PP145276",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 199 867",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 199 867 A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 199 867 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0199867P",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 199 867 Q",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 199 867 R",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 3C0199867B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 3C0199867C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 2H0407151A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 2H0407152A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0501611Q",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 598 611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5Q0598611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5QM501611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5QM598611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5WA501611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5WA501611C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5WA501611D",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0 598 611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0 598 611 A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0 501 529 C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0 501 529 D",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0 505 397",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7H0 401 611 D",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7H0 401 611E",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7H0 401 611 H",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7H0 498 611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0 498 611",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0598103",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0598103V",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0598103X",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0 407 305 A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0 407 305 F",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0407311C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0 498 099 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0 498 099 C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4A0 498 099 J",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 895 407 305 A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7L0 399 249 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4B3407151C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4B3407151K",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4B3407155A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4D0407151P",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4D0407155P",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4D0407693E",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4D0407694E",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4E0407693F",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4E0407693M",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4E0407693N",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AC",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AF",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AJ",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AK",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 411 303AM",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AP",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AQ",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303AS",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303BH",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0411303BJ",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0407621E",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 498 621",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 2K0 498 621",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5K0 498 621 A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5Q0407621B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 5Q0407621C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0 498 625",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0 498 625 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0 598 625",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 8V0598625B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0422803A",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0 422 803 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0422803C",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0 422 803 H",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0 422 804 B",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0 422 804 H",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "LIFAN SA35002",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0412249",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 357412249",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "SAMSUNG 42217-52000",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "SAMSUNG 37401-31015",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 7B0412347",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 505 311 AA",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 505 311 AB",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0505311H",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0 505 311 S",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "SAMSUNG 31301-31010",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0407283AE",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1J0498201L",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 1K0498201D",
+        "make": null,
+        "number": null
+      },
+      {
+        "raw": "VAG 4E0498201",
+        "make": null,
+        "number": null
+      }
+    ]
+  },
+  "grossLessThanNetRows": [
+    {
+      "rowNumber": 11124,
+      "net": 0.64,
+      "gross": 0.29,
+      "reference": "GYAB-005"
+    },
+    {
+      "rowNumber": 12443,
+      "net": 0.485,
+      "gross": 0,
+      "reference": "FDAB-086Z"
+    },
+    {
+      "rowNumber": 13134,
+      "net": 0.33,
+      "gross": 0.312,
+      "reference": "34117-003"
+    },
+    {
+      "rowNumber": 13188,
+      "net": 0.098,
+      "gross": 0.047,
+      "reference": "21606-014"
+    },
+    {
+      "rowNumber": 13725,
+      "net": 1.251,
+      "gross": 1.23,
+      "reference": "2196-TTG"
+    },
+    {
+      "rowNumber": 14574,
+      "net": 0.223,
+      "gross": 0.186,
+      "reference": "01603-008"
+    },
+    {
+      "rowNumber": 15734,
+      "net": 0.018,
+      "gross": 0.002,
+      "reference": "88430-142015C"
+    },
+    {
+      "rowNumber": 18135,
+      "net": 0.76,
+      "gross": 0.708,
+      "reference": "1590-SQRF4J20"
+    }
+  ],
+  "examplesByReference": {
+    "MZAB-124": [
+      {
+        "rowNumber": 10,
+        "values": [
+          "64",
+          "MZAB-124",
+          "bushing, rear trailing arm",
+          "33",
+          "232",
+          "FORD BT4Z-5500-B, FORD BT4Z-5500-C, MAZDA TD11-28-200C, MAZDA TD11-28-250C, MAZDA TD13-28-200C, MAZDA TD13-28-250C",
+          "23.47",
+          "0.447",
+          "0.466",
+          "64",
+          "64"
+        ],
+        "parsedOem": [
+          {
+            "raw": "FORD BT4Z-5500-B",
+            "make": "Ford",
+            "number": "BT4Z-5500-B",
+            "normalizedNumber": "BT4Z5500B"
+          },
+          {
+            "raw": "FORD BT4Z-5500-C",
+            "make": "Ford",
+            "number": "BT4Z-5500-C",
+            "normalizedNumber": "BT4Z5500C"
+          },
+          {
+            "raw": "MAZDA TD11-28-200C",
+            "make": "Mazda",
+            "number": "TD11-28-200C",
+            "normalizedNumber": "TD1128200C"
+          },
+          {
+            "raw": "MAZDA TD11-28-250C",
+            "make": "Mazda",
+            "number": "TD11-28-250C",
+            "normalizedNumber": "TD1128250C"
+          },
+          {
+            "raw": "MAZDA TD13-28-200C",
+            "make": "Mazda",
+            "number": "TD13-28-200C",
+            "normalizedNumber": "TD1328200C"
+          },
+          {
+            "raw": "MAZDA TD13-28-250C",
+            "make": "Mazda",
+            "number": "TD13-28-250C",
+            "normalizedNumber": "TD1328250C"
+          }
+        ]
+      }
+    ],
+    "0282-F15R": [
+      {
+        "rowNumber": 2,
+        "values": [
+          "125",
+          "0282-F15R",
+          "rear wheel hub",
+          "3",
+          "8",
+          "NISSAN 43202-1KA0A, NISSAN 43202-BA60A",
+          "135",
+          "3.450",
+          "3.665",
+          "146",
+          "146"
+        ],
+        "parsedOem": [
+          {
+            "raw": "NISSAN 43202-1KA0A",
+            "make": "Nissan",
+            "number": "43202-1KA0A",
+            "normalizedNumber": "432021KA0A"
+          },
+          {
+            "raw": "NISSAN 43202-BA60A",
+            "make": "Nissan",
+            "number": "43202-BA60A",
+            "normalizedNumber": "43202BA60A"
+          }
+        ]
+      }
+    ],
+    "2101-CA2R": [
+      {
+        "rowNumber": 7,
+        "values": [
+          "45",
+          "2101-CA2R",
+          "pad kit, disc brake, rear - kit (including bolts, with anti-rattle spring)",
+          "4",
+          "10",
+          "FORD 1 439 867, FORD 1 459 408, FORD 1 477 803, FORD 1 566 234, FORD 1 682 005, FORD 1 756 395, FORD 1917249, FORD 1917250, FORD 6G91-2M008-GF, LAND ROVER LR 003655",
+          "12.71",
+          "0.815",
+          "0.855",
+          "95",
+          "85"
+        ],
+        "parsedOem": [
+          {
+            "raw": "FORD 1 439 867",
+            "make": "Ford",
+            "number": "1 439 867",
+            "normalizedNumber": "1439867"
+          },
+          {
+            "raw": "FORD 1 459 408",
+            "make": "Ford",
+            "number": "1 459 408",
+            "normalizedNumber": "1459408"
+          },
+          {
+            "raw": "FORD 1 477 803",
+            "make": "Ford",
+            "number": "1 477 803",
+            "normalizedNumber": "1477803"
+          },
+          {
+            "raw": "FORD 1 566 234",
+            "make": "Ford",
+            "number": "1 566 234",
+            "normalizedNumber": "1566234"
+          },
+          {
+            "raw": "FORD 1 682 005",
+            "make": "Ford",
+            "number": "1 682 005",
+            "normalizedNumber": "1682005"
+          },
+          {
+            "raw": "FORD 1 756 395",
+            "make": "Ford",
+            "number": "1 756 395",
+            "normalizedNumber": "1756395"
+          },
+          {
+            "raw": "FORD 1917249",
+            "make": "Ford",
+            "number": "1917249",
+            "normalizedNumber": "1917249"
+          },
+          {
+            "raw": "FORD 1917250",
+            "make": "Ford",
+            "number": "1917250",
+            "normalizedNumber": "1917250"
+          },
+          {
+            "raw": "FORD 6G91-2M008-GF",
+            "make": "Ford",
+            "number": "6G91-2M008-GF",
+            "normalizedNumber": "6G912M008GF"
+          },
+          {
+            "raw": "LAND ROVER LR 003655",
+            "make": "Land Rover",
+            "number": "LR 003655",
+            "normalizedNumber": "LR003655"
+          }
+        ]
+      }
+    ],
+    "KSB-PICF": [
+      {
+        "rowNumber": 4,
+        "values": [
+          "41",
+          "KSB-PICF",
+          "front stabilizer bar bush d21.5",
+          "0",
+          "0",
+          "HYUNDAI 54812-07100, KIA 54812-07100",
+          "2.31",
+          "0.044",
+          "0.056",
+          "45",
+          "44"
+        ],
+        "parsedOem": [
+          {
+            "raw": "HYUNDAI 54812-07100",
+            "make": "Hyundai",
+            "number": "54812-07100",
+            "normalizedNumber": "5481207100"
+          },
+          {
+            "raw": "KIA 54812-07100",
+            "make": "Kia",
+            "number": "54812-07100",
+            "normalizedNumber": "5481207100"
+          }
+        ]
+      }
+    ],
+    "FDAB-035": [
+      {
+        "rowNumber": 5,
+        "values": [
+          "60",
+          "FDAB-035",
+          "front shock absorber bushing",
+          "20",
+          "79",
+          "FORD 4L3Z-18124-EA, FORD 5L3Z-18124-AA, FORD 6L3Z-18124-AE, FORD 6L3Z-18124-AG, FORD 6L3Z-18124-AH, FORD 6L3Z-18124-CF, FORD 6L3Z-18124-CG, FORD 6L3Z-18124-CH, FORD 6L3Z-18124-L, FORD 6L3Z-18124-LC",
+          "14.41",
+          "0.484",
+          "0.502",
+          "63",
+          "63"
+        ],
+        "parsedOem": [
+          {
+            "raw": "FORD 4L3Z-18124-EA",
+            "make": "Ford",
+            "number": "4L3Z-18124-EA",
+            "normalizedNumber": "4L3Z18124EA"
+          },
+          {
+            "raw": "FORD 5L3Z-18124-AA",
+            "make": "Ford",
+            "number": "5L3Z-18124-AA",
+            "normalizedNumber": "5L3Z18124AA"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-AE",
+            "make": "Ford",
+            "number": "6L3Z-18124-AE",
+            "normalizedNumber": "6L3Z18124AE"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-AG",
+            "make": "Ford",
+            "number": "6L3Z-18124-AG",
+            "normalizedNumber": "6L3Z18124AG"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-AH",
+            "make": "Ford",
+            "number": "6L3Z-18124-AH",
+            "normalizedNumber": "6L3Z18124AH"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-CF",
+            "make": "Ford",
+            "number": "6L3Z-18124-CF",
+            "normalizedNumber": "6L3Z18124CF"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-CG",
+            "make": "Ford",
+            "number": "6L3Z-18124-CG",
+            "normalizedNumber": "6L3Z18124CG"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-CH",
+            "make": "Ford",
+            "number": "6L3Z-18124-CH",
+            "normalizedNumber": "6L3Z18124CH"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-L",
+            "make": "Ford",
+            "number": "6L3Z-18124-L",
+            "normalizedNumber": "6L3Z18124L"
+          },
+          {
+            "raw": "FORD 6L3Z-18124-LC",
+            "make": "Ford",
+            "number": "6L3Z-18124-LC",
+            "normalizedNumber": "6L3Z18124LC"
+          }
+        ]
+      }
+    ],
+    "MM-N43ARR": [
+      {
+        "rowNumber": 6,
+        "values": [
+          "70",
+          "MM-N43ARR",
+          "rear engine mount at",
+          "4",
+          "25",
+          "CHRYSLER MB581311, MITSUBISHI MB581311",
+          "37.15",
+          "0.810",
+          "0.893",
+          "140",
+          "110"
+        ],
+        "parsedOem": [
+          {
+            "raw": "CHRYSLER MB581311",
+            "make": "Chrysler",
+            "number": "MB581311",
+            "normalizedNumber": "MB581311"
+          },
+          {
+            "raw": "MITSUBISHI MB581311",
+            "make": "Mitsubishi",
+            "number": "MB581311",
+            "normalizedNumber": "MB581311"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -27,6 +27,29 @@ type CompatRow = {
 
 const MVL_MARKETS = ['DE', 'UK', 'AU', 'US'] as const;
 
+/** Maps human-readable listing-pipeline field names → camelCase keys. */
+const FIELD_TO_KEY: Record<string, string> = {
+  'Brand': 'brandType',
+  'MPN': 'mpn',
+  'OE Number': 'oeNumber',
+  'OE Numbers': 'OE_numbers',
+  'Condition': 'condition',
+  'Brand Type': 'brandType',
+  'Warranty': 'warranty',
+  'Placement': 'placementOnVehicle',
+  'Position': 'position',
+  'Material': 'material',
+  'Color': 'color',
+  'Part Type': 'partType',
+  'Surface Finish': 'surfaceFinish',
+  'Country of Origin': 'countryOfOrigin',
+  'Category Type': 'categoryType',
+  'Features': 'features',
+  'Fitment Type': 'fitmentType',
+  'Compatible Vehicles': 'compatibleVehicles',
+  'Vehicle System': 'vehicleSystem',
+};
+
 @Controller('search')
 export class SearchController {
   constructor(
@@ -474,8 +497,51 @@ export class SearchController {
       }));
     }
 
+    // Normalize itemSpecifics: the listing-pipeline stores an array of
+    // { field, value } objects, but the enrich-itemspecifics script and the
+    // frontend both expect a flat object keyed by camelCase property name.
+    // Merge both representations so the PDP always renders correctly.
+    const rawIs = (part as any).itemSpecifics;
+    let normalizedItemSpecifics: Record<string, unknown> | null = null;
+    let normalizedPosition = (part as any).position ?? null;
+    let normalizedVehicleSystem = (part as any).vehicleSystem ?? null;
+    let normalizedMaterial = (part as any).material ?? null;
+
+    if (Array.isArray(rawIs)) {
+      // Listing-pipeline array format: [{ field, value, ... }]
+      const map: Record<string, unknown> = {};
+      for (const entry of rawIs) {
+        if (entry && typeof entry.field === 'string' && entry.value != null) {
+          // Map human-readable field names to camelCase keys the frontend expects
+          const key =
+            FIELD_TO_KEY[entry.field] ||
+            entry.field.charAt(0).toLowerCase() + entry.field.slice(1);
+          map[key] = entry.value;
+        }
+      }
+      normalizedItemSpecifics = Object.keys(map).length > 0 ? map : null;
+    } else if (rawIs && typeof rawIs === 'object') {
+      // Already flat object format (enrich-itemspecifics script)
+      normalizedItemSpecifics = rawIs as Record<string, unknown>;
+    }
+
+    // Backfill standalone columns from normalized itemSpecifics
+    if (!normalizedPosition && normalizedItemSpecifics?.position) {
+      normalizedPosition = String(normalizedItemSpecifics.position);
+    }
+    if (!normalizedVehicleSystem && normalizedItemSpecifics?.vehicleSystem) {
+      normalizedVehicleSystem = String(normalizedItemSpecifics.vehicleSystem);
+    }
+    if (!normalizedMaterial && normalizedItemSpecifics?.material) {
+      normalizedMaterial = String(normalizedItemSpecifics.material);
+    }
+
     return {
       ...partWithOffers,
+      itemSpecifics: normalizedItemSpecifics,
+      position: normalizedPosition,
+      vehicleSystem: normalizedVehicleSystem,
+      material: normalizedMaterial,
       // Strip stored compatibility from the FEBEST live path so the client
       // never treats DB cache as authoritative for these parts.
       compatibility: mvlVerifiedTable,
