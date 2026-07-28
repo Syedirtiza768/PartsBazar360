@@ -19,7 +19,9 @@ import { useCart, type CartItem } from "@/lib/cart-context";
 import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
-import { formatPrice, humanize } from "@/lib/format";
+import { humanize } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
+import { SETTLEMENT_CURRENCY } from "@/lib/currency";
 import { CartLineFitment } from "@/components/CartLineFitment";
 import { storeOrder } from "@/lib/order-history";
 
@@ -125,9 +127,14 @@ function SummaryCard({
   shippingQuote: ShippingQuote | null;
   shippingLoading: boolean;
 }) {
+  const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <h2 className="text-base font-bold text-slate-900">Order summary</h2>
+      <p className="mt-1 text-xs text-graphite-600">
+        Showing {displayCurrency}. Stripe charges in {settlementCurrency}.
+      </p>
       <ul className="mt-3 space-y-2.5">
         {items.map((item) => (
           <li key={item.id} className="flex justify-between gap-3 text-sm">
@@ -135,7 +142,7 @@ function SummaryCard({
               {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
             </span>
             <span className="price shrink-0 text-sm">
-              {formatPrice(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
+              {format(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
             </span>
           </li>
         ))}
@@ -143,7 +150,7 @@ function SummaryCard({
       <dl className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
         <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Subtotal</dt>
-          <dd className="price text-sm">{formatPrice(subtotal, currency)}</dd>
+          <dd className="price text-sm">{format(subtotal, currency)}</dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Shipping</dt>
@@ -151,7 +158,7 @@ function SummaryCard({
             {shippingLoading
               ? "Calculating…"
               : shippingQuote
-                ? formatPrice(shippingQuote.shippingTotal, shippingQuote.currency)
+                ? format(shippingQuote.shippingTotal, shippingQuote.currency || SETTLEMENT_CURRENCY)
                 : "Enter country to estimate"}
           </dd>
         </div>
@@ -159,14 +166,14 @@ function SummaryCard({
           <div className="flex justify-between gap-3 border-t border-slate-100 pt-2">
             <dt className="font-semibold text-slate-900">Estimated total</dt>
             <dd className="price text-sm">
-              {formatPrice(shippingQuote.totalAmount, shippingQuote.currency)}
+              {format(shippingQuote.totalAmount, shippingQuote.currency || SETTLEMENT_CURRENCY)}
             </dd>
           </div>
         )}
       </dl>
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-        EMX shipping is quoted per seller shipment using the destination country and parcel weight.
+        Shipping is quoted in AED. Converted amounts above are estimates for browsing.
       </p>
     </div>
   );
@@ -177,6 +184,7 @@ export default function CheckoutPage() {
   const { cart, subtotal, refresh } = useCart();
   const { activeVehicle, ready: garageReady } = useGarage();
   const { user, ready: authReady, isAuthenticated, authHeaders } = useAuth();
+  const { format, settlementCurrency } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -513,7 +521,7 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                       <span className="price shrink-0 text-sm">
-                        {formatPrice(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
+                        {format(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
                       </span>
                     </li>
                   ))}
@@ -593,7 +601,7 @@ export default function CheckoutPage() {
                         {!quote.matchedCountry ? " (average fallback rate)" : ""}
                       </span>
                       <span className="price shrink-0">
-                        {formatPrice(quote.amount, shippingQuote.currency)}
+                        {format(quote.amount, shippingQuote.currency)}
                       </span>
                     </li>
                   ))}
@@ -614,19 +622,19 @@ export default function CheckoutPage() {
                 {/* The full label runs to three lines in a 288px button, so
                     phones get the amount and desktops get the full sentence. */}
                 <span className="sm:hidden">
-                  Pay {formatPrice(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
+                  Pay {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
                 </span>
                 <span className="hidden sm:inline">
                   Pay with Stripe —{" "}
-                  {formatPrice(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
+                  {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
                 </span>
               </Button>
             </div>
 
             <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
               <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              You&apos;ll be redirected to Stripe Checkout. Card details stay with Stripe; sellers ship
-              after payment is confirmed.
+              You&apos;ll be redirected to Stripe Checkout. Card details stay with Stripe; payment is
+              charged in {settlementCurrency}. Display currency conversions are estimates only.
             </p>
           </div>
         )}

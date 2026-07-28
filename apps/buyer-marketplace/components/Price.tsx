@@ -1,5 +1,7 @@
+"use client";
+
 import { cn } from "@repo/ui/cn";
-import { formatPrice } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
 
 const SIZES = {
   sm: "text-sm",
@@ -22,10 +24,12 @@ export function Price({
   from?: boolean;
   className?: string;
 }) {
+  const { format } = useCurrency();
+
   return (
     <span className={cn("inline-flex items-baseline gap-1", className)}>
       {from && <span className="text-xs font-normal text-graphite-600">From</span>}
-      <span className={cn("price", SIZES[size])}>{formatPrice(amount, currency)}</span>
+      <span className={cn("price", SIZES[size])}>{format(amount, currency)}</span>
     </span>
   );
 }

@@ -31,8 +31,9 @@ import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { useWatchlist } from "@/lib/watchlist-context";
 import { useAuth } from "@/lib/auth-context";
 import { clearRecentSearches, getRecentSearches, pushRecentSearch } from "@/lib/recent";
-import { formatPrice } from "@/lib/format";
 import { useSearchSuggestions } from "@/lib/use-search-suggestions";
+import { useCurrency } from "@/lib/currency-context";
+import { CurrencySwitcher } from "@/components/CurrencySwitcher";
 import type { Facet } from "@/lib/types";
 
 const IMG_PROXY = process.env.NEXT_PUBLIC_IMG_PROXY_BASE || "/img-proxy/";
@@ -70,6 +71,7 @@ function Highlight({ text, q }: { text: string; q: string }) {
 function SearchBox({ categories }: { categories: Facet[] }) {
   const router = useRouter();
   const searchId = useId();
+  const { format } = useCurrency();
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -342,7 +344,7 @@ function SearchBox({ categories }: { categories: Facet[] }) {
                     </span>
                     {part.minPrice != null && (
                       <span className="shrink-0 text-sm font-bold text-graphite-950">
-                        {formatPrice(part.minPrice, part.currency)}
+                        {format(part.minPrice, part.currency)}
                       </span>
                     )}
                   </button>
@@ -593,6 +595,7 @@ export function Header({ categories }: { categories: Facet[] }) {
               Fitment evidence shown on every listing
             </p>
             <nav className="flex items-center gap-5" aria-label="Utility navigation">
+              <CurrencySwitcher compact />
               <Link href="/account/purchases" className="hover:text-brand-200">Purchases</Link>
               <Link href="/account/messages" className="hover:text-brand-200">Messages</Link>
               <Link href="/support" className="hover:text-brand-200">Help</Link>
@@ -696,6 +699,13 @@ export function Header({ categories }: { categories: Facet[] }) {
           <p className="font-display text-xl font-black uppercase text-graphite-950">PartsBazar360</p>
         </div>
         <div className="px-4 py-4">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-stone-300 bg-white px-3 py-2.5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-graphite-600">Display currency</p>
+              <p className="mt-0.5 text-[11px] text-graphite-600">Checkout is still charged in AED</p>
+            </div>
+            <CurrencySwitcher />
+          </div>
           <p className="eyebrow mb-2">Shop &amp; account</p>
           {mobileLinks.map(([href, label]) => (
             <Link

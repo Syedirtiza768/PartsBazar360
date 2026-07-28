@@ -6,6 +6,7 @@ import { GarageProvider } from "@/lib/garage-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { WatchlistProvider } from "@/lib/watchlist-context";
 import { AuthProvider } from "@/lib/auth-context";
+import { CurrencyProvider } from "@/lib/currency-context";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { INTERNAL_API_URL } from "@/lib/api";
@@ -168,17 +169,19 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">Skip to marketplace content</a>
         <ToastProvider>
           <AuthProvider>
-            <GarageProvider>
-              <WatchlistProvider>
-                <CartProvider>
-                  <Header categories={categories} />
-                  <main id="main-content" className="flex-1">
-                    {children}
-                  </main>
-                  <Footer />
-                </CartProvider>
-              </WatchlistProvider>
-            </GarageProvider>
+            <CurrencyProvider>
+              <GarageProvider>
+                <WatchlistProvider>
+                  <CartProvider>
+                    <Header categories={categories} />
+                    <main id="main-content" className="flex-1">
+                      {children}
+                    </main>
+                    <Footer />
+                  </CartProvider>
+                </WatchlistProvider>
+              </GarageProvider>
+            </CurrencyProvider>
           </AuthProvider>
         </ToastProvider>
       </body>

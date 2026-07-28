@@ -11,7 +11,7 @@ import {
 } from "@repo/ui/icons";
 import { Spinner } from "@repo/ui/spinner";
 import { pushRecentSearch, getRecentSearches } from "@/lib/recent";
-import { formatPrice } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
 import { useSearchSuggestions } from "@/lib/use-search-suggestions";
 
 const IMG_PROXY = process.env.NEXT_PUBLIC_IMG_PROXY_BASE || "/img-proxy/";
@@ -48,6 +48,7 @@ function Highlight({ text, q }: { text: string; q: string }) {
 
 export function HeroSearch() {
   const router = useRouter();
+  const { format } = useCurrency();
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -302,7 +303,7 @@ export function HeroSearch() {
                     </span>
                     {part.minPrice != null && (
                       <span className="shrink-0 text-sm font-bold text-graphite-950">
-                        {formatPrice(part.minPrice, part.currency)}
+                        {format(part.minPrice, part.currency)}
                       </span>
                     )}
                   </button>

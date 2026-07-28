@@ -14,13 +14,15 @@ import {
   ShieldCheckIcon,
 } from "@repo/ui/icons";
 import { useCart, type CartItem } from "@/lib/cart-context";
-import { formatPrice, humanize } from "@/lib/format";
+import { humanize } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
 import { PartImage } from "@/components/PartImage";
 import { QuantityStepper } from "@/components/QuantityStepper";
 import { CartLineFitment } from "@/components/CartLineFitment";
 
 function CartLine({ item }: { item: CartItem }) {
   const { updateQuantity, removeItem, loading } = useCart();
+  const { format } = useCurrency();
   const part = item.sellerOffer.canonicalPart;
   const image = part?.imageUrls?.[0];
 
@@ -52,7 +54,7 @@ function CartLine({ item }: { item: CartItem }) {
             </div>
           </div>
           <p className="price shrink-0 text-base">
-            {formatPrice(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
+            {format(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}
           </p>
         </div>
 
@@ -83,6 +85,7 @@ function CartLine({ item }: { item: CartItem }) {
 
 export default function CartPage() {
   const { cart, subtotal, itemCount, loading } = useCart();
+  const { format, settlementCurrency } = useCurrency();
   const router = useRouter();
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
@@ -176,7 +179,7 @@ export default function CartPage() {
                   <dt className="min-w-0 text-graphite-600">
                     Subtotal ({itemCount} item{itemCount === 1 ? "" : "s"})
                   </dt>
-                  <dd className="price">{formatPrice(subtotal, currency)}</dd>
+                  <dd className="price">{format(subtotal, currency)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-graphite-600">Shipping</dt>
@@ -184,11 +187,12 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between gap-3 border-t border-slate-100 pt-2.5 text-base">
                   <dt className="font-semibold text-slate-900">Estimated total</dt>
-                  <dd className="price">{formatPrice(subtotal, currency)}</dd>
+                  <dd className="price">{format(subtotal, currency)}</dd>
                 </div>
               </dl>
               <p className="mt-2 text-xs leading-relaxed text-graphite-600">
                 Weight-based shipping is added per seller shipment on the next step.
+                Checkout is charged in {settlementCurrency}.
               </p>
               <Button
                 fullWidth
@@ -235,7 +239,7 @@ export default function CartPage() {
               <p className="text-xs text-graphite-600">
                 {itemCount} item{itemCount === 1 ? "" : "s"} · shipping at checkout
               </p>
-              <p className="price text-lg leading-tight">{formatPrice(subtotal, currency)}</p>
+              <p className="price text-lg leading-tight">{format(subtotal, currency)}</p>
             </div>
             <Button
               className="shrink-0"

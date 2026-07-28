@@ -21,9 +21,10 @@ import { cn } from "@repo/ui/cn";
 import { useCart } from "@/lib/cart-context";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { useToast } from "@/lib/toast-context";
+import { useCurrency } from "@/lib/currency-context";
 import { fitmentForConfig, FITMENT_COPY } from "@/lib/fitment";
 import { pushRecentlyViewed } from "@/lib/recent";
-import { formatPrice, humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
+import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
 import { WatchlistButton } from "./WatchlistButton";
@@ -180,6 +181,7 @@ function OfferRow({
 }) {
   const { addToCart, loading } = useCart();
   const { push } = useToast();
+  const { format } = useCurrency();
   const router = useRouter();
   const [adding, setAdding] = useState(false);
 
@@ -249,7 +251,7 @@ function OfferRow({
             <SourceBadge partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
           </div>
         </div>
-        <p className="price shrink-0 text-lg sm:text-xl">{formatPrice(offer.price, offer.currency)}</p>
+        <p className="price shrink-0 text-lg sm:text-xl">{format(offer.price, offer.currency)}</p>
       </div>
 
       {offer.inventory && offer.inventory.length > 0 && (
@@ -320,6 +322,7 @@ function OfferRow({
 export function BuyBox({ part }: { part: Part }) {
   const offers = useMemo(() => buyerVisibleOffers(part.offers), [part.offers]);
   const best = offers[0];
+  const { format } = useCurrency();
   const partType = part.partType || best?.partType || (part.partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
   const identityLabel = partType === "AFTERMARKET" ? "Aftermarket brand" : partType === "SALVAGE_OEM" ? "Original make" : "Genuine vehicle make";
 
@@ -403,7 +406,7 @@ export function BuyBox({ part }: { part: Part }) {
         <div className="space-y-3">
           {offers.length > 1 && (
             <p className="text-sm font-semibold text-slate-900">
-              {offers.length} offers from {formatPrice(best!.price, best!.currency)}
+              {offers.length} offers from {format(best!.price, best!.currency)}
             </p>
           )}
           {offers.map((offer, i) => (
@@ -449,6 +452,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
   const best = offers[0];
   const { addToCart } = useCart();
   const { push } = useToast();
+  const { format } = useCurrency();
   const [adding, setAdding] = useState(false);
 
   if (!best) return null;
@@ -475,7 +479,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
     <div className="fixed inset-x-0 bottom-0 z-sticky border-t border-slate-200 bg-white/95 gutter pb-safe-b-3 pt-3 shadow-top-bar backdrop-blur lg:hidden">
       <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="price text-lg leading-tight">{formatPrice(best.price, best.currency)}</p>
+          <p className="price text-lg leading-tight">{format(best.price, best.currency)}</p>
           <p className="truncate text-xs text-graphite-600">
             {humanize(best.condition || best.qualityTier)} ·{" "}
             {best.seller?.name || best.sellerName || "Marketplace seller"}
