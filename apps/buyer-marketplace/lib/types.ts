@@ -209,11 +209,24 @@ export interface SalvageUnit {
   } | null;
 }
 
+export interface BrowseFacets {
+  brands: Facet[];
+  categories: Facet[];
+  makes: Facet[];
+  partTypes: Facet[];
+}
+
 export interface BrowseResponse {
   items: Part[];
   total: number;
+  /** 'eq' = exact count; 'gte' = at least (only when a result window is hit). */
+  totalRelation?: "eq" | "gte";
   page: number;
   limit: number;
+  /** Highest page reachable by offset pagination (result window / page size). */
+  maxPage?: number;
+  /** Post-filter facets scoped to the active search/filters — consistent counts. */
+  facets?: BrowseFacets;
 }
 
 export interface Facet {
@@ -225,4 +238,5 @@ export interface FacetsResponse {
   brands: Facet[];
   categories: Facet[];
   makes: Facet[];
+  partTypes: Facet[];
 }

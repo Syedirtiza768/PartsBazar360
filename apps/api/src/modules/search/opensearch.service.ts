@@ -3,17 +3,192 @@ import { Client } from '@opensearch-project/opensearch';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 import { sanitizeSearchItem } from './buyer-visible-offers.util';
 
+export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
+
+export interface BrowseFacets {
+  brands: Array<{ name: string; count: number }>;
+  categories: Array<{ name: string; count: number }>;
+  makes: Array<{ name: string; count: number }>;
+  partTypes: Array<{ name: string; count: number }>;
+}
+
+export interface BrowseResult {
+  items: any[];
+  total: number;
+  /** 'eq' = exact count; 'gte' = at least (only when a result window is hit). */
+  totalRelation: 'eq' | 'gte';
+  page: number;
+  limit: number;
+  /** Highest page reachable by offset pagination (result window / page size). */
+  maxPage: number;
+  facets: BrowseFacets;
+}
+
+/** Coerce a query param (string | string[] | comma-list) into a de-duplicated string[]. */
+function asArray(value: string | string[] | undefined | null): string[] {
+  if (!value) return [];
+  const list = Array.isArray(value) ? value : String(value).split(',');
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    const v = String(raw ?? '').trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
 @Injectable()
 export class OpenSearchService implements OnModuleInit {
   private readonly logger = new Logger(OpenSearchService.name);
-  private client: Client;
+  private client!: Client;
   private readonly INDEX_NAME = 'canonical_parts';
+  /**
+   * OpenSearch caps `from + size` at `index.max_result_window` (default 10_000).
+   * Without raising it, deep pages throw and the buyer cannot reach listings
+   * past ~page 416 (24/page). Raised here so the full active catalog is
+   * reachable; tuned via env for very large catalogs. Above this ceiling,
+   * deep pages return empty gracefully (cursor-based retrieval is the
+   * documented Stage-7 path for >100k catalogs).
+   */
+  private readonly maxResultWindow = Math.max(
+    10000,
+    parseInt(process.env.OPENSEARCH_MAX_RESULT_WINDOW || '100000', 10) || 100000,
+  );
 
   onModuleInit() {
     this.client = new Client({
       node: process.env.OPENSEARCH_URL || 'http://localhost:9200',
     });
     this.logger.log('OpenSearch Service initialized');
+    // Make the index self-managing + raise the result window without blocking
+    // startup. track_total_hits makes accurate totals work immediately; the
+    // window raise (deep-page reach) applies within seconds of boot.
+    void this.ensureIndex().catch((err) =>
+      this.logger.warn(`ensureIndex failed: ${err?.message || err}`),
+    );
+  }
+
+  /**
+   * Make the app own its index schema instead of relying on a one-off script.
+   * - Creates the index with explicit settings + mapping if absent.
+   * - Raises `index.max_result_window` on an existing index (the 10k cap fix).
+   * - Best-effort adds fields the legacy manual mapping omitted.
+   * All steps are idempotent and individually fault-tolerant so a partial
+   * failure never blocks search.
+   */
+  private async ensureIndex(): Promise<void> {
+    const index = this.INDEX_NAME;
+    let exists = false;
+    try {
+      const r = await this.client.indices.exists({ index });
+      // opensearch-js v3 returns an ApiResponse whose body is the boolean;
+      // older returns return the boolean directly.
+      exists = Boolean((r as any)?.body ?? r);
+    } catch (err: any) {
+      this.logger.warn(`ensureIndex: exists check failed: ${err?.message || err}`);
+    }
+
+    if (!exists) {
+      try {
+        await this.client.indices.create({
+          index,
+          body: {
+            settings: {
+              number_of_shards: 1,
+              number_of_replicas: 0,
+              max_result_window: this.maxResultWindow,
+            },
+            mappings: { properties: this.indexMapping() },
+          },
+        });
+        this.logger.log(
+          `Created index ${index} (max_result_window=${this.maxResultWindow})`,
+        );
+        return;
+      } catch (err: any) {
+        // Race: another replica created it between our check and create.
+        this.logger.warn(`ensureIndex: create failed: ${err?.message || err}`);
+      }
+    }
+
+    // Raise the window on an existing index. This is the operative fix for
+    // "go beyond 10,000 listings". Dynamic setting; safe on an open index.
+    try {
+      await this.client.indices.putSettings({
+        index,
+        body: { 'index.max_result_window': this.maxResultWindow },
+      });
+      this.logger.log(
+        `Raised ${index}.max_result_window → ${this.maxResultWindow}`,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `ensureIndex: could not raise max_result_window: ${err?.message || err}`,
+      );
+    }
+
+    // Best-effort: declare fields the legacy manual mapping omitted so they
+    // get proper types instead of dynamic guesses. Non-fatal — a conflict on
+    // an existing field just logs and is ignored.
+    try {
+      await this.client.indices.putMapping({
+        index,
+        body: {
+          properties: {
+            fitmentConfidence: { type: 'float' },
+            listingUrl: { type: 'keyword', index: false },
+            ebayItemId: { type: 'keyword' },
+          },
+        },
+      });
+    } catch (err: any) {
+      this.logger.debug(
+        `ensureIndex: mapping enrichment skipped: ${err?.message || err}`,
+      );
+    }
+  }
+
+  /** Explicit mapping so the index is reproducible from the app, not a script. */
+  private indexMapping(): Record<string, any> {
+    return {
+      id: { type: 'keyword' },
+      title: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
+      partType: { type: 'keyword' },
+      brand: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+      manufacturerPartNumber: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
+      partNumbers: { type: 'object', enabled: false },
+      normalizedPartNumbers: { type: 'keyword' },
+      interchangePartNumbers: { type: 'keyword' },
+      category: { type: 'keyword' },
+      makes: { type: 'keyword' },
+      oeNumbers: { type: 'keyword' },
+      imageUrls: { type: 'keyword', index: false },
+      listingUrl: { type: 'keyword', index: false },
+      ebayItemId: { type: 'keyword' },
+      compatibility: { type: 'object', enabled: false },
+      partSource: { type: 'keyword' },
+      qualityTier: { type: 'keyword' },
+      fitmentStatus: { type: 'keyword' },
+      fitmentConfidence: { type: 'float' },
+      createdAt: { type: 'date' },
+      minPrice: { type: 'float' },
+      fitments: { type: 'keyword' },
+      offers: {
+        type: 'nested',
+        properties: {
+          id: { type: 'keyword' },
+          price: { type: 'float' },
+          currency: { type: 'keyword' },
+          condition: { type: 'keyword' },
+          partSource: { type: 'keyword' },
+          qualityTier: { type: 'keyword' },
+          sellerId: { type: 'keyword' },
+          sellerName: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+        },
+      },
+    };
   }
 
   async indexPart(part: any) {
@@ -203,15 +378,20 @@ export class OpenSearchService implements OnModuleInit {
   /**
    * General catalog browsing — no vehicle selection required. Powers the
    * "shop all parts" experience (and SEO-crawlable listing pages) with
-   * keyword search, brand/category filters, sorting and pagination.
+   * keyword search, multi-select brand/category/make/part-type filters,
+   * relevance ranking, sorting and server-side pagination.
+   *
+   * Facet counts are scoped to the *other* active filters (post-filter facets)
+   * so the numbers beside each option always agree with the visible result
+   * set — never the contradictory global counts the old sidebar showed.
    */
   async browseParts(opts: {
     q?: string;
-    category?: string;
-    brand?: string;
-    make?: string;
-    partType?: string;
-    sort?: 'newest' | 'price_asc' | 'price_desc';
+    category?: string | string[];
+    brand?: string | string[];
+    make?: string | string[];
+    partType?: string | string[];
+    sort?: BrowseSort;
     page?: number;
     limit?: number;
     /**
@@ -221,96 +401,176 @@ export class OpenSearchService implements OnModuleInit {
      * it off restricts matching to the part's own primary identity numbers.
      */
     includeInterchange?: boolean;
-  }) {
+  }): Promise<BrowseResult> {
     const {
       q,
-      category,
-      brand,
-      make,
-      partType,
-      sort = 'newest',
+      sort = 'relevance',
       page = 1,
       limit = 24,
       includeInterchange = true,
     } = opts;
 
-    // Named clauses (`_name`) so each hit reports *how* it matched via
-    // `matched_queries`: a hit found only through an interchange number is
-    // labelled as such rather than passed off as an exact match.
-    const should: any[] = q
-      ? [
-          {
-            multi_match: {
-              query: q,
-              fields: [
-                'title^2',
-                'brand',
-                'category',
-                'manufacturerPartNumber^2',
-                'oeNumbers',
-              ],
-              _name: 'primary',
-            },
-          },
-          {
-            term: {
-              'normalizedPartNumbers.keyword': {
-                value: normalizePartNumber(q),
-                _name: 'primary',
-              },
-            },
-          },
-        ]
-      : [];
+    const pageNum = Math.max(1, Math.floor(page || 1));
+    const size = Math.min(Math.max(1, Math.floor(limit || 24)), 200);
+    const maxPage = Math.max(1, Math.floor(this.maxResultWindow / size));
+    const hasQuery = !!(q && q.trim());
 
-    // Interchange field is absent from indexes built before the catalog
-    // normalization — matching it there simply yields no extra hits, so this
-    // is safe to ship ahead of a reindex (no behaviour change until the field
-    // is populated).
-    if (q && includeInterchange) {
+    const cats = asArray(opts.category);
+    const brands = asArray(opts.brand);
+    const makes = asArray(opts.make);
+    const partTypes = asArray(opts.partType);
+
+    // --- relevance clauses (weighted should). Exact normalized part-number
+    //     dominates (boost 60); interchange cross-reference is a strong but
+    //     secondary signal (boost 25) so it never outranks a primary match. ---
+    const should: any[] = [];
+    if (hasQuery) {
+      const qq = q!.trim();
+      should.push({
+        multi_match: {
+          query: qq,
+          fields: [
+            'title^2',
+            'brand',
+            'category',
+            'manufacturerPartNumber^3',
+            'oeNumbers^2',
+          ],
+          _name: 'primary',
+        },
+      });
       should.push({
         term: {
-          'interchangePartNumbers.keyword': {
-            value: normalizePartNumber(q),
-            _name: 'interchange',
+          'normalizedPartNumbers.keyword': {
+            value: normalizePartNumber(qq),
+            boost: 60,
+            _name: 'primary',
           },
         },
       });
+      if (includeInterchange) {
+        should.push({
+          term: {
+            'interchangePartNumbers.keyword': {
+              value: normalizePartNumber(qq),
+              boost: 25,
+              _name: 'interchange',
+            },
+          },
+        });
+      }
     }
 
-    const must: any[] = q
-      ? [{ bool: { should, minimum_should_match: 1 } }]
-      : [{ match_all: {} }];
+    const qClause = hasQuery
+      ? { bool: { should, minimum_should_match: 1 } }
+      : null;
+    const must: any[] = qClause ? [qClause] : [{ match_all: {} }];
 
-    const filter: any[] = [
+    // --- filters: AND across dimensions, OR within (terms). ---
+    const baseFilters: any[] = [
       // Browse only parts that still have at least one indexed offer.
       { exists: { field: 'offers.sellerId' } },
     ];
-    if (category) filter.push({ term: { 'category.keyword': category } });
-    if (brand) filter.push({ term: { 'brand.keyword': brand } });
-    if (make) filter.push({ term: { 'makes.keyword': make } });
-    if (partType) filter.push({ term: { 'partType.keyword': partType } });
+    if (cats.length) baseFilters.push({ terms: { 'category.keyword': cats } });
+    if (brands.length) baseFilters.push({ terms: { 'brand.keyword': brands } });
+    if (makes.length) baseFilters.push({ terms: { 'makes.keyword': makes } });
+    if (partTypes.length)
+      baseFilters.push({ terms: { 'partType.keyword': partTypes } });
 
-    const sortClause: any[] =
-      sort === 'price_asc'
-        ? [{ minPrice: { order: 'asc', missing: '_last' } }]
+    // --- sort. Relevance only means something for a keyword; a no-query
+    //     browse falls back to newest so the feed is stable, not arbitrary. ---
+    const useRelevance = sort === 'relevance' && hasQuery;
+    const sortClause: any[] = useRelevance
+      ? [{ _score: { order: 'desc' } }, { createdAt: { order: 'desc' } }]
+      : sort === 'price_asc'
+        ? [{ minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
         : sort === 'price_desc'
-          ? [{ minPrice: { order: 'desc', missing: '_last' } }]
+          ? [{ minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
           : [{ createdAt: { order: 'desc' } }];
+
+    // --- scoped facets. Each dimension aggregates over every OTHER active
+    //     filter (incl. the keyword), so counts answer "if I add this, how
+    //     many results?" rather than the global total. ---
+    const facetFilter = (exclude: string): any[] => {
+      const f: any[] = [{ exists: { field: 'offers.sellerId' } }];
+      if (exclude !== 'category' && cats.length)
+        f.push({ terms: { 'category.keyword': cats } });
+      if (exclude !== 'brand' && brands.length)
+        f.push({ terms: { 'brand.keyword': brands } });
+      if (exclude !== 'make' && makes.length)
+        f.push({ terms: { 'makes.keyword': makes } });
+      if (exclude !== 'partType' && partTypes.length)
+        f.push({ terms: { 'partType.keyword': partTypes } });
+      if (qClause) f.push(qClause);
+      return f;
+    };
+    const aggs = {
+      categories: {
+        filter: { bool: { filter: facetFilter('category') } },
+        aggs: { names: { terms: { field: 'category.keyword', size: 50 } } },
+      },
+      brands: {
+        filter: { bool: { filter: facetFilter('brand') } },
+        aggs: { names: { terms: { field: 'brand.keyword', size: 50 } } },
+      },
+      makes: {
+        filter: { bool: { filter: facetFilter('make') } },
+        aggs: { names: { terms: { field: 'makes.keyword', size: 50 } } },
+      },
+      partTypes: {
+        filter: { bool: { filter: facetFilter('partType') } },
+        aggs: { names: { terms: { field: 'partType.keyword', size: 50 } } },
+      },
+    };
+
+    // Deep-page guard: from + size must stay inside max_result_window or
+    // OpenSearch throws. Pages beyond the window return empty gracefully
+    // (the frontend caps visible page count to total/size, so this is a
+    // safety net against hand-edited URLs, not a normal path).
+    const from = (pageNum - 1) * size;
+    if (from + size > this.maxResultWindow) {
+      return {
+        items: [],
+        total: 0,
+        totalRelation: 'eq',
+        page: pageNum,
+        limit: size,
+        maxPage,
+        facets: emptyFacets(),
+      };
+    }
 
     try {
       const response = await this.client.search({
         index: this.INDEX_NAME,
         body: {
-          from: (page - 1) * limit,
-          size: limit,
-          query: { bool: { must, filter } },
+          from,
+          size,
+          track_total_hits: true,
+          query: { bool: { must, filter: baseFilters } },
           sort: sortClause,
-        },
+          aggs,
+        } as any,
       });
 
-      const totalRaw: any = response.body.hits.total;
-      const total = typeof totalRaw === 'object' ? totalRaw.value : totalRaw;
+      const totalRaw = response.body.hits.total;
+      const total =
+        typeof totalRaw === 'number' ? totalRaw : Number(totalRaw?.value || 0);
+      const totalRelation: 'eq' | 'gte' =
+        typeof totalRaw !== 'number' && totalRaw?.relation === 'gte'
+          ? 'gte'
+          : 'eq';
+
+      const aggsBody = (response.body.aggregations ?? {}) as Record<
+        keyof BrowseFacets,
+        FacetAgg
+      >;
+      const facets: BrowseFacets = {
+        categories: bucketsOf(aggsBody.categories),
+        brands: bucketsOf(aggsBody.brands),
+        makes: bucketsOf(aggsBody.makes),
+        partTypes: bucketsOf(aggsBody.partTypes),
+      };
 
       return {
         items: response.body.hits.hits.map((hit: any) => {
@@ -329,12 +589,23 @@ export class OpenSearchService implements OnModuleInit {
           };
         }),
         total,
-        page,
-        limit,
+        totalRelation,
+        page: pageNum,
+        limit: size,
+        maxPage,
+        facets,
       };
     } catch (error) {
       this.logger.error('browseParts failed', error.stack);
-      return { items: [], total: 0, page, limit };
+      return {
+        items: [],
+        total: 0,
+        totalRelation: 'eq',
+        page: pageNum,
+        limit: size,
+        maxPage,
+        facets: emptyFacets(),
+      };
     }
   }
 
@@ -481,7 +752,7 @@ export class OpenSearchService implements OnModuleInit {
     }
   }
 
-  /** Distinct brand/category facets with counts, for building filter sidebars. */
+  /** Distinct brand/category/make/part-type facets with counts, for the homepage. */
   async getFacets() {
     try {
       const response = await this.client.search({
@@ -492,28 +763,44 @@ export class OpenSearchService implements OnModuleInit {
             brands: { terms: { field: 'brand.keyword', size: 50 } },
             categories: { terms: { field: 'category.keyword', size: 50 } },
             makes: { terms: { field: 'makes.keyword', size: 50 } },
+            partTypes: { terms: { field: 'partType.keyword', size: 50 } },
           },
         },
       });
 
-      const aggs: any = response.body.aggregations;
+      const aggs = (response.body.aggregations ?? {}) as {
+        brands: FacetAgg;
+        categories: FacetAgg;
+        makes: FacetAgg;
+        partTypes: FacetAgg;
+      };
       return {
-        brands: (aggs?.brands?.buckets || []).map((b: any) => ({
-          name: b.key,
-          count: b.doc_count,
-        })),
-        categories: (aggs?.categories?.buckets || []).map((b: any) => ({
-          name: b.key,
-          count: b.doc_count,
-        })),
-        makes: (aggs?.makes?.buckets || []).map((b: any) => ({
-          name: b.key,
-          count: b.doc_count,
-        })),
+        brands: bucketsOf(aggs.brands),
+        categories: bucketsOf(aggs.categories),
+        makes: bucketsOf(aggs.makes),
+        partTypes: bucketsOf(aggs.partTypes),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
-      return { brands: [], categories: [], makes: [] };
+      return { brands: [], categories: [], makes: [], partTypes: [] };
     }
   }
+}
+
+function emptyFacets(): BrowseFacets {
+  return { brands: [], categories: [], makes: [], partTypes: [] };
+}
+
+/** Shape of a scoped `filter + terms` aggregation bucket list. */
+type FacetAgg = {
+  names?: { buckets?: Array<{ key: string; doc_count: number }> };
+};
+
+function bucketsOf(
+  agg: FacetAgg | undefined,
+): Array<{ name: string; count: number }> {
+  return (agg?.names?.buckets ?? []).map((b) => ({
+    name: b.key,
+    count: b.doc_count,
+  }));
 }

@@ -17,6 +17,25 @@ function pageWindow(current: number, total: number): Array<number | "…"> {
   return out;
 }
 
+function DoubleChevron({ side }: { side: "left" | "right" }) {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      {side === "left" ? (
+        <path d="M11 6l-6 6 6 6M19 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="M13 6l6 6-6 6M5 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
 export function Pagination({
   page,
   totalPages,
@@ -28,11 +47,31 @@ export function Pagination({
 }) {
   if (totalPages <= 1) return null;
 
+  // Show first/last jump buttons only when they are not already adjacent, so
+  // they never clutter the controls near the edges of the result set.
+  const showFirst = page > 3;
+  const showLast = page < totalPages - 2;
+
   const itemBase =
     "flex h-11 min-w-11 items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors";
 
   return (
     <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-1.5">
+      <span className="sr-only">
+        Page {page} of {totalPages}
+      </span>
+
+      {showFirst && (
+        <Link
+          href={hrefFor(1)}
+          rel="nofollow"
+          className={cn(itemBase, "border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50")}
+          aria-label="First page"
+        >
+          <DoubleChevron side="left" />
+        </Link>
+      )}
+
       {page > 1 ? (
         <Link
           href={hrefFor(page - 1)}
@@ -88,6 +127,17 @@ export function Pagination({
         <span className={cn(itemBase, "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300")} aria-hidden="true">
           <ChevronRightIcon className="h-4 w-4" />
         </span>
+      )}
+
+      {showLast && (
+        <Link
+          href={hrefFor(totalPages)}
+          rel="nofollow"
+          className={cn(itemBase, "border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50")}
+          aria-label="Last page"
+        >
+          <DoubleChevron side="right" />
+        </Link>
       )}
     </nav>
   );

@@ -10,7 +10,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { createReadStream } from 'fs';
-import { OpenSearchService } from './opensearch.service';
+import { OpenSearchService, type BrowseSort } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
 import { MvlOeCatalogService } from './mvl-oe-catalog.service';
@@ -89,9 +89,11 @@ export class SearchController {
     @Query('brand') brand?: string,
     @Query('make') make?: string,
     @Query('partType') partType?: string,
-    @Query('sort') sort?: 'newest' | 'price_asc' | 'price_desc',
+    @Query('sort') sort?: BrowseSort,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    // Page-size selector (24/48/72). Alias of `limit`; the buyer UI sends this.
+    @Query('pageSize') pageSize?: string,
     // Interchange search is on unless explicitly disabled (?includeInterchange=false),
     // so a superseded part number resolves by default.
     @Query('includeInterchange') includeInterchange?: string,
@@ -123,6 +125,12 @@ export class SearchController {
       };
     }
 
+    // `pageSize` (24/48/72 selector) and `limit` (programmatic) are aliases.
+    const limitNum = pageSize
+      ? Math.min(parseInt(pageSize, 10), 200)
+      : limit
+        ? Math.min(parseInt(limit, 10), 200)
+        : 24;
     const result = await this.searchService.browseParts({
       q,
       category,
@@ -131,7 +139,7 @@ export class SearchController {
       partType,
       sort,
       page: page ? parseInt(page, 10) : 1,
-      limit: limit ? Math.min(parseInt(limit, 10), 200) : 24,
+      limit: Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24,
       includeInterchange: includeInterchange !== 'false',
     });
     const visible = sanitizeSearchItems(result.items || []);

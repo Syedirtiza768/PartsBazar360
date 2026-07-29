@@ -7,18 +7,26 @@ import { INTERNAL_API_URL } from "@/lib/api";
 import { NOINDEX_ROBOTS, searchCanonical } from "@/lib/seo";
 import { ProductCard } from "@/components/ProductCard";
 import { SortSelect } from "@/components/SortSelect";
+import { PageSizeSelect } from "@/components/PageSizeSelect";
 import { Pagination } from "@/components/Pagination";
 import { VehicleModeBanner } from "@/components/VehicleModeBanner";
 import { FilterDrawer } from "@/components/FilterDrawer";
 import {
   FilterSections,
   ActiveFilterChips,
+  countActiveFilters,
   buildHref,
   type SearchParamsShape,
 } from "@/components/FilterSidebar";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
-const PAGE_SIZE = 24;
+const DEFAULT_PAGE_SIZE = 24;
+const ALLOWED_PAGE_SIZES = [24, 48, 72] as const;
+
+function resolvePageSize(value?: string): number {
+  const n = value ? parseInt(value, 10) : DEFAULT_PAGE_SIZE;
+  return (ALLOWED_PAGE_SIZES as readonly number[]).includes(n) ? n : DEFAULT_PAGE_SIZE;
+}
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -28,8 +36,9 @@ interface SearchPageProps {
     brand?: string;
     make?: string;
     partType?: string;
-    sort?: "newest" | "price_asc" | "price_desc";
+    sort?: "relevance" | "newest" | "price_asc" | "price_desc";
     page?: string;
+    pageSize?: string;
     includeInterchange?: string;
   }>;
 }
@@ -49,7 +58,7 @@ async function getResults(
   if (params.page) qs.set("page", params.page);
   // Only send when the buyer opted out — the API defaults interchange on.
   if (params.includeInterchange === "false") qs.set("includeInterchange", "false");
-  qs.set("limit", String(PAGE_SIZE));
+  qs.set("pageSize", String(resolvePageSize(params.pageSize)));
 
   try {
     // Anonymous catalog browse is safe to cache briefly. Fitment / vehicle
@@ -67,19 +76,6 @@ async function getResults(
   }
 }
 
-async function getFacets(): Promise<FacetsResponse> {
-  try {
-    const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
-      next: { revalidate: 300 },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return { brands: [], categories: [], makes: [] };
-    return res.json();
-  } catch {
-    return { brands: [], categories: [], makes: [] };
-  }
-}
-
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   const params = await searchParams;
   const parts: string[] = [];
@@ -90,16 +86,21 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   const isHub = Boolean(params.category || params.brand) && !params.q && !params.vehicleConfigId;
   const isAllParts = !params.category && !params.brand && !params.q && !params.vehicleConfigId;
   const pageNum = Math.max(1, params.page ? parseInt(params.page, 10) || 1 : 1);
+  const isPriceSort = params.sort === "price_asc" || params.sort === "price_desc";
+  const isPageSizeVariant =
+    params.pageSize && resolvePageSize(params.pageSize) !== DEFAULT_PAGE_SIZE;
 
-  // Index category/brand hubs and the main catalog. Keep vehicle fitment,
-  // free-text search, sort variants, multi-filter combos, and deep pagination
+  // Index category/brand hubs and the main catalog (relevance/newest are the
+  // canonical sorts). Keep vehicle fitment, free-text search, price-sort
+  // variants, multi-filter combos, page-size variants, and deep pagination
   // out of the index to protect crawl budget.
   const shouldNoIndex =
     Boolean(params.vehicleConfigId) ||
     Boolean(params.q) ||
-    Boolean(params.sort && params.sort !== "newest") ||
+    isPriceSort ||
     Boolean(params.partType) ||
     Boolean(params.includeInterchange === "false") ||
+    Boolean(isPageSizeVariant) ||
     (Boolean(params.category) && Boolean(params.brand)) ||
     pageNum > 1;
 
@@ -146,15 +147,27 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const isFitmentMode = Boolean(params.vehicleConfigId);
   const page = Math.max(1, params.page ? parseInt(params.page, 10) || 1 : 1);
-  const sort = params.sort || "newest";
+  const pageSize = resolvePageSize(params.pageSize);
+  const hasQuery = Boolean(params.q);
+  // Relevance is the default for a keyword search; a no-query browse defaults
+  // to newest so the feed order is stable rather than score-arbitrary.
+  const sort = params.sort || (hasQuery ? "relevance" : "newest");
 
-  const [resultsRaw, facets] = await Promise.all([getResults(params), getFacets()]);
+  const results = await getResults(params);
+
+  // Browse returns post-filter facets scoped to the active filters, so counts
+  // always agree with the visible result set (the old sidebar's global counts
+  // were contradictory). Fitment mode returns no facets.
+  const facets: FacetsResponse =
+    results?.facets ?? { brands: [], categories: [], makes: [], partTypes: [] };
 
   // Both browse and fitment search are server-paginated via the API.
-  const results = resultsRaw;
   let totalPages = 1;
-  if (resultsRaw) {
-    totalPages = Math.max(1, Math.ceil(resultsRaw.total / (resultsRaw.limit || PAGE_SIZE)));
+  if (results) {
+    const raw = Math.ceil(results.total / (results.limit || pageSize));
+    // Never link pages beyond the OpenSearch result window — they would load
+    // empty. For catalogs under the window this is a no-op.
+    totalPages = Math.max(1, Math.min(raw, results.maxPage || raw));
   }
 
   const paramsShape: SearchParamsShape = {
@@ -162,14 +175,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     q: params.q,
     category: params.category,
     brand: params.brand,
+    make: params.make,
     partType: params.partType,
     sort: params.sort,
     includeInterchange: params.includeInterchange,
+    pageSize: params.pageSize,
   };
 
-  const activeFilterCount = [params.category, params.brand, params.make, params.partType].filter(Boolean).length;
-  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0);
+  const activeFilterCount = countActiveFilters(paramsShape);
+  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0 || facets.partTypes.length > 0);
   const interchangeOff = params.includeInterchange === "false";
+  const isAtLeast = results?.totalRelation === "gte";
 
   const heading = isFitmentMode
     ? "Parts that fit your vehicle"
@@ -181,6 +197,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           ? `${params.brand} parts`
           : "Shop all parts";
 
+  const rangeStart = results && results.total > 0 ? (page - 1) * pageSize + 1 : 0;
+  const rangeEnd = results ? Math.min(page * pageSize, results.total) : 0;
+
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
       {/* Toolbar */}
@@ -191,9 +210,20 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             <p className="mt-1 text-sm text-graphite-600">
               {results === null ? (
                 "Results unavailable"
+              ) : results.total === 0 ? (
+                isFitmentMode
+                  ? "No verified-fit parts for this vehicle yet"
+                  : "No matching parts"
               ) : (
                 <>
-                  {results.total.toLocaleString()}{" "}
+                  Showing{" "}
+                  <span className="font-semibold text-slate-900">
+                    {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-slate-900">
+                    {results.total.toLocaleString()}{isAtLeast ? "+" : ""}
+                  </span>{" "}
                   {isFitmentMode ? "verified-fit " : ""}
                   {results.total === 1 ? "part" : "parts"}
                 </>
@@ -210,7 +240,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {isFitmentMode ? (
               <p className="text-sm text-graphite-600">Sorted by lowest price</p>
             ) : (
-              <SortSelect current={sort} />
+              <>
+                <SortSelect current={sort} />
+                <PageSizeSelect current={pageSize} />
+              </>
             )}
           </div>
         </div>

@@ -5,9 +5,11 @@ import type { FacetsResponse } from "@/lib/types";
 
 /**
  * Filter links styled as checkboxes — pure anchors, so filtering works
- * without JavaScript and every filtered view stays crawlable. Facet counts
- * from the backend cover a wider corpus than the browse index, so we present
- * names only (ordered by count) instead of contradictory numbers.
+ * without JavaScript and every filtered view stays crawlable. Each facet is
+ * multi-select (OR within a facet, AND across facets); counts come straight
+ * from the scoped post-filter aggregations the API returns alongside the
+ * results, so the number beside each option always agrees with the visible
+ * result set.
  */
 
 export type SearchParamsShape = Record<string, string | undefined>;
@@ -27,14 +29,54 @@ export function buildHref(
   return `/search${str ? `?${str}` : ""}`;
 }
 
+/** Parse a csv filter param into a de-duplicated value set. */
+function csvList(value: string | undefined): string[] {
+  if (!value) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(",")) {
+    const v = raw.trim();
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+function csvHas(value: string | undefined, item: string): boolean {
+  return csvList(value).includes(item);
+}
+
+/** Toggle a value in a csv filter param, returning the new csv (or undefined). */
+function toggleCsv(value: string | undefined, item: string): string | undefined {
+  const list = csvList(value);
+  const next = list.includes(item)
+    ? list.filter((v) => v !== item)
+    : [...list, item];
+  return next.length > 0 ? next.join(",") : undefined;
+}
+
+/** Total selected values across all multi-select facets (for the drawer badge). */
+export function countActiveFilters(params: SearchParamsShape): number {
+  return (
+    csvList(params.category).length +
+    csvList(params.brand).length +
+    csvList(params.make).length +
+    csvList(params.partType).length
+  );
+}
+
 function FilterOption({
   href,
   active,
   label,
+  count,
 }: {
   href: string;
   active: boolean;
   label: string;
+  count?: number;
 }) {
   return (
     <Link
@@ -57,7 +99,17 @@ function FilterOption({
       >
         {active && <CheckIcon className="h-3 w-3" strokeWidth={3} />}
       </span>
-      <span className="min-w-0 text-pretty">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-pretty">{label}</span>
+      {count != null && (
+        <span
+          className={cn(
+            "shrink-0 font-mono text-xs tabular-nums",
+            active ? "text-brand-600" : "text-graphite-500",
+          )}
+        >
+          {count.toLocaleString()}
+        </span>
+      )}
     </Link>
   );
 }
@@ -91,27 +143,87 @@ function FilterGroup({
   );
 }
 
+/** A multi-select facet group with "show more" and a per-option count. */
+function FacetGroup({
+  field,
+  title,
+  facets,
+  params,
+  defaultOpen = true,
+}: {
+  field: "category" | "brand" | "make" | "partType";
+  title: string;
+  facets: { name: string; count: number }[];
+  params: SearchParamsShape;
+  defaultOpen?: boolean;
+}) {
+  if (facets.length === 0) return null;
+  const preview = facets.slice(0, 6);
+  const rest = facets.slice(6);
+
+  return (
+    <FilterGroup title={title} defaultOpen={defaultOpen}>
+      {preview.map((f) => (
+        <FilterOption
+          key={f.name}
+          href={buildHref(params, { [field]: toggleCsv(params[field], f.name) })}
+          active={csvHas(params[field], f.name)}
+          label={f.name}
+          count={f.count}
+        />
+      ))}
+      {rest.length > 0 && (
+        <details>
+          <summary className="flex min-h-touch cursor-pointer list-none items-center px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 lg:min-h-0 [&::-webkit-details-marker]:hidden">
+            Show {rest.length} more
+          </summary>
+          <div className="space-y-0.5">
+            {rest.map((f) => (
+              <FilterOption
+                key={f.name}
+                href={buildHref(params, { [field]: toggleCsv(params[field], f.name) })}
+                active={csvHas(params[field], f.name)}
+                label={f.name}
+                count={f.count}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+    </FilterGroup>
+  );
+}
+
 export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
-  const chips: Array<{ key: string; label: string }> = [];
-  if (params.q) chips.push({ key: "q", label: `“${params.q}”` });
-  if (params.category) chips.push({ key: "category", label: params.category });
-  if (params.brand) chips.push({ key: "brand", label: params.brand });
-  if (params.make) chips.push({ key: "make", label: params.make });
-  if (params.partType) chips.push({ key: "partType", label: params.partType.replaceAll("_", " ") });
+  const chips: Array<{ field: string; value: string; label: string }> = [];
+  if (params.q) chips.push({ field: "q", value: "", label: `“${params.q}”` });
+  for (const field of ["category", "brand", "make", "partType"] as const) {
+    for (const value of csvList(params[field])) {
+      chips.push({
+        field,
+        value,
+        label: field === "partType" ? value.replaceAll("_", " ") : value,
+      });
+    }
+  }
   if (chips.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {chips.map((chip) => (
         <Link
-          key={chip.key}
-          href={buildHref(params, { [chip.key]: undefined })}
+          key={`${chip.field}:${chip.value}`}
+          href={
+            chip.field === "q"
+              ? buildHref(params, { q: undefined })
+              : buildHref(params, { [chip.field]: toggleCsv(params[chip.field], chip.value) })
+          }
           rel="nofollow"
           className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-3 pr-2 text-xs font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-100"
         >
           <span className="min-w-0 truncate">{chip.label}</span>
           <XIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="sr-only">Remove filter</span>
+          <span className="sr-only">Remove filter {chip.label}</span>
         </Link>
       ))}
       <Link
@@ -135,6 +247,7 @@ export function FilterSections({
   const categories = facets.categories ?? [];
   const brands = facets.brands ?? [];
   const makes = facets.makes ?? [];
+  const partTypes = facets.partTypes ?? [];
   // Interchange matching is on unless the buyer turned it off.
   const interchangeOn = params.includeInterchange !== "false";
 
@@ -173,121 +286,10 @@ export function FilterSections({
         </FilterGroup>
       )}
 
-      <FilterGroup title="Part type">
-        {([
-          ["GENUINE_OEM", "Genuine OEM"],
-          ["AFTERMARKET", "Aftermarket"],
-          ["SALVAGE_OEM", "Used original / salvage"],
-          ["REMANUFACTURED", "Remanufactured"],
-          ["REFURBISHED", "Refurbished"],
-        ] as const).map(([value, label]) => (
-          <FilterOption
-            key={value}
-            href={buildHref(params, { partType: params.partType === value ? undefined : value })}
-            active={params.partType === value}
-            label={label}
-          />
-        ))}
-      </FilterGroup>
-      {categories.length > 0 && (
-        <FilterGroup title="Category">
-          {params.category && (
-            <FilterOption
-              href={buildHref(params, { category: undefined })}
-              active={false}
-              label="All categories"
-            />
-          )}
-          {categories.map((cat) => (
-            <FilterOption
-              key={cat.name}
-              href={buildHref(params, {
-                category: params.category === cat.name ? undefined : cat.name,
-              })}
-              active={params.category === cat.name}
-              label={cat.name}
-            />
-          ))}
-        </FilterGroup>
-      )}
-
-      {brands.length > 0 && (
-        <FilterGroup title="Brand">
-          {params.brand && (
-            <FilterOption
-              href={buildHref(params, { brand: undefined })}
-              active={false}
-              label="All brands"
-            />
-          )}
-          {brands.slice(0, 10).map((b) => (
-            <FilterOption
-              key={b.name}
-              href={buildHref(params, { brand: params.brand === b.name ? undefined : b.name })}
-              active={params.brand === b.name}
-              label={b.name}
-            />
-          ))}
-          {brands.length > 10 && (
-            <details>
-              <summary className="flex min-h-touch cursor-pointer list-none items-center px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 lg:min-h-0 [&::-webkit-details-marker]:hidden">
-                Show all {brands.length} brands
-              </summary>
-              <div className="space-y-0.5">
-                {brands.slice(10).map((b) => (
-                  <FilterOption
-                    key={b.name}
-                    href={buildHref(params, {
-                      brand: params.brand === b.name ? undefined : b.name,
-                    })}
-                    active={params.brand === b.name}
-                    label={b.name}
-                  />
-                ))}
-              </div>
-            </details>
-          )}
-        </FilterGroup>
-      )}
-
-      {makes.length > 0 && (
-        <FilterGroup title="Vehicle Make">
-          {params.make && (
-            <FilterOption
-              href={buildHref(params, { make: undefined })}
-              active={false}
-              label="All makes"
-            />
-          )}
-          {makes.slice(0, 10).map((m) => (
-            <FilterOption
-              key={m.name}
-              href={buildHref(params, { make: params.make === m.name ? undefined : m.name })}
-              active={params.make === m.name}
-              label={m.name}
-            />
-          ))}
-          {makes.length > 10 && (
-            <details>
-              <summary className="flex min-h-touch cursor-pointer list-none items-center px-2 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 lg:min-h-0 [&::-webkit-details-marker]:hidden">
-                Show all {makes.length} makes
-              </summary>
-              <div className="space-y-0.5">
-                {makes.slice(10).map((m) => (
-                  <FilterOption
-                    key={m.name}
-                    href={buildHref(params, {
-                      make: params.make === m.name ? undefined : m.name,
-                    })}
-                    active={params.make === m.name}
-                    label={m.name}
-                  />
-                ))}
-              </div>
-            </details>
-          )}
-        </FilterGroup>
-      )}
+      <FacetGroup field="partType" title="Part type" facets={partTypes} params={params} />
+      <FacetGroup field="category" title="Category" facets={categories} params={params} />
+      <FacetGroup field="brand" title="Brand" facets={brands} params={params} />
+      <FacetGroup field="make" title="Vehicle make" facets={makes} params={params} defaultOpen={false} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 
 const OPTIONS = [
+  { value: "relevance", label: "Best match" },
   { value: "newest", label: "Newest arrivals" },
   { value: "price_asc", label: "Price: low to high" },
   { value: "price_desc", label: "Price: high to low" },
