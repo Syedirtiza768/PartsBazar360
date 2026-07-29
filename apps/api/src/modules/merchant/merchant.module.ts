@@ -10,9 +10,10 @@ import { SellerOnboardingController } from './onboarding.controller';
 import { SellerOnboardingService } from './onboarding.service';
 import { MerchantPricingController } from './pricing.controller';
 import { CatalogImportModule } from '../catalog-import/catalog-import.module';
+import { CheckoutModule } from '../checkout/checkout.module';
 
 @Module({
-  imports: [SearchModule, PricingModule, CatalogImportModule],
+  imports: [SearchModule, PricingModule, CatalogImportModule, CheckoutModule],
   controllers: [
     InventoryController,
     OrdersController,

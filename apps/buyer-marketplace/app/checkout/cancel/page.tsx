@@ -8,12 +8,17 @@ import { buttonClasses } from "@repo/ui/button";
 function CancelContent() {
   const params = useSearchParams();
   const orderId = params.get("orderId");
+  const provider = params.get("provider") === "tamara" ? "Tamara" : "Stripe";
+  const failed = params.get("reason") === "failed";
 
   return (
     <div className="mx-auto max-w-lg gutter py-12 text-center sm:py-16">
-      <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Payment cancelled</h1>
+      <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+        Payment {failed ? "couldn’t be completed" : "cancelled"}
+      </h1>
       <p className="mt-2 text-sm text-graphite-600">
-        You left Stripe Checkout before paying. Your cart may already be checked out for this attempt
+        {failed ? `${provider} could not complete this payment.` : `You left ${provider} before paying.`}{" "}
+        Your cart may already be checked out for this attempt
         {orderId ? (
           <>
             {" "}

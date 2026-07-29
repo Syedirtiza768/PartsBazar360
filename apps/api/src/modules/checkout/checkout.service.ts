@@ -12,6 +12,13 @@ import { ShippingService, type ShippingQuoteItem } from './shipping.service';
 import { parseDimensionsJson } from './billable-weight.util';
 import { resolvePartClassKey } from './part-class-weights';
 import { StripeService } from './stripe.service';
+import {
+  TamaraService,
+  type TamaraCheckoutItem,
+  type TamaraCountryCode,
+  type TamaraCurrency,
+  type TamaraWebhookPayload,
+} from './tamara.service';
 import { PrismaService } from '../../prisma.service';
 import {
   SETTLEMENT_CURRENCY,
@@ -31,29 +38,59 @@ export class CheckoutService {
     private orderService: OrderService,
     private shippingService: ShippingService,
     private stripeService: StripeService,
+    private tamaraService: TamaraService,
     private prisma: PrismaService,
   ) {}
 
   async processCheckout(
     cartId: string,
-    buyer: { buyerId: string; email: string; name?: string },
+    buyer: {
+      buyerId: string;
+      email: string;
+      name?: string;
+      phone?: string;
+    },
     shippingAddress: Record<string, unknown>,
     chargeCurrencyInput?: string | null,
+    paymentProviderInput?: 'stripe' | 'tamara',
   ) {
     if (!buyer.buyerId) {
       throw new UnauthorizedException('Sign in required to checkout');
     }
-    if (!this.stripeService.isConfigured()) {
+    const paymentProvider = paymentProviderInput || 'stripe';
+    if (
+      paymentProvider === 'stripe' &&
+      !this.stripeService.isConfigured()
+    ) {
       throw new ServiceUnavailableException(
         'Stripe is not configured. Set STRIPE_SECRET_KEY (sandbox) on the API.',
       );
     }
+    if (
+      paymentProvider === 'tamara' &&
+      !this.tamaraService.isConfigured()
+    ) {
+      throw new ServiceUnavailableException(
+        'Tamara is not configured. Set TAMARA_API_TOKEN on the API.',
+      );
+    }
 
-    const chargeCurrency = resolveChargeCurrency(chargeCurrencyInput);
     const cart = await this.cartService.getCart(cartId);
 
     if (cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
+    }
+
+    const destinationCountry = this.getDestinationCountry(shippingAddress);
+    const tamaraMarket =
+      paymentProvider === 'tamara'
+        ? this.resolveTamaraMarket(destinationCountry)
+        : null;
+    const chargeCurrency = tamaraMarket
+      ? tamaraMarket.currency
+      : resolveChargeCurrency(chargeCurrencyInput);
+    if (paymentProvider === 'tamara' && !buyer.phone?.trim()) {
+      throw new BadRequestException('Phone number is required for Tamara');
     }
 
     const dbUser = await this.prisma.user.findUnique({
@@ -73,7 +110,6 @@ export class CheckoutService {
 
     // Validate shipping before reserving stock: a reservation held by a failed
     // checkout blocks the offer until its Redis TTL expires.
-    const destinationCountry = this.getDestinationCountry(shippingAddress);
     const quotesBySeller = new Map(
       Object.entries(this.groupItemsBySeller(cart.items)).map(
         ([sellerId, items]) =>
@@ -145,11 +181,11 @@ export class CheckoutService {
       chargeCurrency,
     );
 
-    // 4. Create local payment record + Stripe Checkout Session (hosted — card never hits our servers)
+    // 4. Create the local payment record and the selected hosted checkout.
     const paymentIntent = await this.prisma.paymentIntent.create({
       data: {
         orderId: order.id,
-        provider: 'stripe',
+        provider: paymentProvider,
         amount: order.totalAmount,
         currency: order.currency,
         status: 'PENDING',
@@ -159,30 +195,68 @@ export class CheckoutService {
     const buyerAppUrl = (
       process.env.BUYER_APP_URL || 'http://localhost:3000'
     ).replace(/\/$/, '');
-    // Single line item for the order total (parts + shipping) so Stripe amount matches exactly.
-    const lineItems = [
-      {
-        name: `PartsBazar360 order (${cart.items.length} item${cart.items.length === 1 ? '' : 's'})`,
-        quantity: 1,
-        unitAmount: order.totalAmount,
-      },
-    ];
 
-    let checkoutSession;
+    let checkoutSession: { externalId: string; url: string | null };
     try {
-      checkoutSession = await this.stripeService.createCheckoutSession({
-        paymentIntentId: paymentIntent.id,
-        orderId: order.id,
-        amount: order.totalAmount,
-        currency: order.currency,
-        customerEmail: buyer.email || dbUser.email,
-        lineItems,
-        successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}`,
-      });
+      if (paymentProvider === 'tamara' && tamaraMarket) {
+        const customerName = this.splitCustomerName(
+          buyer.name || dbUser.name || 'PartsBazar Customer',
+        );
+        const session = await this.tamaraService.createCheckoutSession({
+          orderId: order.id,
+          amount: order.totalAmount,
+          shippingAmount: roundMoney(
+            Object.values(shippingTotalsBySeller).reduce(
+              (sum, amount) => sum + amount,
+              0,
+            ),
+          ),
+          currency: tamaraMarket.currency,
+          countryCode: tamaraMarket.countryCode,
+          customer: {
+            email: buyer.email || dbUser.email,
+            firstName: customerName.firstName,
+            lastName: customerName.lastName,
+            phoneNumber: buyer.phone!.trim(),
+          },
+          shippingAddress: {
+            line1: this.addressField(shippingAddress, 'line1', true)!,
+            line2: this.addressField(shippingAddress, 'line2'),
+            city: this.addressField(shippingAddress, 'city', true)!,
+            region: this.addressField(shippingAddress, 'region'),
+          },
+          items: this.toTamaraItems(pricedItems),
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
+          failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara&reason=failed`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
+        });
+        checkoutSession = {
+          externalId: session.order_id,
+          url: session.checkout_url,
+        };
+      } else {
+        // Single total line ensures Stripe's amount exactly includes shipping.
+        const session = await this.stripeService.createCheckoutSession({
+          paymentIntentId: paymentIntent.id,
+          orderId: order.id,
+          amount: order.totalAmount,
+          currency: order.currency,
+          customerEmail: buyer.email || dbUser.email,
+          lineItems: [
+            {
+              name: `PartsBazar360 order (${cart.items.length} item${cart.items.length === 1 ? '' : 's'})`,
+              quantity: 1,
+              unitAmount: order.totalAmount,
+            },
+          ],
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=stripe`,
+        });
+        checkoutSession = { externalId: session.id, url: session.url };
+      }
     } catch (err) {
       this.logger.error(
-        `Stripe Checkout Session failed for order ${order.id}`,
+        `${paymentProvider} checkout session failed for order ${order.id}`,
         err,
       );
       await this.prisma.paymentIntent.update({
@@ -194,13 +268,13 @@ export class CheckoutService {
         data: { status: 'PAYMENT_FAILED' },
       });
       throw new ServiceUnavailableException(
-        'Unable to start Stripe Checkout. Check sandbox keys and try again.',
+        `Unable to start ${paymentProvider === 'tamara' ? 'Tamara' : 'Stripe'} checkout. Please try again.`,
       );
     }
 
     await this.prisma.paymentIntent.update({
       where: { id: paymentIntent.id },
-      data: { externalId: checkoutSession.id },
+      data: { externalId: checkoutSession.externalId },
     });
 
     // 5. Deactivate Cart (clear sessionId so guest can start a fresh cart)
@@ -214,20 +288,21 @@ export class CheckoutService {
     });
 
     this.logger.log(
-      `Checkout completed for Cart ${cartId}. Order ${order.id} charged in ${chargeCurrency} → Stripe ${checkoutSession.id}`,
+      `Checkout completed for Cart ${cartId}. Order ${order.id} charged in ${chargeCurrency} via ${paymentProvider} ${checkoutSession.externalId}`,
     );
 
     return {
       order,
       paymentIntent: {
         ...paymentIntent,
-        externalId: checkoutSession.id,
+        externalId: checkoutSession.externalId,
         status: 'PENDING',
       },
       checkoutUrl: checkoutSession.url,
+      paymentProvider,
       chargeCurrency,
       settlementCurrency: SETTLEMENT_CURRENCY,
-      message: `Redirect to Stripe Checkout to complete payment in ${chargeCurrency}.`,
+      message: `Redirect to ${paymentProvider === 'tamara' ? 'Tamara' : 'Stripe'} to complete payment in ${chargeCurrency}.`,
     };
   }
 
@@ -372,6 +447,64 @@ export class CheckoutService {
     return { received: true, ignored: true };
   }
 
+  async handleTamaraWebhook(
+    body: TamaraWebhookPayload,
+    token: string | undefined,
+  ) {
+    this.tamaraService.verifyWebhookToken(token);
+    if (
+      !body?.order_id ||
+      !body.order_reference_id ||
+      !body.event_type
+    ) {
+      throw new BadRequestException('Invalid Tamara webhook payload');
+    }
+
+    const payment = await this.prisma.paymentIntent.findFirst({
+      where: {
+        orderId: body.order_reference_id,
+        provider: 'tamara',
+      },
+    });
+    if (!payment) {
+      throw new BadRequestException('Tamara payment not found');
+    }
+    if (payment.externalId && payment.externalId !== body.order_id) {
+      throw new UnauthorizedException('Tamara order does not match payment');
+    }
+
+    if (body.event_type === 'order_approved') {
+      if (payment.status !== 'SUCCEEDED') {
+        await this.tamaraService.authoriseOrder(body.order_id);
+        await this.applyPaymentStatus(
+          payment.id,
+          'SUCCEEDED',
+          body.order_id,
+        );
+      }
+      return { received: true };
+    }
+
+    if (
+      body.event_type === 'order_authorised' ||
+      body.event_type === 'order_captured'
+    ) {
+      await this.applyPaymentStatus(payment.id, 'SUCCEEDED', body.order_id);
+      return { received: true };
+    }
+
+    if (
+      body.event_type === 'order_declined' ||
+      body.event_type === 'order_expired' ||
+      body.event_type === 'order_canceled'
+    ) {
+      await this.applyPaymentStatus(payment.id, 'FAILED', body.order_id);
+      return { received: true };
+    }
+
+    return { received: true, ignored: true };
+  }
+
   private async applyPaymentStatus(
     paymentIntentId: string,
     status: 'SUCCEEDED' | 'FAILED',
@@ -414,6 +547,75 @@ export class CheckoutService {
       throw new BadRequestException('Shipping country is required');
     }
     return country;
+  }
+
+  private resolveTamaraMarket(destinationCountry: string): {
+    countryCode: TamaraCountryCode;
+    currency: TamaraCurrency;
+  } {
+    const normalized = destinationCountry
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
+    if (
+      normalized === 'ae' ||
+      normalized === 'uae' ||
+      normalized === 'unitedarabemirates'
+    ) {
+      return { countryCode: 'AE', currency: 'AED' };
+    }
+    if (
+      normalized === 'sa' ||
+      normalized === 'ksa' ||
+      normalized === 'saudiarabia'
+    ) {
+      return { countryCode: 'SA', currency: 'SAR' };
+    }
+    throw new BadRequestException(
+      'Tamara is currently available for UAE and Saudi Arabia deliveries only',
+    );
+  }
+
+  private splitCustomerName(name: string) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const firstName = parts.shift() || 'Customer';
+    return {
+      firstName,
+      lastName: parts.join(' ') || firstName,
+    };
+  }
+
+  private addressField(
+    address: Record<string, unknown>,
+    field: string,
+    required = false,
+  ): string | undefined {
+    const value =
+      typeof address[field] === 'string' ? address[field].trim() : '';
+    if (!value && required) {
+      throw new BadRequestException(`Shipping ${field} is required`);
+    }
+    return value || undefined;
+  }
+
+  private toTamaraItems(items: any[]): TamaraCheckoutItem[] {
+    return items.map((item) => {
+      const unitAmount = roundMoney(Number(item.sellerOffer.price));
+      return {
+        referenceId: String(item.sellerOfferId),
+        name:
+          item.sellerOffer.canonicalPart?.title ||
+          item.sellerOffer.sellerTitle ||
+          'Auto part',
+        sku:
+          item.sellerOffer.sellerSku ||
+          item.sellerOffer.externalOfferId ||
+          item.sellerOfferId,
+        quantity: Number(item.quantity),
+        unitAmount,
+        totalAmount: roundMoney(unitAmount * Number(item.quantity)),
+      };
+    });
   }
 
   /**

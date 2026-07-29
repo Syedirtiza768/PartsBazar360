@@ -43,6 +43,9 @@ const UUID_RE =
 export class EnrichmentProcessor extends WorkerHost {
   private readonly logger = new Logger(EnrichmentProcessor.name);
   private openRouter: OpenRouterClient | null = null;
+  /** Avoid a second RealTrack HTTP hit on every job (Nest throttle is 1000/hr). */
+  private rtBudgetCache: { remaining: number; checkedAt: number } | null = null;
+  private static readonly RT_BUDGET_TTL_MS = 5 * 60_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -62,6 +65,40 @@ export class EnrichmentProcessor extends WorkerHost {
       this.openRouter = new OpenRouterClient(process.env.OPENROUTER_API_KEY || '');
     }
     return this.openRouter;
+  }
+
+  /**
+   * Daily eBay Trading budget (≈4500). Cached so we do not spend a Nest
+   * throttle slot on GET /budget for every single part.
+   */
+  private async assertRealTrackBudget(): Promise<void> {
+    const now = Date.now();
+    if (
+      this.rtBudgetCache &&
+      now - this.rtBudgetCache.checkedAt < EnrichmentProcessor.RT_BUDGET_TTL_MS
+    ) {
+      if (this.rtBudgetCache.remaining <= 0) {
+        throw new Error('budget_exhausted');
+      }
+      return;
+    }
+
+    try {
+      const budget = await this.realTrack.fetchTradingEnrichmentBudget();
+      const remaining = Number(budget?.remaining);
+      this.rtBudgetCache = {
+        remaining: Number.isFinite(remaining) ? remaining : 1,
+        checkedAt: now,
+      };
+      if (this.rtBudgetCache.remaining <= 0) {
+        throw new Error('budget_exhausted');
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (/budget_exhausted/.test(msg)) throw err;
+      // Budget probe itself may 429 — do not block enrichment on that.
+      this.logger.debug(`Budget check skipped: ${msg}`);
+    }
   }
 
   async process(job: Job<{ partId: string; reason?: string }>) {
@@ -160,30 +197,30 @@ export class EnrichmentProcessor extends WorkerHost {
 
       let rtPayload: unknown;
       try {
-        try {
-          const budget = await this.realTrack.fetchTradingEnrichmentBudget();
-          const remaining = Number(budget?.remaining);
-          if (Number.isFinite(remaining) && remaining <= 0) {
-            await this.setStatus(partId, 'DEFERRED');
-            this.logger.warn(
-              `RealTrack enrichment budget exhausted — deferring ${partId}`,
-            );
-            return { deferred: true, reason: 'budget_exhausted' };
-          }
-        } catch (budgetErr: any) {
-          this.logger.debug(
-            `Budget check skipped: ${budgetErr?.message || budgetErr}`,
-          );
-        }
-
+        await this.assertRealTrackBudget();
         rtPayload = await this.realTrack.fetchTradingEnrichment(rtListingId);
       } catch (err: any) {
         const msg = err?.message || String(err);
-        // Endpoint not deployed yet, or rate-limited: defer rather than poison.
-        if (/404|429|503|502/.test(msg)) {
+        if (/budget_exhausted/.test(msg)) {
+          await this.setStatus(partId, 'DEFERRED');
+          this.logger.warn(
+            `RealTrack enrichment budget exhausted — deferring ${partId}`,
+          );
+          return { deferred: true, reason: 'budget_exhausted' };
+        }
+        // 404: endpoint/listing missing — don't retry forever.
+        if (/404/.test(msg)) {
           await this.setStatus(partId, 'DEFERRED');
           this.logger.warn(`RealTrack enrichment deferred for ${partId}: ${msg}`);
           return { deferred: true, reason: msg };
+        }
+        // 429/5xx: throw so BullMQ retries with backoff (silent DEFERRED
+        // burned the hourly Nest throttle by completing jobs with no work).
+        if (/429|503|502/.test(msg)) {
+          await this.setStatus(partId, 'QUEUED');
+          this.logger.warn(
+            `RealTrack rate-limited for ${partId} — will retry: ${msg}`,
+          );
         }
         throw err;
       }

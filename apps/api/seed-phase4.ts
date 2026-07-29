@@ -6,6 +6,7 @@ import { OrderService } from './src/modules/order/order.service';
 import { ReservationService } from './src/modules/inventory/reservation.service';
 import { ShippingService } from './src/modules/checkout/shipping.service';
 import { StripeService } from './src/modules/checkout/stripe.service';
+import { TamaraService } from './src/modules/checkout/tamara.service';
 
 const adapter = new PrismaPg(process.env.DATABASE_URL!);
 const prisma = new PrismaClient({ adapter } as any);
@@ -45,12 +46,14 @@ async function main() {
   const orderService = new OrderService(prisma as any);
   const shippingService = new ShippingService();
   const stripeService = new StripeService();
+  const tamaraService = new TamaraService();
   const checkoutService = new CheckoutService(
     cartService,
     reservationService,
     orderService,
     shippingService,
     stripeService,
+    tamaraService,
     prisma as any,
   );
 

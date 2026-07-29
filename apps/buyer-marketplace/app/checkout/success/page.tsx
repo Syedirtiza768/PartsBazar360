@@ -15,6 +15,7 @@ import {
 function SuccessContent() {
   const params = useSearchParams();
   const orderId = params.get("orderId");
+  const provider = params.get("provider") === "tamara" ? "Tamara" : "Stripe";
   const [order, setOrder] = useState<StoredOrder | null>(null);
 
   useEffect(() => {
@@ -33,8 +34,8 @@ function SuccessContent() {
           Payment submitted
         </h1>
         <p className="mt-2 text-graphite-600">
-          Stripe handled your payment securely. Card details never reached PartsBazar360. Sellers are
-          notified once payment is confirmed.
+          {provider} handled your payment securely. Sellers are notified once payment is confirmed
+          by the provider.
         </p>
       </div>
 

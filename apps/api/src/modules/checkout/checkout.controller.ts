@@ -5,6 +5,7 @@ import {
   Headers,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -23,11 +24,24 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CHARGE_CURRENCIES } from './currency.util';
+import type { TamaraWebhookPayload } from './tamara.service';
 
 class CheckoutDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsString()
+  @IsIn(['stripe', 'tamara'])
+  paymentProvider?: 'stripe' | 'tamara';
 
   @IsObject()
   shippingAddress!: Record<string, unknown>;
@@ -75,6 +89,19 @@ export class CheckoutController {
     return this.checkoutService.handleStripeWebhook(rawBody, signature);
   }
 
+  @Post('webhooks/tamara')
+  tamaraWebhook(
+    @Query('tamaraToken') queryToken: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: TamaraWebhookPayload,
+  ) {
+    const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+    return this.checkoutService.handleTamaraWebhook(
+      body,
+      queryToken || bearerToken,
+    );
+  }
+
   @Post('payments/:paymentIntentId/confirm')
   confirmPayment(
     @Param('paymentIntentId') paymentIntentId: string,
@@ -115,9 +142,11 @@ export class CheckoutController {
         buyerId: user.userId,
         email: user.email,
         name: body.name,
+        phone: body.phone,
       },
       body.shippingAddress,
       body.chargeCurrency,
+      body.paymentProvider,
     );
   }
 }

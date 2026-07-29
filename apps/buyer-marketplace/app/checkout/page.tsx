@@ -35,6 +35,7 @@ import {
 
 type FormState = {
   name: string;
+  phone: string;
   line1: string;
   line2: string;
   city: string;
@@ -44,6 +45,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   name: "",
+  phone: "",
   line1: "",
   line2: "",
   city: "",
@@ -55,6 +57,7 @@ const REQUIRED: Array<keyof FormState> = ["name", "line1", "city", "country"];
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
+  phone: "Mobile number",
   line1: "Address line 1",
   line2: "Address line 2",
   city: "City",
@@ -62,12 +65,29 @@ const LABELS: Record<keyof FormState, string> = {
   postalCode: "Postal code",
 };
 
-function validate(form: FormState): Partial<Record<keyof FormState, string>> {
+function validate(
+  form: FormState,
+  paymentProvider: "stripe" | "tamara",
+): Partial<Record<keyof FormState, string>> {
   const errors: Partial<Record<keyof FormState, string>> = {};
   for (const field of REQUIRED) {
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
+  if (paymentProvider === "tamara" && !form.phone.trim()) {
+    errors.phone = "Mobile number is required for Tamara.";
+  }
   return errors;
+}
+
+function tamaraMarket(country: string): { countryCode: "AE" | "SA"; currency: "AED" | "SAR" } | null {
+  const normalized = country.trim().toLowerCase().replace(/[^a-z]/g, "");
+  if (["ae", "uae", "unitedarabemirates"].includes(normalized)) {
+    return { countryCode: "AE", currency: "AED" };
+  }
+  if (["sa", "ksa", "saudiarabia"].includes(normalized)) {
+    return { countryCode: "SA", currency: "SAR" };
+  }
+  return null;
 }
 
 function Steps({ current }: { current: 1 | 2 }) {
@@ -116,6 +136,8 @@ function SummaryCard({
   shippingQuote,
   shippingLoading,
   shippingError,
+  paymentProvider,
+  chargeCurrency,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -123,14 +145,17 @@ function SummaryCard({
   shippingQuote: ShippingQuote | null;
   shippingLoading: boolean;
   shippingError?: string | null;
+  paymentProvider: "stripe" | "tamara";
+  chargeCurrency: string;
 }) {
-  const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
+  const { format, settlementCurrency } = useCurrency();
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <h2 className="text-base font-bold text-slate-900">Order summary</h2>
       <p className="mt-1 text-xs text-graphite-600">
-        Charged in {displayCurrency} via Stripe. Merchant settlement is {settlementCurrency}.
+        Charged in {chargeCurrency} via {paymentProvider === "tamara" ? "Tamara" : "Stripe"}.
+        Merchant settlement is {settlementCurrency}.
       </p>
       <ul className="mt-3 space-y-2.5">
         {items.map((item) => (
@@ -192,6 +217,7 @@ export default function CheckoutPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [confirmedFit, setConfirmedFit] = useState(false);
+  const [paymentProvider, setPaymentProvider] = useState<"stripe" | "tamara">("stripe");
   const [confirmError, setConfirmError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -199,6 +225,11 @@ export default function CheckoutPage() {
 
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
+  const selectedTamaraMarket = tamaraMarket(form.country);
+  const checkoutCurrency =
+    paymentProvider === "tamara" && selectedTamaraMarket
+      ? selectedTamaraMarket.currency
+      : displayCurrency;
 
   const {
     quote: shippingQuote,
@@ -207,7 +238,7 @@ export default function CheckoutPage() {
   } = useShippingQuote({
     cartId: cart.id,
     country: form.country,
-    currency: displayCurrency,
+    currency: checkoutCurrency,
     enabled: isAuthenticated,
     authHeaders,
   });
@@ -259,7 +290,10 @@ export default function CheckoutPage() {
 
   const goToReview = (e: FormEvent) => {
     e.preventDefault();
-    const nextErrors = validate(form);
+    const nextErrors = validate(form, paymentProvider);
+    if (paymentProvider === "tamara" && !tamaraMarket(form.country)) {
+      nextErrors.country = "Tamara is available for UAE and Saudi Arabia deliveries.";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length === 0) {
       setStep(2);
@@ -284,7 +318,9 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           name: form.name,
-          chargeCurrency: displayCurrency,
+          phone: form.phone,
+          paymentProvider,
+          chargeCurrency: checkoutCurrency,
           shippingAddress: {
             line1: form.line1,
             line2: form.line2 || undefined,
@@ -323,7 +359,7 @@ export default function CheckoutPage() {
         window.location.href = data.checkoutUrl;
         return;
       }
-      throw new Error("Stripe Checkout URL missing. Check sandbox configuration.");
+      throw new Error(`${paymentProvider === "tamara" ? "Tamara" : "Stripe"} Checkout URL is missing.`);
     } catch (err: unknown) {
       setServerError(err instanceof Error ? err.message : "Checkout failed. Please try again.");
       setSubmitting(false);
@@ -366,12 +402,49 @@ export default function CheckoutPage() {
         {step === 1 ? (
           <form onSubmit={goToReview} noValidate className="space-y-6">
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
-              <h2 className="text-base font-semibold text-slate-900">Account</h2>
+              <h2 className="text-base font-semibold text-slate-900">Contact and payment</h2>
               <p className="mt-1 text-sm text-graphite-600">
-                Signed in as <span className="font-medium text-slate-800">{user?.email}</span>. Payment
-                continues on Stripe — we never see your card details.
+                Signed in as <span className="font-medium text-slate-800">{user?.email}</span>.
+                Payment continues securely with your selected provider.
               </p>
-              <div className="mt-4">
+              <fieldset className="mt-4">
+                <legend className="text-sm font-semibold text-slate-800">Payment method</legend>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {([
+                    ["stripe", "Card", "Pay securely with Stripe"],
+                    ["tamara", "Tamara", "Split your payment with Tamara"],
+                  ] as const).map(([value, title, description]) => (
+                    <label
+                      key={value}
+                      className={cn(
+                        "flex min-h-touch cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+                        paymentProvider === value
+                          ? "border-brand-600 bg-brand-50"
+                          : "border-slate-200 bg-white hover:border-slate-300",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentProvider"
+                        value={value}
+                        checked={paymentProvider === value}
+                        onChange={() => setPaymentProvider(value)}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-900">{title}</span>
+                        <span className="mt-0.5 block text-xs text-graphite-600">{description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {paymentProvider === "tamara" && (
+                  <p className="mt-2 text-xs text-graphite-600">
+                    Available for UAE orders in AED and Saudi Arabia orders in SAR.
+                  </p>
+                )}
+              </fieldset>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <Input
                   label="Full name"
                   autoComplete="name"
@@ -379,6 +452,16 @@ export default function CheckoutPage() {
                   value={form.name}
                   onChange={setField("name")}
                   error={errors.name}
+                />
+                <Input
+                  label="Mobile number"
+                  autoComplete="tel"
+                  type="tel"
+                  required={paymentProvider === "tamara"}
+                  hint={paymentProvider === "tamara" ? "Required by Tamara" : "Optional"}
+                  value={form.phone}
+                  onChange={setField("phone")}
+                  error={errors.phone}
                 />
               </div>
             </section>
@@ -641,7 +724,7 @@ export default function CheckoutPage() {
                   Pay {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
                 </span>
                 <span className="hidden sm:inline">
-                  Pay with Stripe —{" "}
+                  Pay with {paymentProvider === "tamara" ? "Tamara" : "Stripe"} —{" "}
                   {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
                 </span>
               </Button>
@@ -649,8 +732,9 @@ export default function CheckoutPage() {
 
             <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
               <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              You&apos;ll be redirected to Stripe Checkout and pay in {displayCurrency}. Card details
-              stay with Stripe; PartsBazar360 settles in {settlementCurrency}.
+              You&apos;ll be redirected to {paymentProvider === "tamara" ? "Tamara" : "Stripe"} and
+              charged in {checkoutCurrency}. Payment details stay with the provider; PartsBazar360
+              settles in {settlementCurrency}.
             </p>
           </div>
         )}
@@ -663,6 +747,8 @@ export default function CheckoutPage() {
             shippingQuote={shippingQuote}
             shippingLoading={shippingLoading}
             shippingError={shippingError}
+            paymentProvider={paymentProvider}
+            chargeCurrency={checkoutCurrency}
           />
         </aside>
       </div>
