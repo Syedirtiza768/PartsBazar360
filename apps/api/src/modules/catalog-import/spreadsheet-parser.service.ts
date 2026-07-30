@@ -2,7 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Workbook, type CellValue } from 'exceljs';
 
 export type ImportTemplate =
-  'DXB_EXW' | 'FEBEST_AVAILABILITY' | 'DYNATRADE_STOCK' | 'GENERIC';
+  'DXB_EXW' | 'FEBEST_AVAILABILITY' | 'DYNATRADE_STOCK' |
+  'TRADE_UNION' | 'SPARCO_STOCK' | 'SPARCO_DEAD_STOCK' | 'GENERIC';
 
 export interface ParsedWorkbookRow {
   rowNumber: number;
@@ -89,6 +90,49 @@ const FIELD_ALIASES: Record<string, string> = {
   imageurls: 'imageUrls',
   images: 'imageUrls',
   picurl: 'imageUrls',
+  // Trade Union / Superior / Sparco aliases
+  oenumber: 'oemReferences',
+  oe: 'oemReferences',
+  oenum: 'oemReferences',
+  oenumbers: 'oemReferences',
+  oeno: 'oemReferences',
+  oebrandid: 'brand',
+  brandname: 'brand',
+  brandref: 'sku',
+  brandrefno: 'sku',
+  brandrefnum: 'sku',
+  brandrefnumber: 'sku',
+  manpartno: 'manufacturerPartNumber',
+  application: 'category',
+  vehicle: 'category',
+  carmake: 'category',
+  vehicletype: 'category',
+  onlineprice: 'price',
+  startprice: 'price',
+  totalonhandqty: 'quantity',
+  stockqty: 'quantity',
+  stockquantity: 'quantity',
+  totalqty: 'quantity',
+  availableqty: 'quantity',
+  origin: 'origin',
+  partno: 'manufacturerPartNumber',
+  partnbr: 'manufacturerPartNumber',
+  partnos: 'manufacturerPartNumber',
+  partcode: 'manufacturerPartNumber',
+  disc: 'description',
+  discription: 'description',
+  item: 'description',
+  srno: 'sku',
+  srnos: 'sku',
+  sno: 'sku',
+  slno: 'sku',
+  serialno: 'sku',
+  avgcost: 'price',
+  totalvalue: 'totalValue',
+  value: 'totalValue',
+  move: 'moveStatus',
+  duration: 'duration',
+  srvdate: 'serviceDate',
 };
 
 function headerKey(value: string) {
@@ -154,6 +198,36 @@ function detectTemplate(headers: string[]): ImportTemplate {
   ) {
     return 'DYNATRADE_STOCK';
   }
+  // Trade Union: SL + O.E# + Brand Ref# + BRAND + Description + APPLICATION + Online Price
+  if (
+    keys.has('sl') &&
+    (keys.has('oe') || keys.has('oenumber')) &&
+    keys.has('brand') &&
+    keys.has('application') &&
+    (keys.has('onlineprice') || keys.has('startprice'))
+  ) {
+    return 'TRADE_UNION';
+  }
+  // Sparco compiled: Part Number + Brand Name + Car Make + Price + Stock Qty
+  if (
+    keys.has('partnumber') &&
+    keys.has('brandname') &&
+    keys.has('carmake') &&
+    keys.has('price') &&
+    (keys.has('stockqty') || keys.has('quantity'))
+  ) {
+    return 'SPARCO_STOCK';
+  }
+  // Sparco raw dead stock: SR.NO + PART NO + DISCRIPTION + BRAND + QTY + COST
+  if (
+    keys.has('srno') &&
+    (keys.has('partno') || keys.has('partnumber')) &&
+    (keys.has('discription') || keys.has('description')) &&
+    keys.has('qty') &&
+    keys.has('cost')
+  ) {
+    return 'SPARCO_DEAD_STOCK';
+  }
   return 'GENERIC';
 }
 
@@ -165,6 +239,12 @@ function suggestedDefaultsFor(
   if (template === 'DXB_EXW') return { partType: 'MIXED' };
   if (template === 'DYNATRADE_STOCK')
     return { partType: 'AFTERMARKET', currency: 'AED' };
+  if (template === 'TRADE_UNION')
+    return { partType: 'AFTERMARKET', currency: 'AED' };
+  if (template === 'SPARCO_STOCK')
+    return { partType: 'USED_OEM', currency: 'AED', condition: 'USED' };
+  if (template === 'SPARCO_DEAD_STOCK')
+    return { partType: 'USED_OEM', currency: 'AED', condition: 'USED' };
   return {};
 }
 

@@ -333,9 +333,9 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.itemSpecifics?.categoryType && (
                 <SpecRow label="Category type">{part.itemSpecifics.categoryType}</SpecRow>
               )}
-              {part.itemSpecifics?.features && part.itemSpecifics.features.length > 0 && (
+              {part.itemSpecifics?.features && (Array.isArray(part.itemSpecifics.features) ? part.itemSpecifics.features.length > 0 : true) && (
                 <SpecRow label="Features">
-                  {part.itemSpecifics.features.join(', ')}
+                  {Array.isArray(part.itemSpecifics.features) ? part.itemSpecifics.features.join(', ') : part.itemSpecifics.features}
                 </SpecRow>
               )}
 

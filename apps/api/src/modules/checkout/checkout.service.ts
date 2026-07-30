@@ -27,6 +27,7 @@ import {
   roundMoney,
   type ChargeCurrency,
 } from './currency.util';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class CheckoutService {
@@ -40,6 +41,7 @@ export class CheckoutService {
     private stripeService: StripeService,
     private tamaraService: TamaraService,
     private prisma: PrismaService,
+    private emailService: EmailService,
   ) {}
 
   async processCheckout(
@@ -535,6 +537,63 @@ export class CheckoutService {
         });
       }
       return updated;
+    }).then(async (updated) => {
+      if (status === 'SUCCEEDED') {
+        void this.sendOrderConfirmationEmail(payment.orderId).catch((err) =>
+          this.logger.error(`Order confirmation email failed: ${err}`),
+        );
+      }
+      return updated;
+    });
+  }
+
+  private async sendOrderConfirmationEmail(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        sellerOrders: {
+          include: {
+            items: {
+              include: {
+                sellerOffer: {
+                  include: { canonicalPart: { select: { title: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order?.buyerId) return;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: order.buyerId },
+    });
+    if (!user?.email) return;
+
+    const items = order.sellerOrders.flatMap((so) =>
+      so.items.map((item) => ({
+        name:
+          item.sellerOffer.canonicalPart?.title ||
+          `Part ${item.sellerOfferId.slice(0, 8)}`,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+    );
+
+    const address = order.shippingAddress as Record<string, string> | null;
+    const shippingStr = address
+      ? [address.line1, address.city, address.state, address.country]
+          .filter(Boolean)
+          .join(', ')
+      : undefined;
+
+    await this.emailService.sendOrderConfirmation(user.email, {
+      orderId: order.id,
+      totalAmount: order.totalAmount,
+      currency: order.currency,
+      items,
+      shippingAddress: shippingStr,
     });
   }
 

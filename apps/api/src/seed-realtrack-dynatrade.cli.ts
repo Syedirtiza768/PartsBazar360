@@ -91,9 +91,9 @@ async function main() {
         report.spreadsheetSources.push({
           file: path.basename(dynatradePath),
           seller: superior.name,
-          jobId: job.id,
-          status: job.status,
-          report: job.report,
+          jobId: job?.id,
+          status: job?.status,
+          report: job?.report,
         });
         report.activatedSuperiorAfterDynatrade =
           await activateSuperiorInStockOffers(prisma);

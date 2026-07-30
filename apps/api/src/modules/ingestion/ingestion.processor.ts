@@ -22,10 +22,18 @@ import {
   prioritizeEbayImages,
 } from './listing-enrichment.util';
 import {
+  BUYER_MARKETPLACE_ID,
   isImportableListing,
+  isUsMotorsMarketplace,
   MARKETPLACE_CURRENCY,
   stockQuantityForImport,
 } from './listing-eligibility.util';
+
+/**
+ * Brands managed through their own dedicated supplier pipeline (spreadsheet upload).
+ * RealTrack ingestion (Salvage/Blackline) must skip these to avoid duplicates.
+ */
+const REALTRACK_EXCLUDED_BRANDS = new Set(['FEBEST']);
 import {
   extractEnglishTitle,
   looksLikeEnglishTitle,
@@ -111,6 +119,8 @@ export class IngestionProcessor extends WorkerHost {
     let skippedWrongStore = 0;
     let skippedInactiveOrZero = 0;
     let skippedNonEnglish = 0;
+    let skippedWrongMarketplace = 0;
+    let skippedExcludedBrand = 0;
     const errors: Array<{ listingId?: string; message: string }> = [];
 
     // Save initial state
@@ -130,6 +140,7 @@ export class IngestionProcessor extends WorkerHost {
           page,
           limit: Math.min(200, remaining),
           storeId: canonicalStoreId,
+          marketplaceId: BUYER_MARKETPLACE_ID,
         });
         if (result.items.length === 0) break;
         discovered += result.items.length;
@@ -141,10 +152,14 @@ export class IngestionProcessor extends WorkerHost {
               canonicalStoreId,
             );
             if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+            else if (outcome === 'skipped_wrong_marketplace')
+              skippedWrongMarketplace++;
             else if (outcome === 'skipped_inactive_or_zero_stock')
               skippedInactiveOrZero++;
             else if (outcome === 'skipped_non_english_title')
               skippedNonEnglish++;
+            else if (outcome === 'skipped_excluded_brand')
+              skippedExcludedBrand++;
             else if (outcome === 'imported') imported++;
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
@@ -164,14 +179,16 @@ export class IngestionProcessor extends WorkerHost {
           discovered: String(discovered),
           imported: String(imported),
           skippedWrongStore: String(skippedWrongStore),
+          skippedWrongMarketplace: String(skippedWrongMarketplace),
           skippedInactiveOrZero: String(skippedInactiveOrZero),
           skippedNonEnglish: String(skippedNonEnglish),
+          skippedExcludedBrand: String(skippedExcludedBrand),
           errors: String(errors.length),
           updatedAt: new Date().toISOString(),
         });
 
         this.logger.log(
-          `[${syncRunId}] ${target.name} page ${page}: imported=${imported} discovered=${discovered} skipped(inactive=${skippedInactiveOrZero}, nonEn=${skippedNonEnglish})`,
+          `[${syncRunId}] ${target.name} page ${page}: imported=${imported} discovered=${discovered} skipped(mkt=${skippedWrongMarketplace}, inactive=${skippedInactiveOrZero}, nonEn=${skippedNonEnglish}, brand=${skippedExcludedBrand})`,
         );
 
         if (discovered >= result.total || result.items.length < result.limit)
@@ -205,8 +222,10 @@ export class IngestionProcessor extends WorkerHost {
       listingsDiscovered: discovered,
       listingsImported: imported,
       skippedWrongStore,
+      skippedWrongMarketplace,
       skippedInactiveOrZero,
       skippedNonEnglish,
+      skippedExcludedBrand,
       errors,
     };
   }
@@ -223,6 +242,7 @@ export class IngestionProcessor extends WorkerHost {
         page: startPage,
         limit: 200,
         storeId: canonicalStoreId,
+        marketplaceId: BUYER_MARKETPLACE_ID,
       });
 
       if (result.items.length === 0) {
@@ -239,7 +259,9 @@ export class IngestionProcessor extends WorkerHost {
 
       let imported = 0;
       let skippedWrongStore = 0;
+      let skippedWrongMarketplace = 0;
       let skippedInactiveOrZero = 0;
+      let skippedExcludedBrand = 0;
       for (const summary of result.items) {
         try {
           // Use summary data directly — detail endpoint is unreliable
@@ -248,8 +270,12 @@ export class IngestionProcessor extends WorkerHost {
             canonicalStoreId,
           );
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
+          else if (outcome === 'skipped_wrong_marketplace')
+            skippedWrongMarketplace++;
           else if (outcome === 'skipped_inactive_or_zero_stock')
             skippedInactiveOrZero++;
+          else if (outcome === 'skipped_excluded_brand')
+            skippedExcludedBrand++;
           else if (outcome === 'imported') imported++;
         } catch (error) {
           this.logger.warn(
@@ -259,7 +285,7 @@ export class IngestionProcessor extends WorkerHost {
       }
 
       this.logger.log(
-        `Processed ${imported} listings for ${target.name} (page ${startPage}, skippedWrongStore=${skippedWrongStore}, skippedInactiveOrZero=${skippedInactiveOrZero})`,
+        `Processed ${imported} listings for ${target.name} (page ${startPage}, skippedWrongStore=${skippedWrongStore}, skippedWrongMarketplace=${skippedWrongMarketplace}, skippedInactiveOrZero=${skippedInactiveOrZero}, skippedExcludedBrand=${skippedExcludedBrand})`,
       );
       return {
         status: 'page_processed',
@@ -268,7 +294,9 @@ export class IngestionProcessor extends WorkerHost {
         page: startPage,
         count: imported,
         skippedWrongStore,
+        skippedWrongMarketplace,
         skippedInactiveOrZero,
+        skippedExcludedBrand,
         total: result.total,
       };
     } catch (error) {
@@ -280,6 +308,21 @@ export class IngestionProcessor extends WorkerHost {
   }
 
   private async syncMarketplace(marketplaceId: string, startPage: number) {
+    // Buyer catalog is eBay Motors US only — refuse other marketplace sync jobs.
+    if (
+      String(marketplaceId || '')
+        .trim()
+        .toUpperCase() !== BUYER_MARKETPLACE_ID
+    ) {
+      this.logger.warn(
+        `Refusing marketplace sync for ${marketplaceId}; only ${BUYER_MARKETPLACE_ID} is allowed`,
+      );
+      return {
+        status: 'rejected',
+        marketplaceId,
+        reason: `Only ${BUYER_MARKETPLACE_ID} is allowed`,
+      };
+    }
     try {
       const allowedStoreIds = new Set(
         REALTRACK_MARKETPLACE_SELLERS.map((s) => s.storeId!),
@@ -287,7 +330,7 @@ export class IngestionProcessor extends WorkerHost {
       const result = await this.realTrackService.fetchListings({
         page: startPage,
         limit: 200,
-        marketplaceId,
+        marketplaceId: BUYER_MARKETPLACE_ID,
       });
 
       if (result.items.length === 0) {
@@ -402,10 +445,12 @@ export class IngestionProcessor extends WorkerHost {
   ): Promise<
     | 'imported'
     | 'skipped_wrong_store'
+    | 'skipped_wrong_marketplace'
     | 'skipped_no_seller'
     | 'skipped_inactive_or_zero_stock'
     | 'skipped_non_english_title'
     | 'skipped_duplicate'
+    | 'skipped_excluded_brand'
   > {
     const listingStoreId = listing.storeId || expectedStoreId;
     if (listing.storeId && listing.storeId !== expectedStoreId) {
@@ -413,6 +458,14 @@ export class IngestionProcessor extends WorkerHost {
         `Skipping listing ${listing.id}: belongs to store ${listingStoreId}, expected ${expectedStoreId}`,
       );
       return 'skipped_wrong_store';
+    }
+
+    if (!isUsMotorsMarketplace(listing)) {
+      this.logger.warn(
+        `Skipping listing ${listing.id}: marketplace ${listing.marketplaceId || 'missing'} (need ${BUYER_MARKETPLACE_ID})`,
+      );
+      await this.deactivateOfferForListing(listing, expectedStoreId);
+      return 'skipped_wrong_marketplace';
     }
 
     if (!isImportableListing(listing)) {
@@ -424,6 +477,7 @@ export class IngestionProcessor extends WorkerHost {
     const title: string = extractEnglishTitle(listing);
     if (!looksLikeEnglishTitle(title)) {
       this.logger.warn(`Skipping listing ${listing.id}: non-English title`);
+      await this.deactivateOfferForListing(listing, expectedStoreId);
       return 'skipped_non_english_title';
     }
     const parsedVehicle = parseVehicleFromTitle(title);
@@ -431,6 +485,19 @@ export class IngestionProcessor extends WorkerHost {
     const oeNumbers = extractListingOeNumbers(listing, extractOeNumbers(title));
     const description = extractListingDescription(listing);
     const brand = extractListingBrand(listing);
+
+    // Skip FEBEST and other exempt brands — they have their own supplier pipeline.
+    // Check both the extracted brand and the raw title (brand field is often empty).
+    const brandUpper = brand?.toUpperCase().trim();
+    if (brandUpper && REALTRACK_EXCLUDED_BRANDS.has(brandUpper)) {
+      return 'skipped_excluded_brand';
+    }
+    for (const excluded of REALTRACK_EXCLUDED_BRANDS) {
+      if (title.toUpperCase().startsWith(excluded)) {
+        return 'skipped_excluded_brand';
+      }
+    }
+
     const mpn =
       (typeof listing.mpn === 'string' && listing.mpn.trim()) ||
       (typeof listing.manufacturerPartNumber === 'string' &&
@@ -447,6 +514,7 @@ export class IngestionProcessor extends WorkerHost {
         price: listing.price ? parseFloat(listing.price) : 0,
         quantity: stockQty,
         status: listing.listingStatus,
+        marketplaceId: listing.marketplaceId || BUYER_MARKETPLACE_ID,
         ebayItemId: listing.ebayItemId,
         ebayAccountId: listing.ebayAccountId,
         offerId: listing.offerId,
@@ -463,7 +531,7 @@ export class IngestionProcessor extends WorkerHost {
       create: {
         sourceListingId: listing.id,
         storeId: expectedStoreId,
-        marketplaceId: listing.marketplaceId,
+        marketplaceId: listing.marketplaceId || BUYER_MARKETPLACE_ID,
         ebayItemId: listing.ebayItemId,
         ebayAccountId: listing.ebayAccountId,
         offerId: listing.offerId,
@@ -530,6 +598,9 @@ export class IngestionProcessor extends WorkerHost {
           description: description || canonicalPart.description,
           imageUrls: combinedImages,
           listingUrl: listing.listingUrl || canonicalPart.listingUrl,
+          partType: 'SALVAGE_OEM',
+          partSource: 'OEM',
+          qualityTier: 'USED',
           compatibility:
             compatibility.length > 0
               ? (compatibility as unknown as Prisma.InputJsonValue)
@@ -551,6 +622,9 @@ export class IngestionProcessor extends WorkerHost {
           imageUrls: mergedImages,
           listingUrl: listing.listingUrl || null,
           ebayItemId: listing.ebayItemId || null,
+          partType: 'SALVAGE_OEM',
+          partSource: 'OEM',
+          qualityTier: 'USED',
           compatibility:
             compatibility.length > 0
               ? (compatibility as unknown as Prisma.InputJsonValue)
@@ -602,6 +676,9 @@ export class IngestionProcessor extends WorkerHost {
           sourceKey,
           sellerSku: listing.sku || offer.sellerSku,
           sellerTitle: title,
+          partType: 'SALVAGE_OEM',
+          partSource: 'OEM',
+          qualityTier: 'USED',
         },
       });
     } else {
@@ -623,6 +700,9 @@ export class IngestionProcessor extends WorkerHost {
           sellerSku: listing.sku || null,
           sellerTitle: title,
           status: 'ACTIVE',
+          partType: 'SALVAGE_OEM',
+          partSource: 'OEM',
+          qualityTier: 'USED',
         },
       });
     }
@@ -856,5 +936,42 @@ export class IngestionProcessor extends WorkerHost {
     }
 
     return config;
+  }
+
+  /** Hide any existing buyer offer for a non-US-Motors RealTrack listing. */
+  private async deactivateOfferForListing(
+    listing: any,
+    expectedStoreId: string,
+  ) {
+    if (!listing?.id) return;
+    const sourceKey = `rt:${expectedStoreId}:${listing.id}`;
+    const offers = await this.prisma.sellerOffer.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ externalOfferId: listing.id }, { sourceKey }],
+      },
+      select: { id: true, canonicalPartId: true },
+    });
+    if (offers.length === 0) return;
+    await this.prisma.sellerOffer.updateMany({
+      where: { id: { in: offers.map((o) => o.id) } },
+      data: { status: 'INACTIVE' },
+    });
+    for (const offer of offers) {
+      try {
+        const part = await this.prisma.canonicalPart.findUnique({
+          where: { id: offer.canonicalPartId },
+          include: {
+            offers: { include: { seller: true } },
+            partNumbers: true,
+          },
+        });
+        if (part) await this.searchService.indexPart(part);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to reindex after deactivating offer ${offer.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 }

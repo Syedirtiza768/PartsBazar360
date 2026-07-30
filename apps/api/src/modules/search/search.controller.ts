@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Header,
+  Logger,
+  OnModuleDestroy,
   Param,
   Post,
   Query,
@@ -10,6 +12,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { createReadStream } from 'fs';
+import Redis from 'ioredis';
 import { OpenSearchService, type BrowseSort } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
@@ -18,6 +21,7 @@ import { sanitizeSearchItems } from './buyer-visible-offers.util';
 import { buildPartShippingSummary } from '../checkout/part-shipping-summary.util';
 import { EnrichmentService } from '../enrichment/enrichment.service';
 import { renderInfographicSvg } from '../enrichment/infographic-renderer';
+import { renderPlaceholderSvg } from '../enrichment/placeholder-svg';
 import {
   normalizeSpec,
   type InfographicSpec,
@@ -68,14 +72,78 @@ const FIELD_TO_KEY: Record<string, string> = {
 };
 
 @Controller('search')
-export class SearchController {
+export class SearchController implements OnModuleDestroy {
+  private readonly logger = new Logger(SearchController.name);
+  private redis: Redis | null = null;
+  private redisReady = false;
+
   constructor(
     private readonly searchService: OpenSearchService,
     private readonly prisma: PrismaService,
     private readonly febestWebsite: FebestWebsiteService,
     private readonly mvlOeCatalog: MvlOeCatalogService,
     private readonly enrichment: EnrichmentService,
-  ) {}
+  ) {
+    try {
+      this.redis = new Redis({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT || 6379),
+        password: process.env.REDIS_PASSWORD || undefined,
+        db: Number(process.env.REDIS_SEARCH_CACHE_DB || 2),
+        maxRetriesPerRequest: 2,
+        retryStrategy: (times) => Math.min(times * 200, 3000),
+        lazyConnect: true,
+      });
+      this.redis
+        .connect()
+        .then(() => {
+          this.redisReady = true;
+          this.logger.log('Search result cache connected (Redis db 2)');
+        })
+        .catch((err: any) =>
+          this.logger.warn(
+            `Search cache Redis unavailable: ${err?.message || err}`,
+          ),
+        );
+    } catch {
+      this.logger.warn('Search cache Redis init failed — caching disabled');
+    }
+  }
+
+  onModuleDestroy() {
+    void this.redis?.quit();
+  }
+
+  /** Build a stable cache key from all search params. */
+  private cacheKey(prefix: string, params: Record<string, any>): string {
+    const sorted = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${Array.isArray(v) ? v.sort().join(',') : v}`)
+      .join('&');
+    return `search:${prefix}:${sorted}`;
+  }
+
+  /** Try cache; return parsed JSON or null on miss. */
+  private async cacheGet<T>(key: string): Promise<T | null> {
+    if (!this.redisReady) return null;
+    try {
+      const raw = await this.redis!.get(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Set cache with TTL (default 45s). Non-blocking. */
+  private cacheSet(key: string, value: any, ttlSec = 45): void {
+    if (!this.redisReady) return;
+    try {
+      void this.redis!.set(key, JSON.stringify(value), 'EX', ttlSec);
+    } catch {
+      /* best-effort */
+    }
+  }
 
   // Fitment-first search when a vehicleConfigId is provided; otherwise falls
   // back to a general catalog browse (keyword + brand/category filters +
@@ -101,6 +169,11 @@ export class SearchController {
     if (vehicleConfigId) {
       const pageNum = page ? parseInt(page, 10) : 1;
       const limitNum = limit ? Math.min(parseInt(limit, 10), 200) : 24;
+
+      const cacheK = this.cacheKey('fitment', { vehicleConfigId, q, page: pageNum, limit: limitNum });
+      const cached = await this.cacheGet<any>(cacheK);
+      if (cached) return cached;
+
       const result = await this.searchService.searchCompatibleParts(
         vehicleConfigId,
         q,
@@ -110,19 +183,22 @@ export class SearchController {
         },
       );
       const visible = sanitizeSearchItems(result.items);
-      const enriched =
-        await this.febestWebsite.attachImagesToSearchItems(visible);
-      // Speculative warm-up is gated inside EnrichmentService (off by default).
+      // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
+      void this.febestWebsite
+        .attachImagesToSearchItems(visible)
+        .catch(() => {});
       void this.enrichment.requestEnrichmentByIds(
-        enriched.map((item: { id?: string }) => item.id || ''),
+        visible.map((item: { id?: string }) => item.id || ''),
         { reason: 'search_results', priority: 50, limit: 3 },
       );
-      return {
-        items: enriched,
+      const response = {
+        items: visible,
         total: result.total,
         page: result.page,
         limit: result.limit,
       };
+      this.cacheSet(cacheK, response, 60);
+      return response;
     }
 
     // `pageSize` (24/48/72 selector) and `limit` (programmatic) are aliases.
@@ -131,6 +207,14 @@ export class SearchController {
       : limit
         ? Math.min(parseInt(limit, 10), 200)
         : 24;
+
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
+    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const cached = await this.cacheGet<any>(cacheK);
+    if (cached) return cached;
+
+    const t0 = Date.now();
     const result = await this.searchService.browseParts({
       q,
       category,
@@ -138,16 +222,24 @@ export class SearchController {
       make,
       partType,
       sort,
-      page: page ? parseInt(page, 10) : 1,
-      limit: Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24,
+      page: pageNum,
+      limit: resolvedLimit,
       includeInterchange: includeInterchange !== 'false',
     });
     const visible = sanitizeSearchItems(result.items || []);
-    result.items = await this.febestWebsite.attachImagesToSearchItems(visible);
+    result.items = visible;
+    // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
+    void this.febestWebsite
+      .attachImagesToSearchItems(visible)
+      .catch(() => {});
     void this.enrichment.requestEnrichmentByIds(
       (result.items || []).map((item: { id?: string }) => item.id || ''),
       { reason: 'search_results', priority: 50, limit: 3 },
     );
+    if (Date.now() - t0 > 500) {
+      this.logger.warn(`Slow browse: ${Date.now() - t0}ms q=${q || '-'} cat=${category || '-'} page=${pageNum}`);
+    }
+    this.cacheSet(cacheK, result, q ? 30 : 45);
     return result;
   }
 
@@ -672,6 +764,12 @@ export class SearchController {
       }
     }
 
+    // If no images at all, inject the placeholder SVG so the gallery shows a
+    // branded spec card instead of the camera-icon fallback.
+    if (imageUrls.length === 0) {
+      imageUrls = [`/api/search/parts/${id}/placeholder.svg`];
+    }
+
     return {
       ...partWithOffers,
       itemSpecifics: normalizedItemSpecifics,
@@ -844,9 +942,6 @@ export class SearchController {
 
     return renderInfographicSvg(spec, {
       brand: part!.brand,
-      footnote: part!.manufacturerPartNumber
-        ? `Part number ${part!.manufacturerPartNumber} · Specifications supplied by the seller`
-        : 'Specifications supplied by the seller',
     });
   }
 
@@ -866,5 +961,39 @@ export class SearchController {
     }
     const stream = createReadStream(locationDiagramFilePath(id));
     return new StreamableFile(stream);
+  }
+
+  /**
+   * Generates a branded placeholder SVG for parts without seller photos.
+   * Returns a self-contained SVG (no external deps) showing the part title,
+   * brand, MPN, category, and a "Photo coming soon" badge.
+   */
+  @Get('parts/:id/placeholder.svg')
+  @Header('Content-Type', 'image/svg+xml; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  async getPartPlaceholder(@Param('id') id: string) {
+    const part = await this.prisma.canonicalPart.findUnique({
+      where: { id },
+      select: {
+        title: true,
+        brand: true,
+        manufacturerPartNumber: true,
+        category: true,
+        qualityTier: true,
+        partSource: true,
+        itemSpecifics: true,
+      },
+    });
+    if (!part) throw new NotFoundException(`Part ${id} not found`);
+    const specifics = (part.itemSpecifics || {}) as Record<string, any>;
+    return renderPlaceholderSvg({
+      title: part.title,
+      brand: part.brand,
+      mpn: part.manufacturerPartNumber,
+      category: part.category,
+      condition: part.qualityTier || null,
+      partSource: part.partSource || null,
+      position: specifics.placementOnVehicle || null,
+    });
   }
 }

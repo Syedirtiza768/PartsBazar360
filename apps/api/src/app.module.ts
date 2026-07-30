@@ -17,6 +17,7 @@ import { CatalogImportModule } from './modules/catalog-import/catalog-import.mod
 import { AuthModule } from './modules/auth/auth.module';
 import { ListingPipelineModule } from './modules/listing-pipeline/listing-pipeline.module';
 import { EnrichmentModule } from './modules/enrichment/enrichment.module';
+import { EmailModule } from './modules/email/email.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { EnrichmentModule } from './modules/enrichment/enrichment.module';
         port: parseInt(process.env.REDIS_PORT || '6379'),
       },
     }),
+    EmailModule,
     IntegrationModule,
     IngestionModule,
     OperationsModule,

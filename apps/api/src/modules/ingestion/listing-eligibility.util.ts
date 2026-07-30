@@ -1,5 +1,17 @@
 /** Shared RealTrack listing eligibility + USD pricing helpers for marketplace sync. */
 
+/** Buyer catalog is eBay Motors US only (RealTrack / eBay Mag). */
+export const BUYER_MARKETPLACE_ID = 'EBAY_MOTORS_US';
+
+/** True when the RealTrack listing is published on eBay Motors US. */
+export function isUsMotorsMarketplace(listing: any): boolean {
+  return (
+    String(listing?.marketplaceId ?? '')
+      .trim()
+      .toUpperCase() === BUYER_MARKETPLACE_ID
+  );
+}
+
 /**
  * Returns stock quantity when the payload carries one; `null` when unknown.
  * Explicit zero is zero (not treated as missing).

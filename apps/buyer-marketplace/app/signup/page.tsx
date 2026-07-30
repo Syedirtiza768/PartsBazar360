@@ -18,6 +18,7 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
 
   useEffect(() => {
     if (ready && isAuthenticated) router.replace(next);
@@ -28,18 +29,43 @@ function SignupForm() {
     setSubmitting(true);
     setError(null);
     try {
-      await register({
+      const result = await register({
         email: email.trim(),
         password,
         name: name.trim() || undefined,
       });
-      router.replace(next);
+      setVerificationSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (verificationSent) {
+    return (
+      <div className="mx-auto max-w-md gutter py-10 sm:py-16">
+        <p className="eyebrow">Buyer account</p>
+        <h1 className="mt-2 font-display text-display-sm font-black tracking-tight text-graphite-950">
+          Check your email
+        </h1>
+        <p className="mt-2 text-sm text-graphite-600">
+          We&apos;ve sent a verification link to <strong>{email}</strong>.
+          Please check your inbox and click the link to activate your account.
+        </p>
+        <p className="mt-4 text-sm text-graphite-600">
+          Once verified, you can{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+          >
+            sign in
+          </Link>{" "}
+          and start shopping.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-md gutter py-10 sm:py-16">

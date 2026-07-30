@@ -62,10 +62,16 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
     );
   if (offers.length === 0) return null;
   const minPrice = Math.min(...offers.map((o) => Number(o.price) || Infinity));
+  const imageUrls = (item.imageUrls as string[] | undefined) || [];
+  // Inject placeholder SVG for items with no seller photos
+  if (imageUrls.length === 0 && item.id) {
+    imageUrls.push(`/api/search/parts/${item.id}/placeholder.svg`);
+  }
   return {
     ...item,
     offers,
     minPrice: Number.isFinite(minPrice) ? minPrice : (item.minPrice ?? null),
+    imageUrls,
   };
 }
 

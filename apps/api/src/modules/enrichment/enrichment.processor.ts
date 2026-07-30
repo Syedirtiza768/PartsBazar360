@@ -188,11 +188,34 @@ export class EnrichmentProcessor extends WorkerHost {
 
       const rtListingId = this.resolveRealTrackListingId(part.offers);
       if (!rtListingId) {
-        await this.setStatus(partId, 'FAILED');
-        this.logger.warn(
-          `No RealTrack listing id for ${partId} — cannot trading-enrich`,
+        // No RealTrack listing (spreadsheet import). Fall back to AI-only enrichment:
+        // generate infographic spec directly from part data if price qualifies.
+        this.logger.log(
+          `No RealTrack listing for ${partId} — attempting AI infographic only`,
         );
-        return { skipped: true, reason: 'no_realtrack_listing_id' };
+        const topPrice = part.offers?.[0]?.price ?? 0;
+        // For spreadsheet imports, always generate infographic regardless of price.
+        const infographic = this.diagramsEnabled
+          ? await this.maybeBuildInfographic(part, null)
+          : null;
+
+        await this.prisma.canonicalPart.update({
+          where: { id: partId },
+          data: {
+            ...(infographic
+              ? {
+                  infographicSpec: infographic.spec as any,
+                  infographicVersion: INFOGRAPHIC_VERSION,
+                  infographicGeneratedAt: new Date(),
+                }
+              : {}),
+            enrichmentStatus: infographic ? 'DONE' : 'DEFERRED',
+            enrichmentVersion: ENRICHMENT_VERSION,
+            enrichedAt: new Date(),
+            enrichmentSource: `ai-only${infographic ? '+infographic' : ''}`,
+          },
+        });
+        return { skipped: false, enriched: Boolean(infographic) };
       }
 
       let rtPayload: unknown;
@@ -504,7 +527,6 @@ export class EnrichmentProcessor extends WorkerHost {
     weightKg?: number | null,
   ) {
     const topPrice = part.offers[0]?.price ?? 0;
-    if (topPrice < infographicMinPriceUsd()) return null;
     if (part.infographicSpec && part.infographicVersion >= INFOGRAPHIC_VERSION) {
       return null;
     }

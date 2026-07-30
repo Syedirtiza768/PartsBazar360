@@ -4,10 +4,16 @@
 // contains the updated term list.
 //
 //   cd /app && node scripts/deactivate-nonenglish-offers.mjs
+//   DRY_RUN=1 SAMPLE=40 node scripts/deactivate-nonenglish-offers.mjs
+//
+// DRY_RUN reports what would be hidden (with a title sample) and changes nothing.
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+
+const DRY_RUN = process.env.DRY_RUN === '1';
+const SAMPLE = Number(process.env.SAMPLE || 25);
 
 async function loadLooksEnglish() {
   const candidates = [
@@ -31,20 +37,58 @@ async function main() {
 
   const offers = await prisma.sellerOffer.findMany({
     where: { status: 'ACTIVE', seller: { onboardingStatus: 'ACTIVE' } },
-    select: { id: true, canonicalPart: { select: { title: true } }, seller: { select: { name: true } } },
+    select: {
+      id: true,
+      canonicalPartId: true,
+      canonicalPart: { select: { title: true } },
+      seller: { select: { name: true } },
+    },
   });
-  let deactivated = 0;
+
   const bySeller = {};
+  const sampleTitles = [];
+  const keptSample = [];
+  const doomed = [];
+
   for (const o of offers) {
     const title = o.canonicalPart?.title || '';
-    if (!looksLikeEnglishTitle(title)) {
-      await prisma.sellerOffer.update({ where: { id: o.id }, data: { status: 'INACTIVE' } });
-      deactivated++;
-      const name = o.seller?.name || '?';
-      bySeller[name] = (bySeller[name] || 0) + 1;
+    if (looksLikeEnglishTitle(title)) {
+      if (keptSample.length < SAMPLE) keptSample.push(title);
+      continue;
+    }
+    doomed.push(o);
+    const name = o.seller?.name || '?';
+    bySeller[name] = (bySeller[name] || 0) + 1;
+    if (sampleTitles.length < SAMPLE) sampleTitles.push(title);
+  }
+
+  if (!DRY_RUN && doomed.length > 0) {
+    const CHUNK = 500;
+    for (let i = 0; i < doomed.length; i += CHUNK) {
+      const ids = doomed.slice(i, i + CHUNK).map((o) => o.id);
+      await prisma.sellerOffer.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'INACTIVE' },
+      });
     }
   }
-  console.log(JSON.stringify({ deactivated, bySeller, scanned: offers.length }, null, 2));
+
+  console.log(
+    JSON.stringify(
+      {
+        dryRun: DRY_RUN,
+        scanned: offers.length,
+        deactivated: DRY_RUN ? 0 : doomed.length,
+        wouldDeactivate: doomed.length,
+        bySeller,
+        sampleNonEnglish: sampleTitles,
+        sampleKeptEnglish: keptSample,
+      },
+      null,
+      2,
+    ),
+  );
+
   await prisma.$disconnect();
 }
 

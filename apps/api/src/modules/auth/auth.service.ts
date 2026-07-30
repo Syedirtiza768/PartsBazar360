@@ -10,6 +10,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { PrismaService } from '../../prisma.service';
+import { EmailService } from '../email/email.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
 export type AuthRole = 'BUYER' | 'SELLER' | 'ADMIN';
@@ -34,7 +35,10 @@ export interface PublicUser {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private jwtSecret() {
     return (
@@ -117,54 +121,6 @@ export class AuthService {
     };
   }
 
-  async registerBuyer(input: {
-    email: string;
-    password: string;
-    name?: string;
-  }) {
-    const email = input.email.trim().toLowerCase();
-    if (!email || !input.password || input.password.length < 8) {
-      throw new BadRequestException(
-        'Email and password (min 8 chars) are required',
-      );
-    }
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing?.passwordHash) {
-      throw new BadRequestException(
-        'An account with this email already exists',
-      );
-    }
-
-    const user = existing
-      ? await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            passwordHash: this.hashPassword(input.password),
-            name: input.name || existing.name,
-            role: existing.role === 'ADMIN' ? 'ADMIN' : 'BUYER',
-          },
-        })
-      : await this.prisma.user.create({
-          data: {
-            email,
-            name: input.name || null,
-            role: 'BUYER',
-            passwordHash: this.hashPassword(input.password),
-          },
-        });
-
-    const publicUser = await this.toPublicUser(user.id);
-    return {
-      user: publicUser,
-      accessToken: this.signToken({
-        sub: user.id,
-        email: user.email,
-        role: 'BUYER',
-        sellerIds: [],
-      }),
-    };
-  }
-
   async login(input: { email: string; password: string }) {
     const email = input.email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
@@ -199,6 +155,152 @@ export class AuthService {
   async me(token: string) {
     const payload = this.verifyToken(token);
     return this.toPublicUser(payload.sub);
+  }
+
+  async registerBuyer(input: {
+    email: string;
+    password: string;
+    name?: string;
+  }) {
+    const email = input.email.trim().toLowerCase();
+    if (!email || !input.password || input.password.length < 8) {
+      throw new BadRequestException(
+        'Email and password (min 8 chars) are required',
+      );
+    }
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing?.passwordHash) {
+      throw new BadRequestException(
+        'An account with this email already exists',
+      );
+    }
+
+    const verifyToken = randomBytes(32).toString('hex');
+    const verifyExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const user = existing
+      ? await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash: this.hashPassword(input.password),
+            name: input.name || existing.name,
+            role: existing.role === 'ADMIN' ? 'ADMIN' : 'BUYER',
+            emailVerified: false,
+            emailVerifyToken: verifyToken,
+            emailVerifyExpiry: verifyExpiry,
+          },
+        })
+      : await this.prisma.user.create({
+          data: {
+            email,
+            name: input.name || null,
+            role: 'BUYER',
+            passwordHash: this.hashPassword(input.password),
+            emailVerified: false,
+            emailVerifyToken: verifyToken,
+            emailVerifyExpiry: verifyExpiry,
+          },
+        });
+
+    void this.emailService.sendEmailVerification(email, verifyToken).catch(() => {});
+
+    const publicUser = await this.toPublicUser(user.id);
+    return {
+      user: publicUser,
+      accessToken: this.signToken({
+        sub: user.id,
+        email: user.email,
+        role: 'BUYER',
+        sellerIds: [],
+      }),
+      emailVerificationSent: true,
+    };
+  }
+
+  async verifyEmail(token: string) {
+    if (!token) throw new BadRequestException('Verification token is required');
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        emailVerifyToken: token,
+        emailVerifyExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerifyToken: null,
+        emailVerifyExpiry: null,
+      },
+    });
+
+    return { message: 'Email verified successfully' };
+  }
+
+  async forgotPassword(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (user) {
+      const resetToken = randomBytes(32).toString('hex');
+      const resetExpiry = new Date(Date.now() + 60 * 60 * 1000);
+
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetToken: resetToken,
+          passwordResetExpiry: resetExpiry,
+        },
+      });
+
+      void this.emailService.sendPasswordReset(normalizedEmail, resetToken).catch(() => {});
+    }
+
+    return {
+      message:
+        'If an account with that email exists, a password reset link has been sent.',
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    if (!token) throw new BadRequestException('Reset token is required');
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: this.hashPassword(newPassword),
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    });
+
+    return { message: 'Password reset successfully' };
   }
 
   /**

@@ -59,11 +59,12 @@ async function ensureSeller(
         externalAccountId: input.externalId,
       },
     },
-    update: { sellerId: seller.id, lastSyncedAt: new Date() },
+    update: { sellerId: seller.id, marketplace: 'US', lastSyncedAt: new Date() },
     create: {
       sellerId: seller.id,
       sourcePlatform: input.sourcePlatform,
       externalAccountId: input.externalId,
+      marketplace: 'US',
       lastSyncedAt: new Date(),
     },
   });
@@ -111,8 +112,8 @@ async function main() {
       },
     });
 
-    // ── Three marketplace sellers ──────────────────────────────────────
-    for (const cfg of Object.values(MARKETPLACE_SELLERS)) {
+    // ── Two marketplace sellers (Salvage + Blackline only) ───────────────
+    for (const cfg of REALTRACK_MARKETPLACE_SELLERS) {
       const seller = await ensureSeller(prisma, org.id, {
         id: cfg.id,
         name: cfg.name,
@@ -152,67 +153,8 @@ async function main() {
       }
     }
 
-    // ── Superior Auto Parts: spreadsheet catalogs ──────────────────────
-    if (enabled('SEED_SPREADSHEET_SELLERS', true)) {
-      const superior = MARKETPLACE_SELLERS.superior;
-      const spreadsheetFiles = [
-        {
-          env: 'SEED_FEBEST_FILE',
-          label: 'FEBEST Availability',
-          brand: 'FEBEST',
-          currency: process.env.SEED_FEBEST_CURRENCY || 'AED',
-          partSource: 'AFTERMARKET',
-        },
-        {
-          env: 'SEED_DXB_FILE',
-          label: 'DXB-EXW',
-          brand: undefined,
-          currency: 'AED',
-          partSource: 'MIXED',
-        },
-        {
-          env: 'SEED_DYNATRADE_FILE',
-          label: 'Dynatrade Stock List',
-          brand: undefined,
-          currency: process.env.SEED_DYNATRADE_CURRENCY || 'AED',
-          partSource: 'AFTERMARKET',
-        },
-      ];
-
-      for (const source of spreadsheetFiles) {
-        const filePath = process.env[source.env];
-        if (!filePath) continue;
-        try {
-          const buffer = await fs.readFile(filePath);
-          const job = await uploads.processUpload(
-            superior.id,
-            path.basename(filePath),
-            buffer,
-            {
-              defaultPartSource: source.partSource,
-              defaultQualityTier: 'NEW',
-              defaultBrand: source.brand,
-              defaultCurrency: source.currency,
-              defaultWeightUnit: process.env.SEED_FEBEST_WEIGHT_UNIT,
-              defaultDimensionUnit: process.env.SEED_FEBEST_DIMENSION_UNIT,
-            },
-          );
-          report.spreadsheetSources.push({
-            file: path.basename(filePath),
-            seller: superior.name,
-            label: source.label,
-            jobId: job.id,
-            status: job.status,
-            report: job.report,
-          });
-        } catch (error) {
-          report.errors.push({
-            source: source.label,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    }
+    // ── Spreadsheet sellers: DISABLED (OEM USED marketplace only) ────────
+    // Removed: Superior Auto Parts and FEBEST are no longer part of the marketplace.
 
     // ── Auth: 3 logins per seller + 1 admin ────────────────────────────
     if (enabled('SEED_AUTH_USERS', true)) {

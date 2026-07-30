@@ -241,7 +241,6 @@ const NON_ENGLISH_TERMS = [
   'butée',
   'jante',
   'pneumatique',
-  'flexible',
   'tableau',
   'commande',
   'cylindre',
@@ -384,14 +383,21 @@ const NON_ENGLISH_TERMS = [
   'manillar',
 ];
 
+// Lookarounds on `\p{L}` instead of `\b`: accented terms ("relè", "ölpumpe",
+// "tür") sit outside the ASCII word class, so `\b` would never match them.
 const NON_ENGLISH_RE = new RegExp(
-  `\\b(${NON_ENGLISH_TERMS.join('|')})\\b`,
-  'i',
+  `(?<!\\p{L})(?:${NON_ENGLISH_TERMS.join('|')})(?!\\p{L})`,
+  'iu',
 );
 
-/** True when title looks predominantly Latin/English (not CJK / heavy Cyrillic). */
+/** Scripts that are never an English marketplace title (CJK, Cyrillic, Greek, Arabic, Hebrew). */
+const NON_LATIN_SCRIPT_RE =
+  /[\u0370-\u03ff\u0400-\u04ff\u0590-\u05ff\u0600-\u06ff\u3000-\u30ff\u4e00-\u9fff\uac00-\ud7af]/;
+
+/** True when the title reads as English (Latin script, no foreign automotive terms). */
 export function looksLikeEnglishTitle(title: string): boolean {
-  // Language filter disabled — import all titles regardless of language.
-  // Non-English titles can be translated in a post-processing step.
-  return true;
+  const value = String(title ?? '').trim();
+  if (!value) return false;
+  if (NON_LATIN_SCRIPT_RE.test(value)) return false;
+  return !NON_ENGLISH_RE.test(value);
 }

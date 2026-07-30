@@ -641,16 +641,21 @@ model SourceRecord {
 }
 
 model User {
-  id           String             @id @default(uuid())
-  email        String             @unique
-  name         String?
+  id                   String             @id @default(uuid())
+  email                String             @unique
+  name                 String?
   /** BUYER | SELLER | ADMIN */
-  role         String             @default("BUYER")
-  passwordHash String?
-  vehicles     UserVehicle[]
-  memberships  SellerMembership[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  role                 String             @default("BUYER")
+  passwordHash         String?
+  emailVerified        Boolean            @default(false)
+  emailVerifyToken     String?
+  emailVerifyExpiry    DateTime?
+  passwordResetToken   String?
+  passwordResetExpiry  DateTime?
+  vehicles             UserVehicle[]
+  memberships          SellerMembership[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 }
 
 /** Links a user login to one seller store (3 staff accounts per seller). */

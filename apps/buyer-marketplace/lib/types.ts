@@ -89,7 +89,7 @@ export interface ItemSpecifics {
   position?: string | null;
   material?: string | null;
   color?: string | null;
-  features?: string[];
+  features?: string | string[];
   countryOfOrigin?: string | null;
   warranty?: string | null;
   condition?: string | null;

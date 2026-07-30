@@ -12,12 +12,22 @@
 //   cd /app && node scripts/backfill-part-class-weights.mjs
 //   cd /app && node scripts/backfill-part-class-weights.mjs --dry-run
 //   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all
+//   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all --validate-weight
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const BATCH_SIZE = 1000;
+
+/**
+ * Parts with exact-source weights that exceed this factor above the class max
+ * are flagged and tracked. Not clamped (exact sources are trusted), but counted.
+ */
+const OUTLIER_FLAG_FACTOR = 5;
+
+// ── Weight source classification ──────────────────────────────────────────────
+const EXACT_SOURCES = new Set(['SPREADSHEET', 'SELLER', 'MEASURED']);
 
 async function loadFromDist(relativePath, exportNames) {
   const candidates = [
@@ -47,10 +57,11 @@ async function main() {
 
   const dryRun = process.argv.includes('--dry-run');
   const recomputeAll = process.argv.includes('--recompute-all');
+  const validateWeight = process.argv.includes('--validate-weight');
 
-  const { resolvePartClassKey } = await loadFromDist(
+  const { resolvePartClassKey, getPartClassProfile } = await loadFromDist(
     'checkout/part-class-weights.js',
-    ['resolvePartClassKey'],
+    ['resolvePartClassKey', 'getPartClassProfile'],
   );
   const { deriveBillableWeight, parseDimensionsJson } = await loadFromDist(
     'checkout/billable-weight.util.js',
@@ -63,12 +74,19 @@ async function main() {
   const where = recomputeAll ? {} : { partClassKey: null };
   const total = await prisma.canonicalPart.count({ where });
   console.log(
-    JSON.stringify({ mode: recomputeAll ? 'recompute-all' : 'missing-only', dryRun, total }),
+    JSON.stringify({
+      mode: recomputeAll ? 'recompute-all' : 'missing-only',
+      dryRun,
+      validateWeight,
+      total,
+    }),
   );
 
   const classCounts = {};
+  const outlierLog = [];
   let scanned = 0;
   let updated = 0;
+  let flaggedOutliers = 0;
   let cursor = null;
 
   for (;;) {
@@ -79,6 +97,7 @@ async function main() {
         title: true,
         category: true,
         weight: true,
+        weightSource: true,
         dimensions: true,
         partClassKey: true,
         dimensionalWeightKg: true,
@@ -114,6 +133,42 @@ async function main() {
           data.billableWeightKg = billable.billableKg;
         }
       }
+
+      // ── Weight validation against class envelope ──────────────────────
+      if (
+        validateWeight &&
+        part.weight !== null &&
+        part.weight > 0 &&
+        EXACT_SOURCES.has(part.weightSource)
+      ) {
+        const profile = getPartClassProfile(partClassKey);
+        const isOutlier =
+          part.weight > profile.maxWeightKg * OUTLIER_FLAG_FACTOR ||
+          part.weight < profile.minWeightKg / OUTLIER_FLAG_FACTOR;
+
+        if (isOutlier) {
+          flaggedOutliers++;
+          const entry = {
+            partId: part.id,
+            title: part.title,
+            source: part.weightSource,
+            weightKg: part.weight,
+            classKey: partClassKey,
+            classMax: profile.maxWeightKg,
+            classMin: profile.minWeightKg,
+            flag: `>${OUTLIER_FLAG_FACTOR}x outside envelope`,
+          };
+          outlierLog.push(entry);
+          if (outlierLog.length <= 50) {
+            console.warn(
+              `OUTLIER ${part.title}: weight=${part.weight}kg ` +
+                `[${part.weightSource}] class=${partClassKey} ` +
+                `range=[${profile.minWeightKg}-${profile.maxWeightKg}kg]`,
+            );
+          }
+        }
+      }
+
       if (Object.keys(data).length === 0) continue;
 
       updated++;
@@ -122,16 +177,26 @@ async function main() {
       }
     }
 
-    console.log(`progress scanned=${scanned}/${total} updated=${updated}`);
+    console.log(`progress scanned=${scanned}/${total} updated=${updated} outliers=${flaggedOutliers}`);
   }
 
   const topClasses = Object.entries(classCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 25);
 
-  console.log(
-    JSON.stringify({ scanned, updated, dryRun, topClasses }, null, 2),
-  );
+  const result = {
+    scanned,
+    updated,
+    dryRun,
+    topClasses,
+  };
+
+  if (validateWeight) {
+    result.flaggedOutliers = flaggedOutliers;
+    result.outlierSummary = outlierLog.slice(0, 100);
+  }
+
+  console.log(JSON.stringify(result, null, 2));
   await prisma.$disconnect();
 }
 

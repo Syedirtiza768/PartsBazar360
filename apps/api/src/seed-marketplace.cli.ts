@@ -242,9 +242,9 @@ async function main() {
             file: path.basename(filePath),
             seller: superior.name,
             label: source.label,
-            jobId: job.id,
-            status: job.status,
-            report: job.report,
+            jobId: job?.id,
+            status: job?.status,
+            report: job?.report,
           });
         } catch (error) {
           report.errors.push({

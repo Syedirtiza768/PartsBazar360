@@ -33,6 +33,20 @@ export const DEFAULT_VOLUMETRIC_DIVISOR = 6000;
  */
 export const DEFAULT_ESTIMATED_VOLUMETRIC_FACTOR = 0.8;
 
+/**
+ * When an exact-source weight exceeds this factor above the class max, it is
+ * likely a unit error (grams submitted as kg).  We divide by 1000 and use the
+ * corrected value, setting `unitAutoConverted = true`.
+ */
+const UNIT_ERROR_FACTOR = 10;
+
+/**
+ * When an exact-source weight exceeds this factor above the class max it is an
+ * outlier but not necessarily a unit error.  The value is still trusted and
+ * used as-is, but the `outlier` flag is set so callers can log/alert.
+ */
+const PLAU_OUTLIER_FACTOR = 3;
+
 export type WeightSource =
   | 'SPREADSHEET'
   | 'SELLER'
@@ -111,10 +125,31 @@ export interface ResolvedItemWeight {
   clamped: boolean;
   partClassKey: string;
   profile: PartClassProfile;
+  /**
+   * True when the supplied weight is a plausible outlier — it fell outside
+   * the class envelope but not by enough to be a unit error. Exact-source
+   * weights are trusted (not clamped) but flagged so callers can log/alert.
+   */
+  outlier: boolean;
+  /**
+   * True when the weight or dimensions were auto-converted from a likely unit
+   * error (grams → kg, or mm → cm). The values have been corrected; callers
+   * should persist the corrected values and flag the part for review.
+   */
+  unitAutoConverted: boolean;
 }
 
 /**
  * Resolves one line item's billable weight, filling gaps from the part class.
+ *
+ * Exact sources (SPREADSHEET, SELLER, MEASURED) are clamped only when the
+ * value is so extreme it is likely a unit error (grams instead of kg). The
+ * clamped value is returned together with `unitAutoConverted = true` so
+ * callers can persist the corrected value and flag the part for review.
+ *
+ * Non-exact sources (AI, CLASS_DEFAULT) are always clamped into the class
+ * envelope. The `outlier` flag is set when the unclamped value fell outside
+ * the envelope but not dramatically enough to be a unit error.
  */
 export function resolveItemWeight(
   input: ResolveItemWeightInput,
@@ -132,13 +167,36 @@ export function resolveItemWeight(
   let source: WeightSource;
   let actualKg: number;
   let clamped = false;
+  let outlier = false;
+  let unitAutoConverted = false;
 
   if (suppliedWeight !== null) {
     source = (input.weightSource as WeightSource) || 'AI';
     if (isExactWeightSource(source)) {
-      // Trust a real measurement even when it sits outside the class envelope.
-      actualKg = suppliedWeight;
+      // Exact sources are trusted unconditionally — but detect unit errors.
+      // A 5000g sensor was probably uploaded as grams, not kg.  If the weight
+      // is 10× above the class max, try dividing by 1000 (g→kg).  If the
+      // result fits the envelope, use it and set `unitAutoConverted`.
+      if (
+        suppliedWeight > profile.maxWeightKg * UNIT_ERROR_FACTOR &&
+        suppliedWeight / 1000 >= profile.minWeightKg * 0.1 &&
+        suppliedWeight / 1000 <= profile.maxWeightKg * PLAU_OUTLIER_FACTOR
+      ) {
+        actualKg = suppliedWeight / 1000;
+        unitAutoConverted = true;
+        outlier = true;
+      } else if (suppliedWeight > profile.maxWeightKg * PLAU_OUTLIER_FACTOR) {
+        // Very far outside the envelope but not a clean g→kg ratio.
+        actualKg = suppliedWeight;
+        outlier = true;
+      } else if (suppliedWeight < profile.minWeightKg / PLAU_OUTLIER_FACTOR) {
+        actualKg = suppliedWeight;
+        outlier = true;
+      } else {
+        actualKg = suppliedWeight;
+      }
     } else {
+      // AI / CLASS_DEFAULT: clamp to the class envelope.
       const result = clampWeightToClass(suppliedWeight, profile);
       actualKg = result.kg;
       clamped = result.clamped;
@@ -174,6 +232,8 @@ export function resolveItemWeight(
     source,
     dimensionsEstimated,
     clamped,
+    outlier,
+    unitAutoConverted,
     partClassKey: profile.key,
     profile,
   };

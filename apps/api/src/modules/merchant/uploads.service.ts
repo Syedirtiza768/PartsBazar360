@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
@@ -155,6 +156,8 @@ function parseDelimitedFile(buffer: Buffer): ParsedUploadRow[] {
 
 @Injectable()
 export class MerchantUploadsService {
+  private readonly logger = new Logger(MerchantUploadsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly search: OpenSearchService,
@@ -310,6 +313,59 @@ export class MerchantUploadsService {
         },
       }));
 
+    // Fire-and-forget: process rows in background so the HTTP response returns immediately.
+    this.processUploadRowsBackground(job.id, sellerId, parsedRows, parsedSheets, {
+      defaultPartSource,
+      defaultQualityTier,
+      defaultBrand: opts.defaultBrand,
+      defaultCurrency: opts.defaultCurrency,
+      defaultWeightUnit: opts.defaultWeightUnit,
+      defaultDimensionUnit: opts.defaultDimensionUnit,
+      fileName,
+      fileChecksum,
+      commitMode,
+    }).catch((err) => {
+      this.logger.error(`Background upload processing failed for ${job.id}: ${err?.message}`);
+    });
+
+    return this.prisma.sellerUploadJob.findUnique({
+      where: { id: job.id },
+      include: { rows: { orderBy: { rowNumber: 'asc' } } },
+    });
+  }
+
+  private async processUploadRowsBackground(
+    jobId: string,
+    sellerId: string,
+    parsedRows: ParsedUploadRow[],
+    parsedSheets: any[],
+    opts: {
+      defaultPartSource: string;
+      defaultQualityTier: string;
+      defaultBrand?: string;
+      defaultCurrency?: string;
+      defaultWeightUnit?: string;
+      defaultDimensionUnit?: string;
+      fileName: string;
+      fileChecksum: string;
+      commitMode?: 'IMMEDIATE' | 'STAGED';
+    },
+  ) {
+    const seller = await this.prisma.seller.findUnique({
+      where: { id: sellerId },
+      include: { warehouses: true },
+    });
+    if (!seller) throw new NotFoundException('Seller not found');
+    const warehouse =
+      seller.warehouses[0] ??
+      (await this.prisma.warehouse.create({
+        data: {
+          sellerId,
+          name: `${seller.name} Default Warehouse`,
+          location: 'Marketplace intake',
+        },
+      }));
+
     let insertedRows = 0;
     let reviewRows = 0;
     let invalidRows = 0;
@@ -325,30 +381,29 @@ export class MerchantUploadsService {
 
     for (const row of parsedRows) {
       const result = await this.processRow(
-        job.id,
+        jobId,
         sellerId,
         seller.name,
         seller.onboardingStatus,
         warehouse.id,
         row,
         {
-          defaultPartSource,
-          defaultQualityTier,
-          defaultBrand:
-            opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand,
+          defaultPartSource: opts.defaultPartSource,
+          defaultQualityTier: opts.defaultQualityTier,
+          defaultBrand: opts.defaultBrand || parsedSheets[0]?.suggestedDefaults.brand,
           defaultCurrency: opts.defaultCurrency,
           defaultWeightUnit: opts.defaultWeightUnit,
           defaultDimensionUnit: opts.defaultDimensionUnit,
-          fileName,
-          fileChecksum,
-          commitMode,
+          fileName: opts.fileName,
+          fileChecksum: opts.fileChecksum,
+          commitMode: opts.commitMode,
           preview,
         },
       );
       if (result.status === 'INVALID') invalidRows++;
       else if (result.status === 'NEEDS_REVIEW' || result.status === 'STAGED') {
         if (result.status === 'NEEDS_REVIEW') reviewRows++;
-        else if (commitMode === 'STAGED' && result.needsReview) reviewRows++;
+        else if (opts.commitMode === 'STAGED' && result.needsReview) reviewRows++;
         else insertedRows++;
       } else insertedRows++;
       if (result.message)
@@ -358,14 +413,14 @@ export class MerchantUploadsService {
     const finalStatus =
       invalidRows === parsedRows.length
         ? 'FAILED'
-        : commitMode === 'STAGED'
+        : opts.commitMode === 'STAGED'
           ? 'PREVIEW_READY'
           : reviewRows > 0
             ? 'NEEDS_REVIEW'
             : 'COMPLETED';
 
-    return this.prisma.sellerUploadJob.update({
-      where: { id: job.id },
+    await this.prisma.sellerUploadJob.update({
+      where: { id: jobId },
       data: {
         status: finalStatus,
         processedRows: parsedRows.length,
@@ -378,18 +433,20 @@ export class MerchantUploadsService {
           filesProcessed: 1,
           sheetsProcessed: parsedSheets.length,
           rowsRead: parsedRows.length,
-          rowsImported: commitMode === 'IMMEDIATE' ? insertedRows : 0,
-          rowsStaged:
-            commitMode === 'STAGED' ? parsedRows.length - invalidRows : 0,
+          rowsImported: opts.commitMode === 'IMMEDIATE' ? insertedRows : 0,
+          rowsStaged: opts.commitMode === 'STAGED' ? parsedRows.length - invalidRows : 0,
           rowsReview: reviewRows,
           rowsRejected: invalidRows,
           preview,
-          commitMode,
+          commitMode: opts.commitMode,
         },
-        completedAt: commitMode === 'IMMEDIATE' ? new Date() : null,
+        completedAt: opts.commitMode === 'IMMEDIATE' ? new Date() : null,
       },
-      include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
+
+    this.logger.log(
+      `Upload ${jobId} completed: ${insertedRows} inserted, ${reviewRows} review, ${invalidRows} invalid`,
+    );
   }
 
   async updateMapping(
@@ -444,6 +501,16 @@ export class MerchantUploadsService {
       data: { status: 'COMMITTING' },
     });
 
+    // Fire-and-forget: process rows in background so the HTTP response returns immediately.
+    this.commitJobBackground(jobId, job).catch((err) => {
+      this.logger.error(`Background commit failed for ${jobId}: ${err?.message}`);
+    });
+
+    return { status: 'COMMITTING', jobId, message: 'Commit started in background' };
+  }
+
+  private async commitJobBackground(jobId: string, job: any) {
+
     const seller = await this.prisma.seller.findUnique({
       where: { id: job.sellerId },
       include: { warehouses: true },
@@ -479,7 +546,11 @@ export class MerchantUploadsService {
         {
           rowNumber: row.rowNumber,
           sheetName: job.sourceSheet || undefined,
-          raw: { ...raw, ...(staged.rawOverrides || {}) },
+          // Build normalized raw from staged payload (string values only) + original rawData fallback.
+          // stagedPayload has the normalized keys processRow expects (manufacturerPartNumber,
+          // description, price, etc.) but also has non-string fields. Extract only string fields
+          // and merge with rawData (which has original headers as fallback).
+          raw: this.buildNormalizedRaw(staged, raw),
           original: raw,
         },
         {
@@ -536,6 +607,34 @@ export class MerchantUploadsService {
       include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
   }
+  /** Build a string-only raw map from staged payload + original rawData fallback. */
+  private buildNormalizedRaw(
+    staged: Record<string, any>,
+    raw: Record<string, string>,
+  ): Record<string, string> {
+    const out: Record<string, string> = { ...raw };
+    // Map staged payload fields (normalized keys) to string values, skipping
+    // nested objects/arrays and internal fields.
+    const skip = new Set([
+      'rawOverrides', 'autoMatchPartId', 'matchCandidates', 'classification',
+      'partClassKey', 'primaryCurrency', 'billableWeightKg', 'weightConfidence',
+      'dimensionalWeightKg', 'parsedOemReferences', 'dimensionsConfidence',
+      'parsedVehicle', 'weightKg', 'dimensionsCm', 'matchCandidates',
+      'stockSharjah', 'stockJebelAli',
+    ]);
+    for (const [k, v] of Object.entries(staged)) {
+      if (skip.has(k)) continue;
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'string') {
+        if (!out[k]) out[k] = v;
+      } else if (typeof v === 'number' || typeof v === 'boolean') {
+        if (!out[k]) out[k] = String(v);
+      }
+      // Skip arrays and objects — processRow can't handle them in raw
+    }
+    return out;
+  }
+
   private async processRow(
     uploadJobId: string,
     sellerId: string,
@@ -571,7 +670,10 @@ export class MerchantUploadsService {
       raw.__suggestedBrand ||
       undefined;
     const manufacturerPartNumber =
-      raw.manufacturerPartNumber?.trim() || raw.mpn?.trim();
+      raw.manufacturerPartNumber?.trim() ||
+      raw.mpn?.trim() ||
+      raw.oemPartNumber?.trim() ||
+      (raw.oemReferences?.trim() || '').split(/[,;|]/)[0]?.trim() || undefined;
     const description = raw.description?.trim() || raw.title?.trim();
     const title =
       raw.title?.trim() ||
@@ -618,7 +720,11 @@ export class MerchantUploadsService {
         : preferredCurrency === 'AED'
           ? raw.priceAed || raw.price || raw.priceUsd || ''
           : raw.priceAed || raw.priceUsd || raw.price || '';
-    const price = priceText ? Number(priceText.replace(/[$,\s]/g, '')) : 0;
+    const rawPrice = priceText ? Number(String(priceText).replace(/[$,\s]/g, '')) : 0;
+    const MARGIN_DIVISOR = Number(process.env.PRICE_MARGIN_DIVISOR || '0.7');
+    const price = MARGIN_DIVISOR > 0 && MARGIN_DIVISOR < 1
+      ? Math.round((rawPrice / MARGIN_DIVISOR) * 100) / 100
+      : rawPrice;
     const stockSharjah =
       raw.stockSharjah === undefined || raw.stockSharjah === ''
         ? null

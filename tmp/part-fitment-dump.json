@@ -1,0 +1,212 @@
+﻿{
+    "id":  "e0bb5741-99f9-4246-98d0-5b46c942f310",
+    "title":  "2017 Jaguar XF Instrument Panel Air Duct Lower Used OEM T2H4903",
+    "brand":  null,
+    "manufacturer":  null,
+    "category":  "Body",
+    "weight":  null,
+    "oeNumbers":  [
+                      "T2H4903"
+                  ],
+    "fitmentFlags":  [
+                         "MVL_VERIFIED"
+                     ],
+    "imageUrls":  [
+                      "https://i.ebayimg.com/images/g/EVcAAeSwTU5qFG5k/s-l1600.jpg"
+                  ],
+    "listingUrl":  "https://www.ebay.com/itm/2017-Jaguar-XF-Instrument-Panel-Air-Duct-Lower-Used-OEM-T2H4903-/397988331898",
+    "ebayItemId":  "397988331898",
+    "compatibility":  [
+                          {
+                              "year":  2017,
+                              "make":  "Jaguar",
+                              "model":  "XF",
+                              "trim":  "2.0 D",
+                              "engine":  "1999 ccm, 132 KW, 180 PS",
+                              "source":  "title",
+                              "mvlVerified":  true,
+                              "epid":  null
+                          }
+                      ],
+    "partSource":  "OEM",
+    "qualityTier":  "USED",
+    "fitmentStatus":  "CONFIRMED",
+    "fitmentConfidence":  0.9,
+    "normalizedTitle":  null,
+    "description":  null,
+    "partType":  "UNCLASSIFIED",
+    "primaryBrandId":  null,
+    "manufacturerPartNumber":  "T2H4903",
+    "genuineOemPartNumber":  null,
+    "dimensions":  null,
+    "position":  null,
+    "vehicleSystem":  null,
+    "classificationStatus":  "REVIEW_REQUIRED",
+    "classificationConfidence":  null,
+    "classificationReason":  null,
+    "completenessScore":  null,
+    "verificationStatus":  "UNVERIFIED",
+    "itemSpecifics":  null,
+    "enrichedAt":  null,
+    "enrichmentSource":  null,
+    "material":  null,
+    "createdAt":  "2026-07-25T06:51:45.225Z",
+    "updatedAt":  "2026-07-25T06:51:45.504Z",
+    "offers":  [
+                   {
+                       "id":  "9bb94bf1-2434-49f4-a222-fe6c417e9353",
+                       "sellerId":  "seller-salvage-auto-parts",
+                       "canonicalPartId":  "e0bb5741-99f9-4246-98d0-5b46c942f310",
+                       "price":  59.99,
+                       "sellerBasePrice":  59.99,
+                       "marketplaceFee":  0,
+                       "sellerProceeds":  59.99,
+                       "pricingPolicyId":  null,
+                       "pricingPolicyVersion":  null,
+                       "pricedAt":  "2026-07-25T06:51:45.483Z",
+                       "currency":  "USD",
+                       "condition":  "USED",
+                       "partSource":  "OEM",
+                       "qualityTier":  "NEW",
+                       "externalOfferId":  "f2515843-2189-4890-8977-efe6ee38cc03",
+                       "status":  "ACTIVE",
+                       "sourceKey":  "rt:3b84b063-3811-481f-a61d-f7846a03558f:f2515843-2189-4890-8977-efe6ee38cc03",
+                       "sellerSku":  "JAG-XF-9202-DB-SS",
+                       "sellerTitle":  "2017 Jaguar XF Instrument Panel Air Duct Lower Used OEM T2H4903",
+                       "partType":  "UNCLASSIFIED",
+                       "moq":  1,
+                       "leadTimeDays":  null,
+                       "deliveryMethod":  null,
+                       "warranty":  null,
+                       "returnPolicy":  null,
+                       "sellerNotes":  null,
+                       "createdAt":  "2026-07-25T06:51:45.484Z",
+                       "updatedAt":  "2026-07-25T06:51:45.484Z",
+                       "seller":  {
+                                      "id":  "seller-salvage-auto-parts",
+                                      "organizationId":  "org-partsbazar-marketplace",
+                                      "name":  "Salvage Auto Parts",
+                                      "storeId":  "3b84b063-3811-481f-a61d-f7846a03558f",
+                                      "onboardingStatus":  "ACTIVE",
+                                      "onboardingNotes":  null,
+                                      "activatedAt":  "2026-07-20T18:27:08.394Z",
+                                      "createdAt":  "2026-07-20T12:59:00.097Z",
+                                      "updatedAt":  "2026-07-20T18:27:08.399Z",
+                                      "profile":  null
+                                  },
+                       "inventory":  [
+                                         {
+                                             "id":  "52d48a13-e633-4aa7-8882-14dd1c5bfb32",
+                                             "warehouseId":  "7d40581f-9640-4a3c-8533-4e8976e8056b",
+                                             "offerId":  "9bb94bf1-2434-49f4-a222-fe6c417e9353",
+                                             "quantity":  1,
+                                             "status":  "AVAILABLE",
+                                             "updatedAt":  "2026-07-25T06:51:45.488Z",
+                                             "warehouse":  {
+                                                               "id":  "7d40581f-9640-4a3c-8533-4e8976e8056b",
+                                                               "sellerId":  "seller-salvage-auto-parts",
+                                                               "name":  "Salvage Auto Parts Main Warehouse",
+                                                               "location":  null,
+                                                               "externalKey":  "DEFAULT",
+                                                               "createdAt":  "2026-07-20T12:59:00.159Z",
+                                                               "updatedAt":  "2026-07-20T12:59:00.159Z"
+                                                           }
+                                         }
+                                     ],
+                       "prices":  [
+
+                                  ],
+                       "salvageUnits":  [
+
+                                        ]
+                   }
+               ],
+    "primaryBrand":  null,
+    "partNumbers":  [
+
+                    ],
+    "media":  [
+
+              ],
+    "salvageUnits":  [
+
+                     ],
+    "fitments":  [
+                     {
+                         "id":  "144755cc-c404-48fc-9680-acd231b6b1ca",
+                         "canonicalPartId":  "e0bb5741-99f9-4246-98d0-5b46c942f310",
+                         "vehicleConfigId":  "cdaec1cb-7484-4aea-a618-4a274f58ddca",
+                         "evidenceLevel":  "B",
+                         "confidence":  0.9,
+                         "reviewer":  "Auto (US MVL verified)",
+                         "source":  "TITLE_MVL",
+                         "verificationStatus":  "VERIFIED",
+                         "reason":  "Matched US MVL Year/Make/Model",
+                         "fitmentNotes":  null,
+                         "originalData":  null,
+                         "createdAt":  "2026-07-25T06:51:45.499Z",
+                         "updatedAt":  "2026-07-25T06:51:45.499Z",
+                         "vehicleConfig":  {
+                                               "id":  "cdaec1cb-7484-4aea-a618-4a274f58ddca",
+                                               "generationId":  "8b8ff471-79cb-4641-9384-9adaa2af7186",
+                                               "trim":  "2.0 D",
+                                               "engine":  "1999 ccm, 132 KW, 180 PS",
+                                               "transmission":  null,
+                                               "drivetrain":  null,
+                                               "fuel":  null,
+                                               "market":  "DE",
+                                               "productionStart":  null,
+                                               "productionEnd":  null,
+                                               "epid":  null,
+                                               "generation":  {
+                                                                  "id":  "8b8ff471-79cb-4641-9384-9adaa2af7186",
+                                                                  "modelId":  "01fcba19-a71d-49cc-b153-b1e813b7efc2",
+                                                                  "name":  "2017",
+                                                                  "startYear":  2017,
+                                                                  "endYear":  2017,
+                                                                  "model":  {
+                                                                                "id":  "01fcba19-a71d-49cc-b153-b1e813b7efc2",
+                                                                                "makeId":  "3194c06b-be3d-46dd-8ebe-57e35b97869a",
+                                                                                "name":  "XF",
+                                                                                "make":  {
+                                                                                             "id":  "3194c06b-be3d-46dd-8ebe-57e35b97869a",
+                                                                                             "name":  "Jaguar",
+                                                                                             "canonicalName":  null,
+                                                                                             "displayName":  null,
+                                                                                             "manufacturerGroup":  null,
+                                                                                             "regionalNames":  null,
+                                                                                             "externalIds":  null
+                                                                                         }
+                                                                            }
+                                                              }
+                                           }
+                     }
+                 ],
+    "compatibleVehicles":  [
+                               {
+                                   "label":  "2017 Jaguar XF",
+                                   "make":  "Jaguar",
+                                   "model":  "XF",
+                                   "startYear":  2017,
+                                   "endYear":  2017,
+                                   "evidenceLevel":  "B",
+                                   "confidence":  0.9
+                               }
+                           ],
+    "compatibilityTable":  [
+                               {
+                                   "year":  2017,
+                                   "make":  "Jaguar",
+                                   "model":  "XF",
+                                   "trim":  "2.0 D",
+                                   "engine":  "1999 ccm, 132 KW, 180 PS",
+                                   "source":  "title",
+                                   "mvlVerified":  true,
+                                   "epid":  null
+                               }
+                           ],
+    "oemCrossReferences":  [
+
+                           ],
+    "enrichmentLive":  false
+}
