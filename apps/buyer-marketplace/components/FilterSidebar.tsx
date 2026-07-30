@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CheckIcon, XIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
+import { partTypeLabel } from "@repo/catalog-contracts";
 import type { FacetsResponse } from "@/lib/types";
 
 /**
@@ -202,7 +203,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
       chips.push({
         field,
         value,
-        label: field === "partType" ? value.replaceAll("_", " ") : value,
+        label: field === "partType" ? partTypeLabel(value) : value,
       });
     }
   }

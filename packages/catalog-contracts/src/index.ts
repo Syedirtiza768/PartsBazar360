@@ -18,7 +18,7 @@ export const PART_TYPE_LABELS: Record<PartType, string> = {
   GENUINE_OEM: 'Genuine OEM',
   OEM_EQUIVALENT: 'OEM-equivalent',
   AFTERMARKET: 'Aftermarket',
-  SALVAGE_OEM: 'Used Original',
+  SALVAGE_OEM: 'OEM USED',
   REMANUFACTURED: 'Remanufactured',
   REFURBISHED: 'Refurbished',
   PERFORMANCE: 'Performance / Upgrade',
