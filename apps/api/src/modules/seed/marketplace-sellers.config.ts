@@ -66,8 +66,8 @@ export const MARKETPLACE_SELLERS: Record<
 
 /** RealTrack-backed sellers only — used by sync jobs and seed. */
 export const REALTRACK_MARKETPLACE_SELLERS = [
-  MARKETPLACE_SELLERS.salvage,
   MARKETPLACE_SELLERS.blackline,
+  MARKETPLACE_SELLERS.salvage,
 ] as const;
 
 export function findMarketplaceSellerByStoreId(

@@ -103,7 +103,7 @@ export class IngestionProcessor extends WorkerHost {
   ) {
     const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
     const canonicalStoreId = target.storeId!;
-    const redisKey = `sync:progress:${syncRunId || 'standalone'}:${canonicalStoreId}`;
+    const redisKey = `sync:store:${canonicalStoreId}`;
 
     // Resume: check Redis for last completed page
     let page = 1;
@@ -173,8 +173,8 @@ export class IngestionProcessor extends WorkerHost {
           }
         }
 
-        // Save progress after each page (resume point)
-        await this.redis.set(`${redisKey}:lastPage`, page, 'EX', 86400);
+        // Save progress after each page (resume point — 7-day TTL)
+        await this.redis.set(`${redisKey}:lastPage`, page, 'EX', 604800);
         await this.redis.hset(redisKey, {
           page: String(page),
           discovered: String(discovered),
@@ -378,13 +378,11 @@ export class IngestionProcessor extends WorkerHost {
 
   /** Sync only the two RealTrack marketplace sellers, staggered (API can't handle concurrent requests). */
   private async syncMarketplaceRealTrackStores() {
-    // Check for an existing incomplete run to resume
-    let syncRunId = await this.redis.get('sync:activeRunId');
-    const isResume = !!syncRunId;
-    if (!syncRunId) {
-      syncRunId = randomUUID().slice(0, 8);
-      await this.redis.set('sync:activeRunId', syncRunId, 'EX', 86400);
-    }
+    // Stable syncRunId — survives restarts, enables resume
+    const syncRunId = 'marketplace-us';
+    const existingRun = await this.redis.get('sync:activeRunId');
+    const isResume = existingRun === syncRunId;
+    await this.redis.set('sync:activeRunId', syncRunId, 'EX', 604800);
 
     this.logger.log(
       `\n${'='.repeat(60)}\n  SYNC RUN: ${syncRunId}${isResume ? ' (RESUME)' : ' (NEW)'}\n  Monitor: GET /operations/sync/progress/${syncRunId}\n${'='.repeat(60)}`,
@@ -856,9 +854,9 @@ export class IngestionProcessor extends WorkerHost {
     // populated even when compatibility JSON is sparse.
     const makes = [...new Set(
       [
-        ...((canonicalPart.compatibility as any[] || [])
-          .map((c: any) => c.make)
-          .filter(Boolean)),
+        ...(Array.isArray(canonicalPart.compatibility)
+          ? (canonicalPart.compatibility as any[]).map((c: any) => c.make).filter(Boolean)
+          : []),
         parsedVehicle?.make,
       ].filter(Boolean) as string[],
     )];
