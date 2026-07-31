@@ -291,7 +291,7 @@ export function FilterSections({
         </FilterGroup>
       )}
 
-      <FacetGroup field="sourceTag" title="Source" facets={sourceTags} params={params} />
+      <FacetGroup field="sourceTag" title="Tag" facets={sourceTags} params={params} />
       <FacetGroup field="brand" title="Brand" facets={brands} params={params} />
       <FacetGroup field="category" title="Category" facets={categories} params={params} />
       <FacetGroup field="partType" title="Part type" facets={partTypes} params={params} />
