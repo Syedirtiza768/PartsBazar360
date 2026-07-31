@@ -6,12 +6,11 @@
  * filtering.
  *
  * Tag map:
- *   FEB  — FEBEST_AVAILABILITY (spreadsheet)
- *   DYN  — DYNATRADE_STOCK     (spreadsheet)
- *   TRU  — TRADE_UNION          (spreadsheet)
- *   DXB  — DXB_EXW              (spreadsheet)
- *   SPC  — SPARCO_STOCK         (spreadsheet)
- *   SPD  — SPARCO_DEAD_STOCK    (spreadsheet)
+ *   BST  — FEBEST_AVAILABILITY (spreadsheet)
+ *   AAP  — DXB_EXW              (spreadsheet)
+ *   YNTD — DYNATRADE_STOCK     (spreadsheet)
+ *   PSRC — SPARCO_STOCK / SPARCO_DEAD_STOCK (spreadsheet)
+ *   TNRU — TRADE_UNION          (spreadsheet)
  *   SAL  — RealTrack Salvage Auto Parts (eBay)
  *   BLK  — RealTrack Blackline Auto Parts (eBay)
  *   GEN  — GENERIC / unclassified spreadsheet uploads
@@ -24,31 +23,30 @@ import {
 } from '../seed/marketplace-sellers.config';
 
 export const SOURCE_TAGS = [
-  'FEB', 'DYN', 'TRU', 'DXB', 'SPC', 'SPD',
+  'BST', 'AAP', 'YNTD', 'PSRC', 'TNRU',
   'SAL', 'BLK', 'GEN',
 ] as const;
 
 export type SourceTag = (typeof SOURCE_TAGS)[number];
 
 export const SOURCE_TAG_LABELS: Record<SourceTag, string> = {
-  FEB: 'FEBEST',
-  DYN: 'Dynatrade',
-  TRU: 'Trade Union',
-  DXB: 'DXB EXW',
-  SPC: 'Sparco',
-  SPD: 'Sparco Dead Stock',
+  BST: 'FEBEST',
+  AAP: 'DXB EXW',
+  YNTD: 'Dynatrade',
+  PSRC: 'Sparco',
+  TNRU: 'Trade Union',
   SAL: 'Salvage',
   BLK: 'Blackline',
   GEN: 'General',
 };
 
 const TEMPLATE_TO_TAG: Record<ImportTemplate, SourceTag> = {
-  FEBEST_AVAILABILITY: 'FEB',
-  DYNATRADE_STOCK: 'DYN',
-  TRADE_UNION: 'TRU',
-  DXB_EXW: 'DXB',
-  SPARCO_STOCK: 'SPC',
-  SPARCO_DEAD_STOCK: 'SPD',
+  FEBEST_AVAILABILITY: 'BST',
+  DYNATRADE_STOCK: 'YNTD',
+  TRADE_UNION: 'TNRU',
+  DXB_EXW: 'AAP',
+  SPARCO_STOCK: 'PSRC',
+  SPARCO_DEAD_STOCK: 'PSRC',
   GENERIC: 'GEN',
 };
 

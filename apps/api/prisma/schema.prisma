@@ -339,7 +339,7 @@ model SellerOffer {
   warranty             String?
   returnPolicy         String?
   sellerNotes          String?
-  sourceTag            String?   @db.VarChar(3) // 3-char provenance tag: FEB, DYN, TRU, DXB, SPC, SPD, SAL, BLK, GEN
+  sourceTag            String?   @db.VarChar(8) // provenance tag: BST, AAP, YNTD, PSRC, TNRU, SAL, BLK, GEN
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 

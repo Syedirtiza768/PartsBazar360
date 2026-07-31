@@ -1,6 +1,8 @@
 import {
   prioritizeEbayImages,
   isEbayImageUrl,
+  isEbayMagImageUrl,
+  hasEbayMagImages,
   extractListingImages,
   extractListingDescription,
   extractListingBrand,
@@ -58,6 +60,36 @@ describe('extractListingImages', () => {
     });
     expect(urls[0]).toContain('ebay');
     expect(urls[0]).toContain('s-l1600');
+  });
+
+  it('drops eBay Mag (storage.ebaymag.com) images and detects them', () => {
+    const urls = extractListingImages({
+      imageUrls: [
+        'https://storage.ebaymag.com/uploads/abc-123.JPG',
+        'https://i.ebayimg.com/images/g/x/s-l1600.jpg',
+      ],
+    });
+    expect(urls.some((u) => u.includes('ebaymag'))).toBe(false);
+    expect(urls.some((u) => u.includes('ebayimg'))).toBe(true);
+    expect(
+      hasEbayMagImages({
+        imageUrls: ['https://storage.ebaymag.com/uploads/abc-123.JPG'],
+      }),
+    ).toBe(true);
+    expect(
+      hasEbayMagImages({
+        imageUrls: ['https://i.ebayimg.com/images/g/x/s-l1600.jpg'],
+      }),
+    ).toBe(false);
+  });
+
+  it('isEbayMagImageUrl detects the cross-border host', () => {
+    expect(
+      isEbayMagImageUrl('https://storage.ebaymag.com/uploads/x.JPG'),
+    ).toBe(true);
+    expect(isEbayMagImageUrl('https://i.ebayimg.com/images/g/x.jpg')).toBe(
+      false,
+    );
   });
 });
 

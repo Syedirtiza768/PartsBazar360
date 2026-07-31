@@ -25,6 +25,7 @@
     "seed:realtrack-dynatrade": "node dist/src/seed-realtrack-dynatrade.cli.js",
     "seed:salvagea": "node dist/src/seed-salvagea.cli.js",
     "seed:blackline": "node dist/src/seed-blackline.cli.js",
+    "cleanup:ebay-feed": "node dist/src/cleanup-ebay-feed.cli.js",
     "export:salvage": "node dist/src/export-salvage.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
     "import:mvl": "node scripts/import-us-mvl.mjs",

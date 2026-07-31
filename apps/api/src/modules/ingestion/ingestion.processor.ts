@@ -19,6 +19,7 @@ import {
   extractListingDescription,
   extractListingImages,
   extractListingOeNumbers,
+  hasEbayMagImages,
   prioritizeEbayImages,
 } from './listing-enrichment.util';
 import {
@@ -107,9 +108,11 @@ export class IngestionProcessor extends WorkerHost {
 
     // Resume: check Redis for last completed page
     let page = 1;
+    let isResume = false;
     const savedPage = await this.redis.get(`${redisKey}:lastPage`);
     if (savedPage && Number(savedPage) > 1) {
       page = Number(savedPage) + 1;
+      isResume = true;
       this.logger.log(
         `[${syncRunId}] Resuming ${target.name} from page ${page} (last completed: ${savedPage})`,
       );
@@ -122,7 +125,15 @@ export class IngestionProcessor extends WorkerHost {
     let skippedNonEnglish = 0;
     let skippedWrongMarketplace = 0;
     let skippedExcludedBrand = 0;
+    let skippedEbayMag = 0;
+    let staleDeactivated = 0;
+    // True only when the sweep reached result.total — protects the tombstone
+    // from a premature short-page break (partial feed) over-deactivating.
+    let reachedTotal = false;
     const errors: Array<{ listingId?: string; message: string }> = [];
+    // Every listing id discovered this run — used to tombstone offers for
+    // listings that have vanished from RealTrack (no longer published on eBay).
+    const seenIds = new Set<string>();
 
     // Save initial state
     await this.redis.hset(redisKey, {
@@ -147,6 +158,7 @@ export class IngestionProcessor extends WorkerHost {
         discovered += result.items.length;
 
         for (const summary of result.items) {
+          seenIds.add(summary.id);
           try {
             const outcome = await this.processListing(
               summary,
@@ -159,6 +171,7 @@ export class IngestionProcessor extends WorkerHost {
               skippedInactiveOrZero++;
             else if (outcome === 'skipped_non_english_title')
               skippedNonEnglish++;
+            else if (outcome === 'skipped_ebay_mag') skippedEbayMag++;
             else if (outcome === 'skipped_excluded_brand')
               skippedExcludedBrand++;
             else if (outcome === 'imported') imported++;
@@ -183,17 +196,21 @@ export class IngestionProcessor extends WorkerHost {
           skippedWrongMarketplace: String(skippedWrongMarketplace),
           skippedInactiveOrZero: String(skippedInactiveOrZero),
           skippedNonEnglish: String(skippedNonEnglish),
+          skippedEbayMag: String(skippedEbayMag),
           skippedExcludedBrand: String(skippedExcludedBrand),
           errors: String(errors.length),
           updatedAt: new Date().toISOString(),
         });
 
         this.logger.log(
-          `[${syncRunId}] ${target.name} page ${page}: imported=${imported} discovered=${discovered} skipped(mkt=${skippedWrongMarketplace}, inactive=${skippedInactiveOrZero}, nonEn=${skippedNonEnglish}, brand=${skippedExcludedBrand})`,
+          `[${syncRunId}] ${target.name} page ${page}: imported=${imported} discovered=${discovered} skipped(mkt=${skippedWrongMarketplace}, inactive=${skippedInactiveOrZero}, nonEn=${skippedNonEnglish}, ebayMag=${skippedEbayMag}, brand=${skippedExcludedBrand})`,
         );
 
-        if (discovered >= result.total || result.items.length < result.limit)
+        if (discovered >= result.total) {
+          reachedTotal = true;
           break;
+        }
+        if (result.items.length < result.limit) break;
         page++;
       } catch (error) {
         this.logger.error(
@@ -209,11 +226,38 @@ export class IngestionProcessor extends WorkerHost {
       }
     }
 
+    // Stale-listing tombstone: a fresh, complete (non-resume, unbounded) sweep
+    // that reached result.total has now seen every listing RealTrack still
+    // publishes for this store. Any ACTIVE offer for this seller whose
+    // externalOfferId was NOT seen this run corresponds to a listing that is no
+    // longer published on eBay — deactivate it so the buyer catalog never shows
+    // ghosts. `reachedTotal` guards against a premature short-page break
+    // (partial feed) over-deactivating. Skipped on resume / bounded runs (the
+    // seen set would be incomplete) and when the feed returned nothing.
+    const fullRun =
+      !isResume && !listingLimit && discovered > 0 && reachedTotal;
+    if (fullRun) {
+      staleDeactivated = await this.tombstoneUnseenOffers(
+        canonicalStoreId,
+        seenIds,
+      );
+      if (staleDeactivated > 0) {
+        this.logger.log(
+          `[${syncRunId}] ${target.name}: tombstoned ${staleDeactivated} stale offers (no longer in RealTrack)`,
+        );
+      }
+    } else if (discovered === 0) {
+      this.logger.warn(
+        `[${syncRunId}] ${target.name}: RealTrack returned 0 listings — stale tombstone skipped to protect the catalog`,
+      );
+    }
+
     await this.redis.hset(redisKey, {
       status: 'completed',
       completedAt: new Date().toISOString(),
       finalImported: String(imported),
       finalDiscovered: String(discovered),
+      staleDeactivated: String(staleDeactivated),
     });
 
     return {
@@ -226,7 +270,9 @@ export class IngestionProcessor extends WorkerHost {
       skippedWrongMarketplace,
       skippedInactiveOrZero,
       skippedNonEnglish,
+      skippedEbayMag,
       skippedExcludedBrand,
+      staleDeactivated,
       errors,
     };
   }
@@ -266,17 +312,13 @@ export class IngestionProcessor extends WorkerHost {
       for (const summary of result.items) {
         try {
           // Use summary data directly — detail endpoint is unreliable
-          const outcome = await this.processListing(
-            summary,
-            canonicalStoreId,
-          );
+          const outcome = await this.processListing(summary, canonicalStoreId);
           if (outcome === 'skipped_wrong_store') skippedWrongStore++;
           else if (outcome === 'skipped_wrong_marketplace')
             skippedWrongMarketplace++;
           else if (outcome === 'skipped_inactive_or_zero_stock')
             skippedInactiveOrZero++;
-          else if (outcome === 'skipped_excluded_brand')
-            skippedExcludedBrand++;
+          else if (outcome === 'skipped_excluded_brand') skippedExcludedBrand++;
           else if (outcome === 'imported') imported++;
         } catch (error) {
           this.logger.warn(
@@ -399,7 +441,7 @@ export class IngestionProcessor extends WorkerHost {
           store.storeId!,
           undefined,
           store.storeSlug || undefined,
-          syncRunId!,
+          syncRunId,
         ),
       );
     }
@@ -423,10 +465,10 @@ export class IngestionProcessor extends WorkerHost {
     const { execSync } = require('child_process');
     try {
       this.logger.log('Starting bulk OpenSearch reindex...');
-      const output = execSync(
-        'node /app/scripts/reindex-active-from-db.mjs',
-        { timeout: 600_000, encoding: 'utf-8' },
-      );
+      const output = execSync('node /app/scripts/reindex-active-from-db.mjs', {
+        timeout: 600_000,
+        encoding: 'utf-8',
+      });
       const lastLine = output.trim().split('\n').pop();
       this.logger.log(`Bulk reindex complete: ${lastLine}`);
     } catch (error) {
@@ -448,6 +490,7 @@ export class IngestionProcessor extends WorkerHost {
     | 'skipped_no_seller'
     | 'skipped_inactive_or_zero_stock'
     | 'skipped_non_english_title'
+    | 'skipped_ebay_mag'
     | 'skipped_duplicate'
     | 'skipped_excluded_brand'
   > {
@@ -473,6 +516,13 @@ export class IngestionProcessor extends WorkerHost {
 
     const stockQty = stockQuantityForImport(listing);
     const imageUrls = extractListingImages(listing);
+    if (hasEbayMagImages(listing)) {
+      this.logger.warn(
+        `Skipping listing ${listing.id}: eBay Mag listing (storage.ebaymag.com images)`,
+      );
+      await this.deactivateOfferForListing(listing, expectedStoreId);
+      return 'skipped_ebay_mag';
+    }
     const title: string = extractEnglishTitle(listing);
     if (!looksLikeEnglishTitle(title)) {
       this.logger.warn(`Skipping listing ${listing.id}: non-English title`);
@@ -852,14 +902,18 @@ export class IngestionProcessor extends WorkerHost {
 
     // Collect unique make names from all sources so OpenSearch facets are
     // populated even when compatibility JSON is sparse.
-    const makes = [...new Set(
-      [
-        ...(Array.isArray(canonicalPart.compatibility)
-          ? (canonicalPart.compatibility as any[]).map((c: any) => c.make).filter(Boolean)
-          : []),
-        parsedVehicle?.make,
-      ].filter(Boolean) as string[],
-    )];
+    const makes = [
+      ...new Set(
+        [
+          ...(Array.isArray(canonicalPart.compatibility)
+            ? (canonicalPart.compatibility as any[])
+                .map((c: any) => c.make)
+                .filter(Boolean)
+            : []),
+          parsedVehicle?.make,
+        ].filter(Boolean) as string[],
+      ),
+    ];
 
     // Skip per-listing OpenSearch indexing during bulk sync — a single
     // bulk reindex runs after all stores finish (much faster overall).
@@ -986,5 +1040,57 @@ export class IngestionProcessor extends WorkerHost {
         );
       }
     }
+  }
+
+  /**
+   * Deactivate ACTIVE offers for this store whose `externalOfferId` was NOT
+   * seen in the just-completed sync run — i.e. listings RealTrack no longer
+   * returns, so they are no longer published on eBay. Reindexes each affected
+   * canonical part so OpenSearch drops the ghost document. Only touches offers
+   * that carry an `externalOfferId` (eBay-source offers); manually-created /
+   * spreadsheet offers without one are left untouched.
+   */
+  private async tombstoneUnseenOffers(
+    storeId: string,
+    seenIds: Set<string>,
+  ): Promise<number> {
+    const seller = await this.prisma.seller.findFirst({
+      where: { storeId },
+      select: { id: true },
+    });
+    if (!seller) return 0;
+
+    const active = await this.prisma.sellerOffer.findMany({
+      where: { sellerId: seller.id, status: 'ACTIVE' },
+      select: { id: true, canonicalPartId: true, externalOfferId: true },
+    });
+    const toDeactivate = active.filter(
+      (o) => o.externalOfferId && !seenIds.has(o.externalOfferId),
+    );
+    if (toDeactivate.length === 0) return 0;
+
+    await this.prisma.sellerOffer.updateMany({
+      where: { id: { in: toDeactivate.map((o) => o.id) } },
+      data: { status: 'INACTIVE' },
+    });
+
+    const partIds = [...new Set(toDeactivate.map((o) => o.canonicalPartId))];
+    for (const partId of partIds) {
+      try {
+        const part = await this.prisma.canonicalPart.findUnique({
+          where: { id: partId },
+          include: {
+            offers: { include: { seller: true } },
+            partNumbers: true,
+          },
+        });
+        if (part) await this.searchService.indexPart(part);
+      } catch (err) {
+        this.logger.warn(
+          `tombstone: failed to reindex ${partId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return toDeactivate.length;
   }
 }

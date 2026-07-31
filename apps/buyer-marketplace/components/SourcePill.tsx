@@ -1,12 +1,11 @@
 import { Badge, type BadgeTone } from "@repo/ui/badge";
 
 const SOURCE_TAG_CONFIG: Record<string, { label: string; tone: BadgeTone }> = {
-  FEB: { label: "FEBEST", tone: "success" },
-  DYN: { label: "Dynatrade", tone: "info" },
-  TRU: { label: "Trade Union", tone: "warning" },
-  DXB: { label: "DXB", tone: "brand" },
-  SPC: { label: "Sparco", tone: "info" },
-  SPD: { label: "Sparco DS", tone: "neutral" },
+  BST: { label: "FEBEST", tone: "success" },
+  AAP: { label: "DXB EXW", tone: "brand" },
+  YNTD: { label: "Dynatrade", tone: "info" },
+  PSRC: { label: "Sparco", tone: "info" },
+  TNRU: { label: "Trade Union", tone: "warning" },
   SAL: { label: "Salvage", tone: "danger" },
   BLK: { label: "Blackline", tone: "dark" },
   GEN: { label: "General", tone: "outline" },

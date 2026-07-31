@@ -21,21 +21,65 @@ export function isEbayImageUrl(url: string): boolean {
   return /ebay/i.test(url);
 }
 
+/** True when the URL is hosted on eBay Mag (eBay's cross-border-trade tool). */
+export function isEbayMagImageUrl(url: string): boolean {
+  return /storage\.ebaymag\.com\//i.test(String(url || ''));
+}
+
 /**
  * Keep remote image URLs only (never download/store binaries).
  * eBay-hosted URLs are sorted to the front; order within each group is preserved.
+ * eBay Mag (`storage.ebaymag.com`) assets are dropped — those listings are
+ * cross-border-trade sourced and excluded from the US buyer catalog.
  */
 export function prioritizeEbayImages(urls: string[]): string[] {
   const unique = [
     ...new Set(
       urls
         .map((u) => upgradeImageUrl(String(u).trim()))
-        .filter((u) => u.startsWith('http')),
+        .filter((u) => u.startsWith('http') && !isEbayMagImageUrl(u)),
     ),
   ];
   const ebay = unique.filter(isEbayImageUrl);
   const other = unique.filter((u) => !isEbayImageUrl(u));
   return [...ebay, ...other];
+}
+
+/**
+ * True when the listing's OWN images are hosted on eBay Mag (the eBay
+ * cross-border-trade listing tool). Such listings are not buyer-visible on
+ * the US catalog even though they publish to eBay US in USD. Detected from the
+ * raw payload (before sibling-image merging) so a merged-in sibling asset can
+ * never flag an otherwise-native listing.
+ */
+export function hasEbayMagImages(listing: any): boolean {
+  const collected: string[] = [];
+  const pushRaw = (value?: string | null) => {
+    if (typeof value === 'string' && value.startsWith('http')) {
+      collected.push(value.trim());
+    }
+  };
+  if (Array.isArray(listing?.imageUrls)) {
+    for (const url of listing.imageUrls) pushRaw(url);
+  }
+  if (Array.isArray(listing?.images)) {
+    for (const img of listing.images)
+      pushRaw(typeof img === 'string' ? img : img?.url);
+  }
+  pushRaw(listing?.rawEbayResponse?.item?.imageUrl);
+  pushRaw(listing?.rawEbayResponse?.item?.pictureURL);
+  pushRaw(listing?.rawEbayResponse?.item?.galleryURL);
+  const rawPics =
+    listing?.rawEbayResponse?.item?.pictureURLLarge ||
+    listing?.rawEbayResponse?.item?.PictureURL ||
+    listing?.rawEbayResponse?.item?.pictureUrls ||
+    listing?.rawEbayResponse?.item?.imageUrls;
+  if (Array.isArray(rawPics)) {
+    for (const url of rawPics) pushRaw(url);
+  } else {
+    pushRaw(rawPics);
+  }
+  return collected.some(isEbayMagImageUrl);
 }
 
 /** Collect every image URL available on a RealTrack listing payload. */
@@ -115,9 +159,7 @@ export function extractListingBrand(listing: any): string | null {
   const specifics = listing?.itemSpecifics;
   const fromSpecifics =
     specifics && typeof specifics === 'object'
-      ? specifics.Brand ||
-        specifics.brand ||
-        specifics.Manufacturer
+      ? specifics.Brand || specifics.brand || specifics.Manufacturer
       : null;
   const raw =
     listing?.brand ||
