@@ -163,6 +163,7 @@ function FacetGroup({
   const sorted = [...facets].sort((a, b) => a.name.localeCompare(b.name));
   const preview = sorted.slice(0, 6);
   const rest = sorted.slice(6);
+  const displayLabel = (name: string) => field === "partType" ? partTypeLabel(name) : name;
 
   return (
     <FilterGroup title={title} defaultOpen={defaultOpen}>
@@ -171,7 +172,7 @@ function FacetGroup({
           key={f.name}
           href={buildHref(params, { [field]: toggleCsv(params[field], f.name) })}
           active={csvHas(params[field], f.name)}
-          label={f.name}
+          label={displayLabel(f.name)}
           count={f.count}
         />
       ))}
@@ -186,7 +187,7 @@ function FacetGroup({
                 key={f.name}
                 href={buildHref(params, { [field]: toggleCsv(params[field], f.name) })}
                 active={csvHas(params[field], f.name)}
-                label={f.name}
+                label={displayLabel(f.name)}
                 count={f.count}
               />
             ))}
