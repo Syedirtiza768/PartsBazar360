@@ -30,6 +30,7 @@ ARG APP_NAME
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV APP_NAME=${APP_NAME}
+ENV HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=builder /app/apps/${APP_NAME}/.next/standalone ./
 COPY --from=builder /app/apps/${APP_NAME}/.next/static ./apps/${APP_NAME}/.next/static
