@@ -209,7 +209,6 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
       });
     }
   }
-  }
   if (chips.length === 0) return null;
 
   return (
