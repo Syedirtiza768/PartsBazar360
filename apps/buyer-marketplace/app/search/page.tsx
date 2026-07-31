@@ -16,6 +16,7 @@ import {
   ActiveFilterChips,
   countActiveFilters,
   buildHref,
+  clearFiltersHref,
   type SearchParamsShape,
 } from "@/components/FilterSidebar";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
@@ -25,7 +26,9 @@ const ALLOWED_PAGE_SIZES = [75, 150, 300] as const;
 
 function resolvePageSize(value?: string): number {
   const n = value ? parseInt(value, 10) : DEFAULT_PAGE_SIZE;
-  return (ALLOWED_PAGE_SIZES as readonly number[]).includes(n) ? n : DEFAULT_PAGE_SIZE;
+  return (ALLOWED_PAGE_SIZES as readonly number[]).includes(n)
+    ? n
+    : DEFAULT_PAGE_SIZE;
 }
 
 interface SearchPageProps {
@@ -59,18 +62,22 @@ async function getResults(
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
   // Only send when the buyer opted out — the API defaults interchange on.
-  if (params.includeInterchange === "false") qs.set("includeInterchange", "false");
+  if (params.includeInterchange === "false")
+    qs.set("includeInterchange", "false");
   qs.set("pageSize", String(resolvePageSize(params.pageSize)));
 
   try {
     // Anonymous catalog browse is safe to cache briefly. Fitment / vehicle
     // searches stay live so stock and verified-fit sets stay current.
-    const res = await fetch(`${INTERNAL_API_URL}/search/parts?${qs.toString()}`, {
-      ...(params.vehicleConfigId
-        ? { cache: "no-store" as const }
-        : { next: { revalidate: 30 } }),
-      signal: AbortSignal.timeout(12_000),
-    });
+    const res = await fetch(
+      `${INTERNAL_API_URL}/search/parts?${qs.toString()}`,
+      {
+        ...(params.vehicleConfigId
+          ? { cache: "no-store" as const }
+          : { next: { revalidate: 30 } }),
+        signal: AbortSignal.timeout(12_000),
+      },
+    );
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -78,17 +85,24 @@ async function getResults(
   }
 }
 
-export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: SearchPageProps): Promise<Metadata> {
   const params = await searchParams;
   const parts: string[] = [];
   if (params.brand) parts.push(params.brand);
   if (params.category) parts.push(params.category);
   if (params.q) parts.push(`"${params.q}"`);
 
-  const isHub = Boolean(params.category || params.brand) && !params.q && !params.vehicleConfigId;
-  const isAllParts = !params.category && !params.brand && !params.q && !params.vehicleConfigId;
+  const isHub =
+    Boolean(params.category || params.brand) &&
+    !params.q &&
+    !params.vehicleConfigId;
+  const isAllParts =
+    !params.category && !params.brand && !params.q && !params.vehicleConfigId;
   const pageNum = Math.max(1, params.page ? parseInt(params.page, 10) || 1 : 1);
-  const isPriceSort = params.sort === "price_asc" || params.sort === "price_desc";
+  const isPriceSort =
+    params.sort === "price_asc" || params.sort === "price_desc";
   const isPageSizeVariant =
     params.pageSize && resolvePageSize(params.pageSize) !== DEFAULT_PAGE_SIZE;
 
@@ -161,8 +175,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   // Browse returns post-filter facets scoped to the active filters, so counts
   // always agree with the visible result set (the old sidebar's global counts
   // were contradictory). Fitment mode returns no facets.
-  const facets: FacetsResponse =
-    results?.facets ?? { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
+  const facets: FacetsResponse = results?.facets ?? {
+    brands: [],
+    categories: [],
+    makes: [],
+    partTypes: [],
+    sourceTags: [],
+  };
 
   // Both browse and fitment search are server-paginated via the API.
   let totalPages = 1;
@@ -187,7 +206,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   };
 
   const activeFilterCount = countActiveFilters(paramsShape);
-  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0 || facets.partTypes.length > 0 || facets.sourceTags.length > 0);
+  const showFilters =
+    !isFitmentMode &&
+    (Boolean(params.q) ||
+      activeFilterCount > 0 ||
+      facets.categories.length > 0 ||
+      facets.brands.length > 0 ||
+      facets.makes.length > 0 ||
+      facets.partTypes.length > 0 ||
+      facets.sourceTags.length > 0);
+  const clearHref = clearFiltersHref(paramsShape);
   const interchangeOff = params.includeInterchange === "false";
   const isAtLeast = results?.totalRelation === "gte";
 
@@ -201,7 +229,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           ? `${params.brand} parts`
           : "Shop all parts";
 
-  const rangeStart = results && results.total > 0 ? (page - 1) * pageSize + 1 : 0;
+  const rangeStart =
+    results && results.total > 0 ? (page - 1) * pageSize + 1 : 0;
   const rangeEnd = results ? Math.min(page * pageSize, results.total) : 0;
 
   return (
@@ -210,14 +239,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{heading}</h1>
+            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              {heading}
+            </h1>
             <p className="mt-1 text-sm text-graphite-600">
               {results === null ? (
                 "Results unavailable"
               ) : results.total === 0 ? (
-                isFitmentMode
-                  ? "No verified-fit parts for this vehicle yet"
-                  : "No matching parts"
+                isFitmentMode ? (
+                  "No verified-fit parts for this vehicle yet"
+                ) : (
+                  "No matching parts"
+                )
               ) : (
                 <>
                   Showing{" "}
@@ -226,7 +259,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   </span>{" "}
                   of{" "}
                   <span className="font-semibold text-slate-900">
-                    {results.total.toLocaleString()}{isAtLeast ? "+" : ""}
+                    {results.total.toLocaleString()}
+                    {isAtLeast ? "+" : ""}
                   </span>{" "}
                   {isFitmentMode ? "verified-fit " : ""}
                   {results.total === 1 ? "part" : "parts"}
@@ -237,29 +271,54 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
           <div className="flex w-full items-center gap-2.5 sm:w-auto">
             {showFilters && (
-              <FilterDrawer activeCount={activeFilterCount}>
+              <FilterDrawer
+                activeCount={activeFilterCount}
+                resultCount={results?.total}
+                clearHref={clearHref}
+              >
                 <FilterSections facets={facets} params={paramsShape} />
               </FilterDrawer>
             )}
             {isFitmentMode ? (
-              <p className="text-sm text-graphite-600">Sorted by lowest price</p>
+              <p className="text-sm text-graphite-600">
+                Sorted by lowest price
+              </p>
             ) : (
               <>
                 <SortSelect current={sort} />
-                <PageSizeSelect current={pageSize} />
+                <div className="hidden md:block">
+                  <PageSizeSelect current={pageSize} />
+                </div>
               </>
             )}
           </div>
         </div>
 
         <ActiveFilterChips params={paramsShape} />
-        {isFitmentMode && <VehicleModeBanner configId={params.vehicleConfigId!} />}
+        {isFitmentMode && (
+          <VehicleModeBanner configId={params.vehicleConfigId!} />
+        )}
       </div>
 
       <div className="flex flex-col gap-8 pt-6 lg:flex-row">
         {/* Filters sidebar — plain links so filtering works without JS and is fully crawlable */}
         {showFilters && (
-          <aside className="hidden w-60 shrink-0 self-start lg:sticky lg:top-28 lg:block lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" aria-label="Filters">
+          <aside
+            className="hidden w-64 shrink-0 self-start border-r border-slate-200 pr-5 lg:sticky lg:top-28 lg:block lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
+            aria-label="Filters"
+          >
+            <div className="mb-2 flex min-h-10 items-center justify-between gap-3 border-b-2 border-slate-950 pb-2">
+              <h2 className="text-base font-bold text-slate-950">Filters</h2>
+              {activeFilterCount > 0 && (
+                <Link
+                  href={clearHref}
+                  rel="nofollow"
+                  className="text-xs font-semibold text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                >
+                  Clear filters
+                </Link>
+              )}
+            </div>
             <FilterSections facets={facets} params={paramsShape} />
           </aside>
         )}
@@ -272,7 +331,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               title="We couldn't load results"
               description="Something went wrong on our side. Reload the page or try again in a moment."
             >
-              <Link href={buildHref(paramsShape, {})} className={buttonClasses({ variant: "outline" })}>
+              <Link
+                href={buildHref(paramsShape, {})}
+                className={buttonClasses({ variant: "outline" })}
+              >
                 Try again
               </Link>
             </EmptyState>
@@ -280,7 +342,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             <EmptyState
               variant="page"
               icon={isFitmentMode ? <CarIcon /> : <SearchIcon />}
-              title={isFitmentMode ? "No verified-fit parts for this vehicle yet" : "No parts match"}
+              title={
+                isFitmentMode
+                  ? "No verified-fit parts for this vehicle yet"
+                  : "No parts match"
+              }
               description={
                 isFitmentMode
                   ? "Inventory changes daily. Try browsing the full catalog and checking listings' compatibility tables, or ask support to source the part."
@@ -296,7 +362,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   <Link href="/search" className={buttonClasses()}>
                     Browse all parts
                   </Link>
-                  <Link href="/support" className={buttonClasses({ variant: "outline" })}>
+                  <Link
+                    href="/support"
+                    className={buttonClasses({ variant: "outline" })}
+                  >
                     Ask support
                   </Link>
                 </>
@@ -304,7 +373,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 <>
                   {interchangeOff && params.q && (
                     <Link
-                      href={buildHref(paramsShape, { includeInterchange: undefined })}
+                      href={buildHref(paramsShape, {
+                        includeInterchange: undefined,
+                      })}
                       className={buttonClasses()}
                     >
                       Include interchange numbers
@@ -313,12 +384,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   {params.q && (
                     <Link
                       href={`/support?category=GENERAL&subject=${encodeURIComponent(`Source request: ${params.q}`)}`}
-                      className={buttonClasses({ variant: interchangeOff ? "outline" : "primary" })}
+                      className={buttonClasses({
+                        variant: interchangeOff ? "outline" : "primary",
+                      })}
                     >
                       Ask us to source “{params.q}”
                     </Link>
                   )}
-                  <Link href="/search" className={buttonClasses({ variant: "outline" })}>
+                  <Link
+                    href="/search"
+                    className={buttonClasses({ variant: "outline" })}
+                  >
                     Clear search &amp; filters
                   </Link>
                 </>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { SlidersIcon } from "@repo/ui/icons";
-import { Button } from "@repo/ui/button";
+import { Button, buttonClasses } from "@repo/ui/button";
 import { Sheet } from "@repo/ui/sheet";
 
 /**
@@ -19,18 +19,15 @@ import { Sheet } from "@repo/ui/sheet";
 export function FilterDrawer({
   children,
   activeCount = 0,
+  resultCount,
+  clearHref,
 }: {
   children: ReactNode;
   activeCount?: number;
+  resultCount?: number;
+  clearHref: string;
 }) {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Close when any filter link navigates.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname, searchParams]);
 
   return (
     <>
@@ -54,11 +51,25 @@ export function FilterDrawer({
         onClose={() => setOpen(false)}
         side="right"
         size="md"
-        title="Filters"
+        title={activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
+        description="Select one or more options. Counts update as you refine."
         footer={
-          <Button fullWidth onClick={() => setOpen(false)}>
-            Show results
-          </Button>
+          <div className="flex items-center gap-3">
+            {activeCount > 0 && (
+              <Link
+                href={clearHref}
+                rel="nofollow"
+                className={`${buttonClasses({ variant: "outline" })} shrink-0`}
+              >
+                Clear
+              </Link>
+            )}
+            <Button fullWidth onClick={() => setOpen(false)}>
+              {resultCount == null
+                ? "Show results"
+                : `Show ${resultCount.toLocaleString()} ${resultCount === 1 ? "result" : "results"}`}
+            </Button>
+          </div>
         }
       >
         {children}
