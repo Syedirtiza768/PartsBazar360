@@ -159,8 +159,9 @@ function FacetGroup({
   defaultOpen?: boolean;
 }) {
   if (facets.length === 0) return null;
-  const preview = facets.slice(0, 6);
-  const rest = facets.slice(6);
+  const sorted = [...facets].sort((a, b) => a.name.localeCompare(b.name));
+  const preview = sorted.slice(0, 6);
+  const rest = sorted.slice(6);
 
   return (
     <FilterGroup title={title} defaultOpen={defaultOpen}>
@@ -287,9 +288,9 @@ export function FilterSections({
         </FilterGroup>
       )}
 
-      <FacetGroup field="partType" title="Part type" facets={partTypes} params={params} />
-      <FacetGroup field="category" title="Category" facets={categories} params={params} />
       <FacetGroup field="brand" title="Brand" facets={brands} params={params} />
+      <FacetGroup field="category" title="Category" facets={categories} params={params} />
+      <FacetGroup field="partType" title="Part type" facets={partTypes} params={params} />
       <FacetGroup field="make" title="Vehicle make" facets={makes} params={params} defaultOpen={false} />
     </div>
   );

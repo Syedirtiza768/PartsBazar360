@@ -20,8 +20,8 @@ import {
 } from "@/components/FilterSidebar";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
-const DEFAULT_PAGE_SIZE = 24;
-const ALLOWED_PAGE_SIZES = [24, 48, 72] as const;
+const DEFAULT_PAGE_SIZE = 75;
+const ALLOWED_PAGE_SIZES = [75, 150, 300] as const;
 
 function resolvePageSize(value?: string): number {
   const n = value ? parseInt(value, 10) : DEFAULT_PAGE_SIZE;
@@ -255,7 +255,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <div className="flex flex-col gap-8 pt-6 lg:flex-row">
         {/* Filters sidebar — plain links so filtering works without JS and is fully crawlable */}
         {showFilters && (
-          <aside className="hidden w-60 shrink-0 self-start lg:sticky lg:top-28 lg:block" aria-label="Filters">
+          <aside className="hidden w-60 shrink-0 self-start lg:sticky lg:top-28 lg:block lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" aria-label="Filters">
             <FilterSections facets={facets} params={paramsShape} />
           </aside>
         )}
