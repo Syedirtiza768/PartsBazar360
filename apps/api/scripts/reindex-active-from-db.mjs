@@ -79,6 +79,14 @@ function toDoc(part) {
       .map((n) => n.normalizedNumber)
       .filter(Boolean),
     category: part.category,
+    makes: [...new Set(
+      [
+        ...((part.compatibility || []).map((c) => c.make).filter(Boolean)),
+        ...(part.fitments || [])
+          .map((f) => f.vehicleConfig?.generation?.model?.make?.name)
+          .filter(Boolean),
+      ],
+    )],
     oeNumbers: part.oeNumbers,
     interchangePartNumbers: partNumbers
       .filter((n) => n.numberType === 'OEM_CROSS_REFERENCE')
@@ -180,10 +188,18 @@ async function main() {
         include: {
           partNumbers: true,
           fitments: {
-            select: {
-              vehicleConfigId: true,
-              evidenceLevel: true,
-              confidence: true,
+            include: {
+              vehicleConfig: {
+                include: {
+                  generation: {
+                    include: {
+                      model: {
+                        include: { make: true },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
           offers: {
