@@ -42,3 +42,7 @@ certbot/
 
 # Scraper checkpoints and run reports
 .scraper-state/
+
+# Local scratch: ad-hoc SQL, one-off scripts, exported CSV/JSON dumps.
+# ~500 MB of working files, some containing database credentials.
+tmp/
