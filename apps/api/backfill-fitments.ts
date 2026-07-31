@@ -130,6 +130,8 @@ async function main() {
       category: updatedPart.category,
       oeNumbers: updatedPart.oeNumbers,
       imageUrls: updatedPart.imageUrls,
+      compatibility: updatedPart.compatibility,
+      makes: parsedVehicle?.make ? [parsedVehicle.make] : [],
       createdAt: updatedPart.createdAt,
       fitments: allFitments,
       offers: part.offers,

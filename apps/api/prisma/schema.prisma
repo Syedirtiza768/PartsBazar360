@@ -339,6 +339,7 @@ model SellerOffer {
   warranty             String?
   returnPolicy         String?
   sellerNotes          String?
+  sourceTag            String?   @db.VarChar(3) // 3-char provenance tag: FEB, DYN, TRU, DXB, SPC, SPD, SAL, BLK, GEN
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -357,6 +358,7 @@ model SellerOffer {
   @@index([canonicalPartId])
   @@index([sellerId, status])
   @@index([sellerId, updatedAt])
+  @@index([sourceTag])
 }
 
 model OfferPrice {

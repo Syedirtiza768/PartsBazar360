@@ -45,6 +45,7 @@ import {
   REALTRACK_MARKETPLACE_SELLERS,
   resolveRealTrackSyncTarget,
 } from '../seed/marketplace-sellers.config';
+import { tagFromStoreId } from '../catalog-import/source-tag.util';
 
 @Processor('ingestion', {
   concurrency: 2,
@@ -679,6 +680,7 @@ export class IngestionProcessor extends WorkerHost {
           partType: 'SALVAGE_OEM',
           partSource: 'OEM',
           qualityTier: 'USED',
+          sourceTag: tagFromStoreId(expectedStoreId),
         },
       });
     } else {
@@ -703,6 +705,7 @@ export class IngestionProcessor extends WorkerHost {
           partType: 'SALVAGE_OEM',
           partSource: 'OEM',
           qualityTier: 'USED',
+          sourceTag: tagFromStoreId(expectedStoreId),
         },
       });
     }
@@ -849,6 +852,17 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
+    // Collect unique make names from all sources so OpenSearch facets are
+    // populated even when compatibility JSON is sparse.
+    const makes = [...new Set(
+      [
+        ...(canonicalPart.compatibility || [])
+          .map((c: any) => c.make)
+          .filter(Boolean),
+        parsedVehicle?.make,
+      ].filter(Boolean) as string[],
+    )];
+
     // Skip per-listing OpenSearch indexing during bulk sync — a single
     // bulk reindex runs after all stores finish (much faster overall).
     if (!process.env.SKIP_OS_INDEX_ON_INGEST) {
@@ -876,6 +890,7 @@ export class IngestionProcessor extends WorkerHost {
             condition: offer.condition,
             sellerId: offer.sellerId,
             sellerName: seller.name,
+            sourceTag: offer.sourceTag,
           },
         ],
       });

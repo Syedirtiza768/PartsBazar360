@@ -36,6 +36,7 @@ interface SearchPageProps {
     brand?: string;
     make?: string;
     partType?: string;
+    sourceTag?: string;
     sort?: "relevance" | "newest" | "price_asc" | "price_desc";
     page?: string;
     pageSize?: string;
@@ -54,6 +55,7 @@ async function getResults(
   if (params.brand) qs.set("brand", params.brand);
   if (params.make) qs.set("make", params.make);
   if (params.partType) qs.set("partType", params.partType);
+  if (params.sourceTag) qs.set("sourceTag", params.sourceTag);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
   // Only send when the buyer opted out — the API defaults interchange on.
@@ -177,6 +179,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     brand: params.brand,
     make: params.make,
     partType: params.partType,
+    sourceTag: params.sourceTag,
     sort: params.sort,
     includeInterchange: params.includeInterchange,
     pageSize: params.pageSize,

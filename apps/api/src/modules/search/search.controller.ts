@@ -157,6 +157,7 @@ export class SearchController implements OnModuleDestroy {
     @Query('brand') brand?: string,
     @Query('make') make?: string,
     @Query('partType') partType?: string,
+    @Query('sourceTag') sourceTag?: string,
     @Query('sort') sort?: BrowseSort,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -210,7 +211,7 @@ export class SearchController implements OnModuleDestroy {
 
     const pageNum = page ? parseInt(page, 10) : 1;
     const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
-    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
     const cached = await this.cacheGet<any>(cacheK);
     if (cached) return cached;
 
@@ -221,6 +222,7 @@ export class SearchController implements OnModuleDestroy {
       brand,
       make,
       partType,
+      sourceTag,
       sort,
       page: pageNum,
       limit: resolvedLimit,

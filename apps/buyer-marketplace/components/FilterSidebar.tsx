@@ -64,7 +64,8 @@ export function countActiveFilters(params: SearchParamsShape): number {
     csvList(params.category).length +
     csvList(params.brand).length +
     csvList(params.make).length +
-    csvList(params.partType).length
+    csvList(params.partType).length +
+    csvList(params.sourceTag).length
   );
 }
 
@@ -152,7 +153,7 @@ function FacetGroup({
   params,
   defaultOpen = true,
 }: {
-  field: "category" | "brand" | "make" | "partType";
+  field: "category" | "brand" | "make" | "partType" | "sourceTag";
   title: string;
   facets: { name: string; count: number }[];
   params: SearchParamsShape;
@@ -198,8 +199,8 @@ function FacetGroup({
 
 export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
   const chips: Array<{ field: string; value: string; label: string }> = [];
-  if (params.q) chips.push({ field: "q", value: "", label: `“${params.q}”` });
-  for (const field of ["category", "brand", "make", "partType"] as const) {
+  if (params.q) chips.push({ field: "q", value: "", label: `\u201c${params.q}\u201d` });
+  for (const field of ["category", "brand", "make", "partType", "sourceTag"] as const) {
     for (const value of csvList(params[field])) {
       chips.push({
         field,
@@ -207,6 +208,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
         label: field === "partType" ? partTypeLabel(value) : value,
       });
     }
+  }
   }
   if (chips.length === 0) return null;
 
@@ -250,6 +252,7 @@ export function FilterSections({
   const brands = facets.brands ?? [];
   const makes = facets.makes ?? [];
   const partTypes = facets.partTypes ?? [];
+  const sourceTags = facets.sourceTags ?? [];
   // Interchange matching is on unless the buyer turned it off.
   const interchangeOn = params.includeInterchange !== "false";
 
@@ -288,6 +291,7 @@ export function FilterSections({
         </FilterGroup>
       )}
 
+      <FacetGroup field="sourceTag" title="Source" facets={sourceTags} params={params} />
       <FacetGroup field="brand" title="Brand" facets={brands} params={params} />
       <FacetGroup field="category" title="Category" facets={categories} params={params} />
       <FacetGroup field="partType" title="Part type" facets={partTypes} params={params} />

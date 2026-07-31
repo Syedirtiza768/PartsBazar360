@@ -108,7 +108,9 @@ function toDoc(part) {
       qualityTier: o.qualityTier || null,
       sellerId: o.sellerId,
       sellerName: o.seller?.name || null,
+      sourceTag: o.sourceTag || null,
     })),
+    sourceTags: [...new Set(activeOffers.map((o) => o.sourceTag).filter(Boolean))],
   };
 }
 

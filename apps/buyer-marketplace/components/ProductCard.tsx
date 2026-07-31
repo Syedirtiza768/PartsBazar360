@@ -7,6 +7,7 @@ import { UserIcon, TagIcon, RefreshIcon } from "@repo/ui/icons";
 import { PartImage } from "./PartImage";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
+import { SourcePill } from "./SourcePill";
 import { Price } from "./Price";
 import { WatchlistButton } from "./WatchlistButton";
 import { lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
@@ -84,6 +85,7 @@ export function ProductCard({
   const isSalvage = partType === "SALVAGE_OEM";
   const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];
   const identityNumber = part.manufacturerPartNumber || oeNumber;
+  const sourceTag = part.sourceTags?.[0] || bestOffer?.sourceTag || null;
 
   if (offerCount === 0) return null;
 
@@ -136,6 +138,7 @@ export function ProductCard({
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           <ConditionBadge qualityTier={qualityTier} size="sm" />
           <SourceBadge partSource={partSource} partType={partType} size="sm" />
+          <SourcePill tag={sourceTag} size="sm" />
         </div>
 
         {/* Found via a cross-reference number, not this part's own — say so,

@@ -10,6 +10,7 @@ export interface Offer {
   partType?: string;
   sellerSku?: string | null;
   moq?: number;
+  sourceTag?: string | null;
   inventory?: Array<{ quantity: number; status: string; warehouse?: { name: string; location?: string | null } }>;
   seller?: {
     id: string;
@@ -185,6 +186,7 @@ export interface Part {
   matchedVia?: "interchange";
   matchedNumber?: string;
   salvageUnits?: SalvageUnit[];
+  sourceTags?: string[];
 }
 
 export interface SalvageUnit {
@@ -216,6 +218,7 @@ export interface BrowseFacets {
   categories: Facet[];
   makes: Facet[];
   partTypes: Facet[];
+  sourceTags: Facet[];
 }
 
 export interface BrowseResponse {
@@ -241,4 +244,5 @@ export interface FacetsResponse {
   categories: Facet[];
   makes: Facet[];
   partTypes: Facet[];
+  sourceTags: Facet[];
 }

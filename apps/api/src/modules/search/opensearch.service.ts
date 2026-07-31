@@ -10,6 +10,7 @@ export interface BrowseFacets {
   categories: Array<{ name: string; count: number }>;
   makes: Array<{ name: string; count: number }>;
   partTypes: Array<{ name: string; count: number }>;
+  sourceTags: Array<{ name: string; count: number }>;
 }
 
 export interface BrowseResult {
@@ -186,8 +187,10 @@ export class OpenSearchService implements OnModuleInit {
           qualityTier: { type: 'keyword' },
           sellerId: { type: 'keyword' },
           sellerName: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+          sourceTag: { type: 'keyword' },
         },
       },
+      sourceTags: { type: 'keyword' },
     };
   }
 
@@ -241,14 +244,15 @@ export class OpenSearchService implements OnModuleInit {
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           category: part.category,
-          // Extract unique makes from compatibility data for faceted filtering.
-          // Makes (Toyota, BMW) are vehicle manufacturers — distinct from brand
-          // (FEBEST, Bosch) which is the parts manufacturer.
-          makes: [...new Set(
-            (part.compatibility || [])
+          // Extract unique makes from both compatibility data and any
+          // explicit makes array passed by callers (e.g. from structured
+          // fitments where the caller already resolved the make name).
+          makes: [...new Set([
+            ...(part.compatibility || [])
               .map((c: any) => c.make)
-              .filter(Boolean)
-          )],
+              .filter(Boolean),
+            ...(part.makes || []).filter(Boolean),
+          ])],
           oeNumbers: part.oeNumbers,
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
@@ -293,7 +297,9 @@ export class OpenSearchService implements OnModuleInit {
             qualityTier: o.qualityTier || null,
             sellerId: o.sellerId,
             sellerName: o.sellerName || o.seller?.name || null,
+            sourceTag: o.sourceTag || null,
           })),
+          sourceTags: [...new Set(offers.map((o: any) => o.sourceTag).filter(Boolean))],
         },
         refresh: process.env.OPENSEARCH_REFRESH_ON_INDEX === 'true',
       });
@@ -391,6 +397,7 @@ export class OpenSearchService implements OnModuleInit {
     brand?: string | string[];
     make?: string | string[];
     partType?: string | string[];
+    sourceTag?: string | string[];
     sort?: BrowseSort;
     page?: number;
     limit?: number;
@@ -419,6 +426,7 @@ export class OpenSearchService implements OnModuleInit {
     const brands = asArray(opts.brand);
     const makes = asArray(opts.make);
     const partTypes = asArray(opts.partType);
+    const sourceTags = asArray(opts.sourceTag);
 
     // --- relevance clauses (weighted should). Exact normalized part-number
     //     dominates (boost 60); interchange cross-reference is a strong but
@@ -476,6 +484,8 @@ export class OpenSearchService implements OnModuleInit {
     if (makes.length) baseFilters.push({ terms: { 'makes.keyword': makes } });
     if (partTypes.length)
       baseFilters.push({ terms: { 'partType.keyword': partTypes } });
+    if (sourceTags.length)
+      baseFilters.push({ terms: { 'sourceTags.keyword': sourceTags } });
 
     // --- sort. Relevance only means something for a keyword; a no-query
     //     browse falls back to newest so the feed is stable, not arbitrary. ---
@@ -501,6 +511,8 @@ export class OpenSearchService implements OnModuleInit {
         f.push({ terms: { 'makes.keyword': makes } });
       if (exclude !== 'partType' && partTypes.length)
         f.push({ terms: { 'partType.keyword': partTypes } });
+      if (exclude !== 'sourceTag' && sourceTags.length)
+        f.push({ terms: { 'sourceTags.keyword': sourceTags } });
       if (qClause) f.push(qClause);
       return f;
     };
@@ -520,6 +532,10 @@ export class OpenSearchService implements OnModuleInit {
       partTypes: {
         filter: { bool: { filter: facetFilter('partType') } },
         aggs: { names: { terms: { field: 'partType.keyword', size: 50 } } },
+      },
+      sourceTags: {
+        filter: { bool: { filter: facetFilter('sourceTag') } },
+        aggs: { names: { terms: { field: 'sourceTags.keyword', size: 50 } } },
       },
     };
 
@@ -570,6 +586,7 @@ export class OpenSearchService implements OnModuleInit {
         brands: bucketsOf(aggsBody.brands),
         makes: bucketsOf(aggsBody.makes),
         partTypes: bucketsOf(aggsBody.partTypes),
+        sourceTags: bucketsOf(aggsBody.sourceTags),
       };
 
       return {
@@ -764,6 +781,7 @@ export class OpenSearchService implements OnModuleInit {
             categories: { terms: { field: 'category.keyword', size: 50 } },
             makes: { terms: { field: 'makes.keyword', size: 50 } },
             partTypes: { terms: { field: 'partType.keyword', size: 50 } },
+            sourceTags: { terms: { field: 'sourceTags.keyword', size: 50 } },
           },
         },
       });
@@ -773,12 +791,14 @@ export class OpenSearchService implements OnModuleInit {
         categories: FacetAgg;
         makes: FacetAgg;
         partTypes: FacetAgg;
+        sourceTags: FacetAgg;
       };
       return {
         brands: bucketsOf(aggs.brands),
         categories: bucketsOf(aggs.categories),
         makes: bucketsOf(aggs.makes),
         partTypes: bucketsOf(aggs.partTypes),
+        sourceTags: bucketsOf(aggs.sourceTags),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
@@ -788,7 +808,7 @@ export class OpenSearchService implements OnModuleInit {
 }
 
 function emptyFacets(): BrowseFacets {
-  return { brands: [], categories: [], makes: [], partTypes: [] };
+  return { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
 }
 
 /** Shape of a scoped `filter + terms` aggregation bucket list. */

@@ -693,20 +693,27 @@ async function main() {
   const partIds = offers.map((o) => o.canonicalPartId);
   console.log(JSON.stringify({ event: 'loaded_part_ids', count: partIds.length }));
 
-  let parts = await prisma.canonicalPart.findMany({
-    where: { id: { in: partIds } },
+const BRAND_FILTER = process.env.FEBEST_BRAND || 'FEBEST';
+const BATCH = 5000;
+let parts = [];
+for (let i = 0; i < partIds.length; i += BATCH) {
+  const chunk = partIds.slice(i, i + BATCH);
+  const batch = await prisma.canonicalPart.findMany({
+    where: { id: { in: chunk }, brand: BRAND_FILTER },
     select: {
-      id: true,
-      title: true,
-      manufacturerPartNumber: true,
-      imageUrls: true,
-      listingUrl: true,
-      oeNumbers: true,
-      fitmentFlags: true,
-      compatibility: true,
-    },
-    orderBy: { manufacturerPartNumber: 'asc' },
-  });
+        id: true,
+        title: true,
+        manufacturerPartNumber: true,
+        imageUrls: true,
+        listingUrl: true,
+        oeNumbers: true,
+        fitmentFlags: true,
+        compatibility: true,
+      },
+    });
+    parts.push(...batch);
+  }
+  parts.sort((a, b) => (a.manufacturerPartNumber || '').localeCompare(b.manufacturerPartNumber || ''));
 
   if (!FORCE) {
     parts = parts.filter((p) => {

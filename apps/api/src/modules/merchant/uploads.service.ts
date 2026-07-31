@@ -14,7 +14,7 @@ import {
 import type { ParsedVehicle } from '../ingestion/listing-parser.util';
 import { PricingService } from '../pricing/pricing.service';
 import { createHash } from 'node:crypto';
-import { SpreadsheetParserService } from '../catalog-import/spreadsheet-parser.service';
+import { SpreadsheetParserService, type ImportTemplate } from '../catalog-import/spreadsheet-parser.service';
 import { classifyPart } from '../catalog-import/classification.util';
 import { parseCompoundOemReferences } from '../catalog-import/oem-reference.parser';
 import {
@@ -22,6 +22,7 @@ import {
   normalizeMasterName,
   normalizePartNumber,
 } from '../catalog-import/part-normalization.util';
+import { tagFromTemplate, type SourceTag } from '../catalog-import/source-tag.util';
 import { CatalogMatchService } from '../catalog-import/catalog-match.service';
 import { ReviewTaskService } from '../catalog-import/review-task.service';
 import { CatalogAuditService } from '../catalog-import/catalog-audit.service';
@@ -1218,6 +1219,7 @@ export class MerchantUploadsService {
       moq: raw.moq ? Math.max(1, parseInt(raw.moq, 10) || 1) : 1,
       externalOfferId: raw.sku?.trim() || manufacturerPartNumber,
       sourceKey: offerSourceKey,
+      sourceTag: tagFromTemplate(raw.__template as ImportTemplate),
       status:
         quantity === 0
           ? 'OUT_OF_STOCK'
@@ -1444,6 +1446,15 @@ export class MerchantUploadsService {
       oeNumbers: canonicalPart.oeNumbers,
       imageUrls: canonicalPart.imageUrls,
       compatibility: canonicalPart.compatibility,
+      makes: [...new Set(
+        [
+          ...(canonicalPart.compatibility || [])
+            .map((c: any) => c.make)
+            .filter(Boolean),
+          parsedVehicle?.make,
+          ...parsedOemReferences.map((r) => r.canonicalMake).filter(Boolean),
+        ].filter(Boolean) as string[],
+      )],
       partSource: canonicalPart.partSource,
       qualityTier: canonicalPart.qualityTier,
       fitmentStatus: canonicalPart.fitmentStatus,
@@ -1459,6 +1470,7 @@ export class MerchantUploadsService {
           qualityTier: offer.qualityTier,
           sellerId: offer.sellerId,
           sellerName,
+          sourceTag: offer.sourceTag,
         },
       ],
     });
