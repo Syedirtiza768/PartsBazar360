@@ -39,7 +39,7 @@ async function main() {
   let skipped = 0;
 
   for (const part of parts) {
-    const compatMakes = (part.compatibility || [])
+    const compatMakes = ((part.compatibility as any[]) || [])
       .map((c: any) => c.make)
       .filter(Boolean);
 

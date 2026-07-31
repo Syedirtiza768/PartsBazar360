@@ -1448,9 +1448,9 @@ export class MerchantUploadsService {
       compatibility: canonicalPart.compatibility,
       makes: [...new Set(
         [
-          ...(canonicalPart.compatibility || [])
+          ...((canonicalPart.compatibility as any[] || [])
             .map((c: any) => c.make)
-            .filter(Boolean),
+            .filter(Boolean)),
           parsedVehicle?.make,
           ...parsedOemReferences.map((r) => r.canonicalMake).filter(Boolean),
         ].filter(Boolean) as string[],

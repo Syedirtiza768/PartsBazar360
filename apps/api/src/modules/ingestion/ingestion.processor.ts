@@ -856,9 +856,9 @@ export class IngestionProcessor extends WorkerHost {
     // populated even when compatibility JSON is sparse.
     const makes = [...new Set(
       [
-        ...(canonicalPart.compatibility || [])
+        ...((canonicalPart.compatibility as any[] || [])
           .map((c: any) => c.make)
-          .filter(Boolean),
+          .filter(Boolean)),
         parsedVehicle?.make,
       ].filter(Boolean) as string[],
     )];
