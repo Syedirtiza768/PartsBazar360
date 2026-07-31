@@ -81,7 +81,7 @@ function toDoc(part) {
     category: part.category,
     makes: [...new Set(
       [
-        ...((part.compatibility || []).map((c) => c.make).filter(Boolean)),
+        ...(Array.isArray(part.compatibility) ? part.compatibility.map((c) => c.make).filter(Boolean) : []),
         ...(part.fitments || [])
           .map((f) => f.vehicleConfig?.generation?.model?.make?.name)
           .filter(Boolean),
