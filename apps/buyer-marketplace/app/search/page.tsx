@@ -101,6 +101,7 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
     Boolean(params.q) ||
     isPriceSort ||
     Boolean(params.partType) ||
+    Boolean(params.sourceTag) ||
     Boolean(params.includeInterchange === "false") ||
     Boolean(isPageSizeVariant) ||
     (Boolean(params.category) && Boolean(params.brand)) ||
@@ -161,7 +162,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   // always agree with the visible result set (the old sidebar's global counts
   // were contradictory). Fitment mode returns no facets.
   const facets: FacetsResponse =
-    results?.facets ?? { brands: [], categories: [], makes: [], partTypes: [] };
+    results?.facets ?? { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
 
   // Both browse and fitment search are server-paginated via the API.
   let totalPages = 1;
@@ -186,7 +187,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   };
 
   const activeFilterCount = countActiveFilters(paramsShape);
-  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0 || facets.partTypes.length > 0);
+  const showFilters = !isFitmentMode && (facets.categories.length > 0 || facets.brands.length > 0 || facets.makes.length > 0 || facets.partTypes.length > 0 || facets.sourceTags.length > 0);
   const interchangeOff = params.includeInterchange === "false";
   const isAtLeast = results?.totalRelation === "gte";
 
