@@ -113,13 +113,65 @@ describe('resolveItemWeight', () => {
     expect(estimated.actualKg).toBe(profile.maxWeightKg);
     expect(estimated.clamped).toBe(true);
 
+    // A plausible exact measurement inside the envelope is trusted.
     const measured = resolveItemWeight({
+      weightKg: 3.2,
+      weightSource: 'MEASURED',
+      partClassKey: 'BRAKE_PAD_SET',
+    });
+    expect(measured.actualKg).toBe(3.2);
+    expect(measured.clamped).toBe(false);
+    expect(measured.outlier).toBe(false);
+    expect(measured.unitAutoConverted).toBe(false);
+  });
+
+  it('auto-converts a likely grams-as-kg unit error for exact sources', () => {
+    // BRAKE_PAD_SET maxWeightKg = 5. A 500kg brake pad is clearly grams.
+    const result = resolveItemWeight({
       weightKg: 500,
       weightSource: 'MEASURED',
       partClassKey: 'BRAKE_PAD_SET',
     });
-    expect(measured.actualKg).toBe(500);
-    expect(measured.clamped).toBe(false);
+    expect(result.actualKg).toBe(0.5); // 500g → 0.5kg
+    expect(result.unitAutoConverted).toBe(true);
+    expect(result.outlier).toBe(true);
+    expect(result.clamped).toBe(false); // exact sources still not clamped
+  });
+
+  it('flags a plausible outlier for exact sources but does not auto-convert', () => {
+    // BRAKE_DISC_ROTOR maxWeightKg = 22. A 80kg rotor is 3.6× the max —
+    // outlier territory but not a single g→kg conversion.
+    const result = resolveItemWeight({
+      weightKg: 80,
+      weightSource: 'SPREADSHEET',
+      partClassKey: 'BRAKE_DISC_ROTOR',
+    });
+    expect(result.actualKg).toBe(80); // kept as-is
+    expect(result.outlier).toBe(true);
+    expect(result.unitAutoConverted).toBe(false);
+    expect(result.clamped).toBe(false); // exact sources still not clamped
+  });
+
+  it('does not auto-convert when g→kg result would still be implausible', () => {
+    // ALTERNATOR maxWeightKg = 16. 5000g → 5kg, which is in the envelope.
+    const result = resolveItemWeight({
+      weightKg: 5000,
+      weightSource: 'MEASURED',
+      partClassKey: 'ALTERNATOR',
+    });
+    expect(result.actualKg).toBe(5); // 5000g → 5kg
+    expect(result.unitAutoConverted).toBe(true);
+    expect(result.outlier).toBe(true);
+  });
+
+  it('marks normal weights as neither outlier nor auto-converted', () => {
+    const result = resolveItemWeight({
+      weightKg: 2,
+      weightSource: 'SPREADSHEET',
+      partClassKey: 'BRAKE_PAD_SET',
+    });
+    expect(result.outlier).toBe(false);
+    expect(result.unitAutoConverted).toBe(false);
   });
 
   it('defaults an unlabelled supplied weight to the AI source', () => {

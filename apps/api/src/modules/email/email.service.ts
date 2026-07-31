@@ -126,6 +126,16 @@ export class EmailService {
     await this.send(to, 'Reset your PartsBazar360 password', html);
   }
 
+  async sendOtpCode(to: string, code: string): Promise<void> {
+    const html = this.layout(`
+      <h1>Your verification code</h1>
+      <p>Use the following code to sign in to your PartsBazar360 account. This code expires in 10 minutes.</p>
+      <div class="code">${code}</div>
+      <p style="font-size:13px;color:#71717a;">If you didn't request this code, you can safely ignore this email.</p>
+    `);
+    await this.send(to, `Your PartsBazar360 code: ${code}`, html);
+  }
+
   async sendOrderConfirmation(
     to: string,
     order: {

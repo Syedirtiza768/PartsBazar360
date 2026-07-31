@@ -28,6 +28,8 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (input: { email: string; password: string; name?: string }) => Promise<AuthUser>;
+  sendOtp: (email: string) => Promise<void>;
+  verifyOtp: (email: string, code: string) => Promise<AuthUser>;
   logout: () => void;
   authHeaders: () => HeadersInit;
 };
@@ -120,6 +122,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const sendOtp = useCallback(async (email: string) => {
+    const res = await fetch(`${API_BASE_URL}/auth/otp/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error(await parseError(res));
+  }, []);
+
+  const verifyOtp = useCallback(
+    async (email: string, code: string) => {
+      const res = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      if (!res.ok) throw new Error(await parseError(res));
+      const data = (await res.json()) as { user: AuthUser; accessToken: string };
+      persist(data.accessToken, data.user);
+      return data.user;
+    },
+    [persist],
+  );
+
   const logout = useCallback(() => persist(null, null), [persist]);
 
   const authHeaders = useCallback((): HeadersInit => {
@@ -135,10 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user && token),
       login,
       register,
+      sendOtp,
+      verifyOtp,
       logout,
       authHeaders,
     }),
-    [user, token, ready, login, register, logout, authHeaders],
+    [user, token, ready, login, register, sendOtp, verifyOtp, logout, authHeaders],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

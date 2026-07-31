@@ -271,11 +271,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.manufacturer && part.manufacturer !== part.brand && (
                 <SpecRow label="Manufacturer">{part.manufacturer}</SpecRow>
               )}
-              {(part.qualityTier || part.offers?.[0]?.qualityTier) && (
-                <SpecRow label="Condition tier">
-                  {humanize(part.qualityTier || part.offers?.[0]?.qualityTier)}
-                </SpecRow>
-              )}
+              {(part.qualityTier || part.offers?.[0]?.qualityTier) && (() => { const t = humanize(part.qualityTier || part.offers?.[0]?.qualityTier); return t !== "Used" ? <SpecRow label="Condition tier">{t}</SpecRow> : null; })()}
               {(part.partSource || part.offers?.[0]?.partSource) && (
                 <SpecRow label="Part source">
                   {(part.partSource || part.offers?.[0]?.partSource) === "OEM"

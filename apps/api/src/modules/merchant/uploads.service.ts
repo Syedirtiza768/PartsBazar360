@@ -30,6 +30,7 @@ import { resolvePartClassKey } from '../checkout/part-class-weights';
 import {
   deriveBillableWeight,
   parseDimensionsJson,
+  resolveItemWeight,
 } from '../checkout/billable-weight.util';
 import { partTypeFromLegacy } from '@repo/catalog-contracts';
 
@@ -780,8 +781,14 @@ export class MerchantUploadsService {
     const parsedVehicle = parseVehicleFromTitle(title);
     const category = raw.category?.trim() || extractCategory(title);
     const partClassKey = resolvePartClassKey({ title, category });
+    const resolved = resolveItemWeight({
+      weightKg: shippingMetrics.weightKg,
+      dimensionsCm: shippingMetrics.dimensionsCm,
+      weightSource: shippingMetrics.weightKg ? 'SPREADSHEET' : null,
+      partClassKey,
+    });
     const billable = deriveBillableWeight({
-      actualKg: shippingMetrics.weightKg,
+      actualKg: resolved.actualKg,
       dimensionsCm: shippingMetrics.dimensionsCm,
     });
     const classification = classifyPart({
@@ -827,6 +834,14 @@ export class MerchantUploadsService {
     if (!shippingMetrics.weightKg)
       reviewReasons.push(
         'Shipping weight missing — quotes will use a class estimate',
+      );
+    if (resolved.outlier)
+      reviewReasons.push(
+        `Weight ${resolved.actualKg}kg is outside the expected range for ${resolved.partClassKey}`,
+      );
+    if (resolved.unitAutoConverted)
+      reviewReasons.push(
+        `Weight unit likely wrong — auto-converted from ${shippingMetrics.weightKg} to ${resolved.actualKg}kg`,
       );
     if (classification.status !== 'READY')
       reviewReasons.push(...classification.reasons);
@@ -897,13 +912,15 @@ export class MerchantUploadsService {
       parsedVehicle,
       matchCandidates,
       autoMatchPartId: autoMatch?.canonicalPartId || null,
-      weightKg: shippingMetrics.weightKg,
+      weightKg: resolved.actualKg,
       weightConfidence: shippingMetrics.weightConfidence,
       dimensionsCm: shippingMetrics.dimensionsCm,
       dimensionsConfidence: shippingMetrics.dimensionsConfidence,
       partClassKey,
       dimensionalWeightKg: billable?.volumetricKg ?? null,
       billableWeightKg: billable?.billableKg ?? null,
+      weightOutlier: resolved.outlier,
+      weightUnitAutoConverted: resolved.unitAutoConverted,
     };
 
     if (defaults.commitMode === 'STAGED') {
@@ -1034,8 +1051,8 @@ export class MerchantUploadsService {
           oeNumbers: Array.from(new Set(oeNumbers.map((v) => v.toUpperCase()))),
           fitmentFlags: reviewReasons,
           imageUrls,
-          weight: shippingMetrics.weightKg ?? undefined,
-          weightSource: shippingMetrics.weightKg ? 'SPREADSHEET' : undefined,
+          weight: resolved.actualKg,
+          weightSource: resolved.actualKg ? 'SPREADSHEET' : undefined,
           weightConfidence: shippingMetrics.weightConfidence ?? undefined,
           dimensions: (shippingMetrics.dimensionsCm as any) ?? undefined,
           partClassKey,
@@ -1161,11 +1178,11 @@ export class MerchantUploadsService {
         });
     }
 
-    const sellerBasePrice = Number.isFinite(price) && price > 0 ? price : 0;
+    const rawFilePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 0;
     const priceQuote = await this.pricing.quote(
       sellerId,
       category,
-      sellerBasePrice,
+      rawFilePrice,
     );
     const offerSourceKey = deterministicSourceKey(
       'SPREADSHEET',
@@ -1174,13 +1191,17 @@ export class MerchantUploadsService {
       row.sheetName,
       row.rowNumber,
     );
+    // Listing price is ALWAYS filePrice / margin divisor (default 0.7).
+    // This is enforced regardless of any pricing policy to maintain consistent margins.
+    const listingPrice = Number.isFinite(price) && price > 0 ? price : 0;
+    const marketplaceFee = Math.round((listingPrice - rawFilePrice) * 100) / 100;
     const offerData = {
       sellerId,
       canonicalPartId: canonicalPart.id,
-      price: priceQuote.customerPrice,
-      sellerBasePrice: priceQuote.sellerBasePrice,
-      marketplaceFee: priceQuote.marketplaceFee,
-      sellerProceeds: priceQuote.sellerProceeds,
+      price: listingPrice,
+      sellerBasePrice: rawFilePrice,
+      marketplaceFee: marketplaceFee,
+      sellerProceeds: rawFilePrice,
       pricingPolicyId: priceQuote.pricingPolicyId,
       pricingPolicyVersion: priceQuote.pricingPolicyVersion,
       pricedAt: new Date(),
@@ -1200,7 +1221,7 @@ export class MerchantUploadsService {
       status:
         quantity === 0
           ? 'OUT_OF_STOCK'
-          : status === 'IMPORTED' && sellerStatus === 'ACTIVE'
+          : sellerStatus === 'ACTIVE'
             ? 'ACTIVE'
             : 'REVIEW',
     };
@@ -1506,6 +1527,78 @@ export class MerchantUploadsService {
       needsReview: reviewReasons.length > 0,
     };
   }
+
+  /**
+   * Reprice all existing offers for a seller so that listingPrice = filePrice / 0.7.
+   *
+   * Uses the OfferPrice table (which stores the original file prices) to recalculate
+   * the listing price with the correct margin. This fixes discrepancies where pricing
+   * policies may have inflated prices beyond the intended 30% margin.
+   */
+  async repriceFromFilePrices(sellerId: string) {
+    const MARGIN_DIVISOR = Number(process.env.PRICE_MARGIN_DIVISOR || '0.7');
+    if (MARGIN_DIVISOR <= 0 || MARGIN_DIVISOR >= 1) {
+      throw new BadRequestException(
+        'PRICE_MARGIN_DIVISOR must be between 0 and 1 (exclusive)',
+      );
+    }
+
+    const offers = await this.prisma.sellerOffer.findMany({
+      where: { sellerId },
+      include: { prices: true },
+    });
+
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const offer of offers) {
+      // Primary source: OfferPrice (original file price).
+      // Fallback: sellerBasePrice (already corrected to filePrice after backfill).
+      const primaryPrice =
+        offer.prices.find((p) => p.isPrimary) || offer.prices[0];
+      const rawFilePrice = primaryPrice
+        ? Number(primaryPrice.amount)
+        : offer.sellerBasePrice ?? 0;
+      if (!Number.isFinite(rawFilePrice) || rawFilePrice <= 0) {
+        skipped++;
+        continue;
+      }
+
+      const listingPrice =
+        Math.round((rawFilePrice / MARGIN_DIVISOR) * 100) / 100;
+      const marketplaceFee =
+        Math.round((listingPrice - rawFilePrice) * 100) / 100;
+
+      // Only update if the price actually differs (avoid unnecessary writes).
+      const priceDiffers =
+        Math.abs(offer.price - listingPrice) > 0.01 ||
+        Math.abs((offer.sellerBasePrice ?? 0) - rawFilePrice) > 0.01;
+      if (!priceDiffers) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await this.prisma.sellerOffer.update({
+          where: { id: offer.id },
+          data: {
+            price: listingPrice,
+            sellerBasePrice: rawFilePrice,
+            marketplaceFee,
+            sellerProceeds: rawFilePrice,
+            pricedAt: new Date(),
+          },
+        });
+        updated++;
+      } catch (err) {
+        errors.push(`Offer ${offer.id}: ${(err as Error).message}`);
+      }
+    }
+
+    return { updated, skipped, errors, total: offers.length };
+  }
+
   private buildReviewReasons(input: {
     title: string;
     price: number;
@@ -1570,11 +1663,28 @@ export class MerchantUploadsService {
 
     if (Object.keys(data).length === 0) return;
 
+    const effectivePartClassKey =
+      (data.partClassKey as string) ?? part.partClassKey ?? incoming.partClassKey;
+    const effectiveWeight = (data.weight as number) ?? part.weight ?? null;
+    const effectiveDims =
+      (data.dimensions as typeof incoming.dimensionsCm | undefined) ??
+      existingDims ??
+      null;
+
+    const resolved = resolveItemWeight({
+      weightKg: effectiveWeight,
+      dimensionsCm: effectiveDims,
+      weightSource: effectiveWeight ? 'SPREADSHEET' : null,
+      partClassKey: effectivePartClassKey,
+    });
+
+    if (resolved.unitAutoConverted && effectiveWeight) {
+      data.weight = resolved.actualKg;
+    }
+
     const billable = deriveBillableWeight({
-      actualKg: (data.weight as number | undefined) ?? part.weight,
-      dimensionsCm:
-        (data.dimensions as typeof incoming.dimensionsCm | undefined) ??
-        existingDims,
+      actualKg: resolved.actualKg,
+      dimensionsCm: effectiveDims,
     });
     if (billable) {
       data.dimensionalWeightKg = billable.volumetricKg;

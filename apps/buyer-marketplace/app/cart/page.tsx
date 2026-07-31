@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button, buttonClasses } from "@repo/ui/button";
-import { Input } from "@repo/ui/field";
+import { Select } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
 import {
@@ -24,6 +24,7 @@ import { CartLineFitment } from "@/components/CartLineFitment";
 import {
   resolveShippingCountry,
   setShippingCountry,
+  SHIPPING_COUNTRIES,
 } from "@/lib/shipping-destination";
 import { useShippingQuote } from "@/lib/use-shipping-quote";
 
@@ -54,7 +55,7 @@ function CartLine({ item }: { item: CartItem }) {
               {part?.title || "Part"}
             </Link>
             <p className="mt-1 text-xs text-graphite-600">
-              Condition: {humanize(item.sellerOffer.condition || "USED")}
+              {(() => { const c = humanize(item.sellerOffer.condition || ""); return c !== "Used" ? `Condition: ${c}` : null; })()}
             </p>
             <div className="mt-1.5">
               <CartLineFitment partId={part?.id} />
@@ -219,14 +220,17 @@ export default function CartPage() {
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
               <h2 className="text-base font-bold text-slate-900">Order summary</h2>
               <div className="mt-4">
-                <Input
+                <Select
                   label="Ship to country"
-                  autoComplete="country-name"
-                  placeholder="e.g. UAE, United Kingdom"
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
                   hint="Used to estimate shipping before checkout."
-                />
+                >
+                  <option value="" disabled>Select country</option>
+                  {SHIPPING_COUNTRIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
               </div>
               <dl className="mt-4 space-y-2.5 text-sm">
                 <div className="flex justify-between gap-3">

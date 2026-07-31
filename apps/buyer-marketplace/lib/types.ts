@@ -126,6 +126,8 @@ export interface PartShipping {
   dimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number } | null;
   dimensionsEstimated?: boolean;
   requiresFreightQuote: boolean;
+  weightOutlier?: boolean;
+  weightAutoConverted?: boolean;
 }
 
 export interface Part {

@@ -42,6 +42,10 @@ export interface PartShippingSummary {
   dimensionsEstimated: boolean;
   /** True when the parcel exceeds courier limits and needs a manual quote. */
   requiresFreightQuote: boolean;
+  /** True when the stored weight is outside the class envelope. */
+  weightOutlier: boolean;
+  /** True when a unit error was auto-corrected (g → kg). */
+  weightAutoConverted: boolean;
 }
 
 export interface ShippingSummaryPartInput {
@@ -102,5 +106,7 @@ export function buildPartShippingSummary(
     dimensionsCm,
     dimensionsEstimated: resolved.dimensionsEstimated,
     requiresFreightQuote: resolved.billableKg > maxParcelKg,
+    weightOutlier: resolved.outlier,
+    weightAutoConverted: resolved.unitAutoConverted,
   };
 }

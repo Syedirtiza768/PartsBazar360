@@ -9,25 +9,16 @@
 // Loads the compiled resolvers from dist/ so the stored values match exactly
 // what the live rate engine computes. Rebuild the API image first.
 //
-//   cd /app && node scripts/backfill-part-class-weights.mjs
-//   cd /app && node scripts/backfill-part-class-weights.mjs --dry-run
-//   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all
-//   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all --validate-weight
+//   cd /app && node scripts/backfill-part-class-weights.mjs                     # missing class keys only
+//   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all     # recompute ALL parts
+//   cd /app && node scripts/backfill-part-class-weights.mjs --dry-run           # preview changes only
+//   cd /app && node scripts/backfill-part-class-weights.mjs --recompute-all --validate-weight  # + outlier audit
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
-const BATCH_SIZE = 1000;
-
-/**
- * Parts with exact-source weights that exceed this factor above the class max
- * are flagged and tracked. Not clamped (exact sources are trusted), but counted.
- */
-const OUTLIER_FLAG_FACTOR = 5;
-
-// ── Weight source classification ──────────────────────────────────────────────
-const EXACT_SOURCES = new Set(['SPREADSHEET', 'SELLER', 'MEASURED']);
+const BATCH_SIZE = 500;
 
 async function loadFromDist(relativePath, exportNames) {
   const candidates = [
@@ -63,9 +54,9 @@ async function main() {
     'checkout/part-class-weights.js',
     ['resolvePartClassKey', 'getPartClassProfile'],
   );
-  const { deriveBillableWeight, parseDimensionsJson } = await loadFromDist(
+  const { resolveItemWeight, deriveBillableWeight, parseDimensionsJson } = await loadFromDist(
     'checkout/billable-weight.util.js',
-    ['deriveBillableWeight', 'parseDimensionsJson'],
+    ['resolveItemWeight', 'deriveBillableWeight', 'parseDimensionsJson'],
   );
 
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -84,9 +75,11 @@ async function main() {
 
   const classCounts = {};
   const outlierLog = [];
+  const unitErrorLog = [];
   let scanned = 0;
   let updated = 0;
   let flaggedOutliers = 0;
+  let unitConversions = 0;
   let cursor = null;
 
   for (;;) {
@@ -118,13 +111,26 @@ async function main() {
       });
       classCounts[partClassKey] = (classCounts[partClassKey] || 0) + 1;
 
-      const billable = deriveBillableWeight({
-        actualKg: part.weight,
+      const resolved = resolveItemWeight({
+        weightKg: part.weight,
         dimensionsCm: parseDimensionsJson(part.dimensions),
+        weightSource: part.weightSource,
+        partClassKey,
       });
 
       const data = {};
       if (part.partClassKey !== partClassKey) data.partClassKey = partClassKey;
+
+      // Persist auto-converted weight
+      if (resolved.unitAutoConverted && part.weight !== null) {
+        data.weight = resolved.actualKg;
+      }
+
+      // Recompute billable weight using corrected values
+      const billable = deriveBillableWeight({
+        actualKg: resolved.actualKg,
+        dimensionsCm: parseDimensionsJson(part.dimensions),
+      });
       if (billable) {
         if (part.dimensionalWeightKg !== billable.volumetricKg) {
           data.dimensionalWeightKg = billable.volumetricKg;
@@ -134,38 +140,41 @@ async function main() {
         }
       }
 
-      // ── Weight validation against class envelope ──────────────────────
-      if (
-        validateWeight &&
-        part.weight !== null &&
-        part.weight > 0 &&
-        EXACT_SOURCES.has(part.weightSource)
-      ) {
+      // ── Outlier tracking ─────────────────────────────────────────────
+      if (resolved.unitAutoConverted) {
+        unitConversions++;
+        unitErrorLog.push({
+          partId: part.id,
+          title: part.title,
+          source: part.weightSource,
+          originalWeightKg: part.weight,
+          correctedWeightKg: resolved.actualKg,
+          classKey: partClassKey,
+        });
+        if (unitErrorLog.length <= 50) {
+          console.warn(
+            `UNIT_FIX ${part.title}: ${part.weight} → ${resolved.actualKg}kg ` +
+              `[${part.weightSource}] class=${partClassKey}`,
+          );
+        }
+      } else if (resolved.outlier) {
+        flaggedOutliers++;
         const profile = getPartClassProfile(partClassKey);
-        const isOutlier =
-          part.weight > profile.maxWeightKg * OUTLIER_FLAG_FACTOR ||
-          part.weight < profile.minWeightKg / OUTLIER_FLAG_FACTOR;
-
-        if (isOutlier) {
-          flaggedOutliers++;
-          const entry = {
-            partId: part.id,
-            title: part.title,
-            source: part.weightSource,
-            weightKg: part.weight,
-            classKey: partClassKey,
-            classMax: profile.maxWeightKg,
-            classMin: profile.minWeightKg,
-            flag: `>${OUTLIER_FLAG_FACTOR}x outside envelope`,
-          };
-          outlierLog.push(entry);
-          if (outlierLog.length <= 50) {
-            console.warn(
-              `OUTLIER ${part.title}: weight=${part.weight}kg ` +
-                `[${part.weightSource}] class=${partClassKey} ` +
-                `range=[${profile.minWeightKg}-${profile.maxWeightKg}kg]`,
-            );
-          }
+        outlierLog.push({
+          partId: part.id,
+          title: part.title,
+          source: part.weightSource,
+          weightKg: part.weight,
+          classKey: partClassKey,
+          classMin: profile.minWeightKg,
+          classMax: profile.maxWeightKg,
+        });
+        if (outlierLog.length <= 50) {
+          console.warn(
+            `OUTLIER ${part.title}: weight=${part.weight}kg ` +
+              `[${part.weightSource}] class=${partClassKey} ` +
+              `range=[${profile.minWeightKg}-${profile.maxWeightKg}kg]`,
+          );
         }
       }
 
@@ -177,7 +186,9 @@ async function main() {
       }
     }
 
-    console.log(`progress scanned=${scanned}/${total} updated=${updated} outliers=${flaggedOutliers}`);
+    console.log(
+      `progress scanned=${scanned}/${total} updated=${updated} unitFixes=${unitConversions} outliers=${flaggedOutliers}`,
+    );
   }
 
   const topClasses = Object.entries(classCounts)
@@ -187,13 +198,15 @@ async function main() {
   const result = {
     scanned,
     updated,
+    unitConversions,
+    flaggedOutliers,
     dryRun,
     topClasses,
   };
 
-  if (validateWeight) {
-    result.flaggedOutliers = flaggedOutliers;
-    result.outlierSummary = outlierLog.slice(0, 100);
+  if (validateWeight || unitConversions > 0 || flaggedOutliers > 0) {
+    result.unitErrorLog = unitErrorLog.slice(0, 100);
+    result.outlierLog = outlierLog.slice(0, 100);
   }
 
   console.log(JSON.stringify(result, null, 2));

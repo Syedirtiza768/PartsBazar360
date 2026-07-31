@@ -128,4 +128,10 @@ export class UploadsController {
   ) {
     return this.uploads.reviewRow(rowId, body);
   }
+
+  @Post('reprice')
+  async repriceFromFilePrices(@Query('sellerId') sellerId: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    return this.uploads.repriceFromFilePrices(sellerId);
+  }
 }

@@ -80,16 +80,15 @@ export async function wipeMarketplaceSellerInventory(prisma: PrismaService) {
   });
 
   // Superior spreadsheet jobs (rows cascade)
+  // SKIP: Superior is a spreadsheet-only seller. Wiping its upload jobs and
+  // offers during seed destroys imported inventory that took hours to process.
+  // Only wipe RealTrack-backed sellers (Salvage, Blackline).
   const superior = sellers.find(
     (s) => s.name === MARKETPLACE_SELLERS.superior.name,
   );
   let deletedUploadJobs = 0;
-  if (superior) {
-    const jobs = await prisma.sellerUploadJob.deleteMany({
-      where: { sellerId: superior.id },
-    });
-    deletedUploadJobs = jobs.count;
-  }
+  // Intentionally skipped — Superior data is manually imported via spreadsheets.
+  // if (superior) { ... }
 
   return {
     sellers,

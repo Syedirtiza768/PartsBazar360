@@ -36,6 +36,7 @@ export function ConditionBadge({
 }) {
   if (!qualityTier) return null;
   const key = qualityTier.toUpperCase();
+  if (key === "USED") return null;
   return (
     <Badge tone={TIER_TONES[key] ?? "neutral"} size={size} className={className}>
       {humanize(qualityTier)}

@@ -38,6 +38,20 @@ class ResetPasswordDto {
   newPassword!: string;
 }
 
+class SendOtpDto {
+  @IsEmail()
+  email!: string;
+}
+
+class VerifyOtpDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(6)
+  code!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -72,5 +86,15 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() body: ResetPasswordDto) {
     return this.auth.resetPassword(body.token, body.newPassword);
+  }
+
+  @Post('otp/send')
+  sendOtp(@Body() body: SendOtpDto) {
+    return this.auth.sendOtp(body.email);
+  }
+
+  @Post('otp/verify')
+  verifyOtp(@Body() body: VerifyOtpDto) {
+    return this.auth.verifyOtp(body.email, body.code);
   }
 }

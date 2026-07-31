@@ -116,4 +116,28 @@ describe('buildPartShippingSummary', () => {
       }).partClassKey,
     ).toBe('ALTERNATOR');
   });
+
+  it('detects a unit-error outlier and reports weightAutoConverted', () => {
+    // 500kg brake pad: 100× class max of 5kg → clearly grams → auto-convert to 0.5kg
+    const summary = buildPartShippingSummary({
+      title: 'Front Brake Pad Set',
+      weight: 500,
+      weightSource: 'MEASURED',
+    });
+
+    expect(summary.weightOutlier).toBe(true);
+    expect(summary.weightAutoConverted).toBe(true);
+    expect(summary.weightKg).toBe(0.5);
+  });
+
+  it('marks normal values as neither outlier nor auto-converted', () => {
+    const summary = buildPartShippingSummary({
+      title: 'Front Brake Pad Set',
+      weight: 1.6,
+      weightSource: 'SPREADSHEET',
+    });
+
+    expect(summary.weightOutlier).toBe(false);
+    expect(summary.weightAutoConverted).toBe(false);
+  });
 });

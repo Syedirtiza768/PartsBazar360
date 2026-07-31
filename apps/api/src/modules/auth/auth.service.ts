@@ -243,6 +243,87 @@ export class AuthService {
     return { message: 'Email verified successfully' };
   }
 
+  async sendOtp(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required');
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (existing) {
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { otpCode: code, otpExpiry },
+      });
+    } else {
+      await this.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          role: 'BUYER',
+          otpCode: code,
+          otpExpiry,
+        },
+      });
+    }
+
+    void this.emailService.sendOtpCode(normalizedEmail, code).catch(() => {});
+
+    return { message: 'Verification code sent to your email' };
+  }
+
+  async verifyOtp(email: string, code: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !code) {
+      throw new BadRequestException('Email and code are required');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { memberships: true },
+    });
+
+    if (
+      !user ||
+      user.otpCode !== code ||
+      !user.otpExpiry ||
+      user.otpExpiry < new Date()
+    ) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        otpCode: null,
+        otpExpiry: null,
+        emailVerified: true,
+      },
+    });
+
+    const role = (user.role as AuthRole) || 'BUYER';
+    const sellerIds =
+      role === 'ADMIN'
+        ? Object.values(MARKETPLACE_SELLERS).map((s) => s.id)
+        : user.memberships.map((m) => m.sellerId);
+
+    const publicUser = await this.toPublicUser(user.id);
+    return {
+      user: publicUser,
+      accessToken: this.signToken({
+        sub: user.id,
+        email: user.email,
+        role,
+        sellerIds,
+      }),
+    };
+  }
+
   async forgotPassword(email: string) {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {

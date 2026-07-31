@@ -478,8 +478,11 @@ export function StickyMobileBar({ part }: { part: Part }) {
         <div className="min-w-0">
           <p className="price text-lg leading-tight">{format(best.price, best.currency)}</p>
           <p className="truncate text-xs text-graphite-600">
-            {humanize(best.condition || best.qualityTier)} ·{" "}
-            {best.seller?.name || best.sellerName || "Marketplace seller"}
+            {(() => {
+              const cond = humanize(best.condition || best.qualityTier);
+              const parts = [cond !== "Used" ? cond : null, best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
+              return parts.join(" · ");
+            })()}
           </p>
         </div>
         <Button onClick={handleAdd} loading={adding} className="shrink-0">

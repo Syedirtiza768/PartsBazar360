@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, buttonClasses } from "@repo/ui/button";
-import { Input, Checkbox } from "@repo/ui/field";
+import { Input, Select, Checkbox } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import {
   CartIcon,
@@ -27,6 +26,7 @@ import { storeOrder } from "@/lib/order-history";
 import {
   getShippingCountry,
   setShippingCountry,
+  SHIPPING_COUNTRIES,
 } from "@/lib/shipping-destination";
 import {
   useShippingQuote,
@@ -206,11 +206,155 @@ function SummaryCard({
   );
 }
 
+function EmailOtpGate({ children }: { children: React.ReactNode }) {
+  const { sendOtp, verifyOtp, isAuthenticated, ready } = useAuth();
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-md gutter py-16 text-center text-sm text-graphite-600">
+        Checking your account…
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <>{children}</>;
+  }
+
+  const handleSendOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    setError(null);
+    try {
+      await sendOtp(email.trim());
+      setOtpSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setVerifying(true);
+    setError(null);
+    try {
+      await verifyOtp(email.trim(), code.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid code");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-md gutter py-10 sm:py-16">
+      <p className="eyebrow">Quick sign in</p>
+      <h1 className="mt-2 font-display text-display-sm font-black tracking-tight text-graphite-950">
+        Enter your email
+      </h1>
+      <p className="mt-2 text-sm text-graphite-600">
+        We&apos;ll send a one-time code to verify your email — no password needed.
+      </p>
+
+      {!otpSent ? (
+        <form onSubmit={handleSendOtp} className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6">
+          <Input
+            label="Email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          {error && (
+            <p className="text-sm font-medium text-red-600" role="alert">{error}</p>
+          )}
+          <Button type="submit" size="lg" fullWidth loading={sending}>
+            Send verification code
+          </Button>
+          <p className="text-center text-xs text-graphite-600">
+            Existing user?{" "}
+            <Link href="/login" className="font-semibold text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline">
+              Sign in with password
+            </Link>
+          </p>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6">
+          <p className="text-sm text-graphite-600">
+            We sent a 6-digit code to <span className="font-medium text-slate-800">{email}</span>.
+          </p>
+          <Input
+            label="Verification code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            placeholder="000000"
+          />
+          {error && (
+            <p className="text-sm font-medium text-red-600" role="alert">{error}</p>
+          )}
+          <Button type="submit" size="lg" fullWidth loading={verifying}>
+            Verify &amp; continue
+          </Button>
+          <div className="flex items-center justify-between text-xs text-graphite-600">
+            <button
+              type="button"
+              onClick={() => { setOtpSent(false); setCode(""); setError(null); }}
+              className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+            >
+              Change email
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                try { await sendOtp(email.trim()); } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to resend");
+                }
+              }}
+              className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+            >
+              Resend code
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function CheckoutPage() {
-  const router = useRouter();
+  return (
+    <EmailOtpGate>
+      <CheckoutContent />
+    </EmailOtpGate>
+  );
+}
+
+function CheckoutContent() {
   const { cart, subtotal, refresh } = useCart();
   const { activeVehicle, ready: garageReady } = useGarage();
-  const { user, ready: authReady, isAuthenticated, authHeaders } = useAuth();
+  const { user, authHeaders } = useAuth();
   const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -239,7 +383,7 @@ export default function CheckoutPage() {
     cartId: cart.id,
     country: form.country,
     currency: checkoutCurrency,
-    enabled: isAuthenticated,
+    enabled: true,
     authHeaders,
   });
 
@@ -250,14 +394,7 @@ export default function CheckoutPage() {
   );
 
   useEffect(() => {
-    if (!authReady) return;
-    if (!isAuthenticated) {
-      router.replace(`/login?next=${encodeURIComponent("/checkout")}`);
-    }
-  }, [authReady, isAuthenticated, router]);
-
-  useEffect(() => {
-    if (prefilled || !authReady) return;
+    if (prefilled) return;
     const savedCountry = getShippingCountry();
     setForm((prev) => ({
       ...prev,
@@ -265,7 +402,7 @@ export default function CheckoutPage() {
       country: prev.country || savedCountry,
     }));
     setPrefilled(true);
-  }, [user, prefilled, authReady]);
+  }, [user, prefilled]);
 
   useEffect(() => {
     if (form.country.trim()) setShippingCountry(form.country);
@@ -283,7 +420,7 @@ export default function CheckoutPage() {
     return [...groups.values()];
   }, [items]);
 
-  const setField = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const setField = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
@@ -365,14 +502,6 @@ export default function CheckoutPage() {
       setSubmitting(false);
     }
   };
-
-  if (!authReady || !isAuthenticated) {
-    return (
-      <div className="mx-auto max-w-md gutter py-16 text-center text-sm text-graphite-600">
-        Checking your account…
-      </div>
-    );
-  }
 
   if (items.length === 0) {
     return (
@@ -499,14 +628,18 @@ export default function CheckoutPage() {
                     value={form.postalCode}
                     onChange={setField("postalCode")}
                   />
-                  <Input
+                  <Select
                     label="Country"
-                    autoComplete="country-name"
                     required
                     value={form.country}
                     onChange={setField("country")}
                     error={errors.country}
-                  />
+                  >
+                    <option value="" disabled>Select country</option>
+                    {SHIPPING_COUNTRIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </Select>
                 </div>
               </div>
             </section>
@@ -580,7 +713,7 @@ export default function CheckoutPage() {
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
                         </p>
                         <p className="mt-0.5 text-xs text-graphite-600">
-                          {humanize(item.sellerOffer.condition || "USED")}
+                          {(() => { const c = humanize(item.sellerOffer.condition || ""); return c !== "Used" ? c : null; })()}
                         </p>
                         <div className="mt-1.5">
                           <CartLineFitment partId={item.sellerOffer.canonicalPart?.id} />

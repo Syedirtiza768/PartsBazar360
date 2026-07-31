@@ -25,6 +25,7 @@ import {
   deriveBillableWeight,
   isExactWeightSource,
   parseDimensionsJson,
+  resolveItemWeight,
 } from '../checkout/billable-weight.util';
 
 const UUID_RE =
@@ -256,14 +257,34 @@ export class EnrichmentProcessor extends WorkerHost {
         isExactWeightSource(part.weightSource);
       const existingDims = parseDimensionsJson(part.dimensions);
 
-      const weightKg = weightIsTrusted
+      const rawWeightKg = weightIsTrusted
         ? (part.weight as number)
         : (mapped.weightKg ?? part.weight ?? null);
       const dimensionsCm = existingDims ?? mapped.dimensionsCm ?? null;
+
+      const resolved = resolveItemWeight({
+        weightKg: rawWeightKg,
+        dimensionsCm,
+        weightSource: weightIsTrusted ? part.weightSource : (mapped.weightKg ? 'SELLER' : null),
+        partClassKey,
+      });
+
+      const weightKg = resolved.actualKg;
       const billable = deriveBillableWeight({
         actualKg: weightKg,
         dimensionsCm,
       });
+
+      if (resolved.unitAutoConverted) {
+        this.logger.warn(
+          `Auto-converted unit error for ${partId}: ${rawWeightKg} → ${weightKg}kg [${resolved.partClassKey}]`,
+        );
+      }
+      if (resolved.outlier && !resolved.unitAutoConverted) {
+        this.logger.warn(
+          `Weight outlier for ${partId}: ${weightKg}kg [${resolved.partClassKey}] source=${resolved.source}`,
+        );
+      }
 
       const itemSpecifics =
         mapped.itemSpecifics ||
@@ -330,9 +351,19 @@ export class EnrichmentProcessor extends WorkerHost {
             : {}),
           ...(!weightIsTrusted && mapped.weightKg
             ? {
-                weight: mapped.weightKg,
+                weight: resolved.unitAutoConverted ? resolved.actualKg : mapped.weightKg,
                 weightSource: 'SELLER',
-                weightConfidence: mapped.rawCached === false ? 0.85 : 0.95,
+                weightConfidence: resolved.unitAutoConverted
+                  ? 0.5
+                  : mapped.rawCached === false ? 0.85 : 0.95,
+              }
+            : {}),
+          // Persist auto-converted weight even when original was trusted
+          ...(weightIsTrusted && resolved.unitAutoConverted
+            ? {
+                weight: resolved.actualKg,
+                weightSource: part.weightSource,
+                weightConfidence: 0.5,
               }
             : {}),
           ...(!existingDims && mapped.dimensionsCm
