@@ -173,8 +173,18 @@ async function main() {
     }
 
     if (!SKIP_DELETE) {
-      console.log(`Deleting index ${INDEX}...`);
-      await os(`/${INDEX}`, { method: 'DELETE' });
+      // Resolve alias → concrete index (aliases can't be deleted directly)
+      let deleteTarget = INDEX;
+      try {
+        const aliasInfo = await os(`/_alias/${INDEX}`);
+        const concreteIndices = Object.keys(aliasInfo);
+        if (concreteIndices.length > 0) {
+          deleteTarget = concreteIndices[0];
+          console.log(`Resolved alias ${INDEX} → concrete index ${deleteTarget}`);
+        }
+      } catch {}
+      console.log(`Deleting index ${deleteTarget}...`);
+      await os(`/${deleteTarget}`, { method: 'DELETE' });
       console.log('Index deleted (will auto-create on first bulk index).');
     }
 
