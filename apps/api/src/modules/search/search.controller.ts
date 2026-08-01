@@ -431,7 +431,7 @@ export class SearchController implements OnModuleDestroy {
     // RealTrack salvage sometimes has empty inventory while still ACTIVE —
     // keep those. Spreadsheet offers carry inventory: hide zero-stock rows.
     // Also drop offers with no usable price so no tile/PDP renders price-less.
-    const buyerOffers = part.offers.filter((offer) => {
+    let buyerOffers = part.offers.filter((offer) => {
       if (
         offer.price === null ||
         offer.price === undefined ||
@@ -444,6 +444,22 @@ export class SearchController implements OnModuleDestroy {
         (row) => row.quantity > 0 && row.status !== 'OUT_OF_STOCK',
       );
     });
+
+    // When a Superior offer exists, hide Blackline and Salvage offers —
+    // Superior is the preferred seller and takes priority.
+    const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
+    const SUPERFLOUS_SELLER_IDS = new Set([
+      'seller-blackline-auto-parts',
+      'seller-salvage-auto-parts',
+    ]);
+    const hasSuperior = buyerOffers.some(
+      (o) => o.sellerId === SUPERIOR_SELLER_ID,
+    );
+    if (hasSuperior) {
+      buyerOffers = buyerOffers.filter(
+        (o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId),
+      );
+    }
     if (buyerOffers.length === 0) {
       throw new NotFoundException(`Part ${id} has no active offers`);
     }

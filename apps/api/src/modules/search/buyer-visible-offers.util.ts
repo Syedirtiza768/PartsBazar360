@@ -7,6 +7,12 @@ const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
 
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 
+const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
+const SUPERFLOUS_SELLER_IDS = new Set([
+  'seller-blackline-auto-parts',
+  'seller-salvage-auto-parts',
+]);
+
 export type IndexedOfferLike = {
   sellerId?: string | null;
   sellerName?: string | null;
@@ -54,8 +60,13 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
   item: T,
 ): T | null {
   if (!item) return null;
-  const offers = (item.offers || [])
-    .filter(isBuyerVisibleIndexedOffer)
+  const filtered = (item.offers || [])
+    .filter(isBuyerVisibleIndexedOffer);
+  const hasSuperior = filtered.some((o) => o.sellerId === SUPERIOR_SELLER_ID);
+  const offers = (hasSuperior
+    ? filtered.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ''))
+    : filtered
+  )
     .slice()
     .sort(
       (a, b) => (Number(a.price) || Infinity) - (Number(b.price) || Infinity),

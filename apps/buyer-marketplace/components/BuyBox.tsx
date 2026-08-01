@@ -25,7 +25,7 @@ import { pushRecentlyViewed } from "@/lib/recent";
 import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
-import { SourcePill, SOURCE_TAG_CONFIG } from "./SourcePill";
+import { SourcePill } from "./SourcePill";
 import { WatchlistButton } from "./WatchlistButton";
 import { ShippingSummaryRow } from "./ShippingSummaryRow";
 import type { Part, Offer } from "@/lib/types";
@@ -259,7 +259,7 @@ function OfferRow({
             <li key={`${offer.id}-inv-${index}`} className="flex items-center justify-between gap-2">
               <span>{row.warehouse?.name || row.warehouse?.location || "Warehouse"}</span>
               <span className="font-semibold text-slate-800">
-                {row.quantity > 0 ? `${row.quantity} in stock` : "Out of stock"}
+                {row.quantity > 0 ? "In stock" : "Out of stock"}
               </span>
             </li>
           ))}
@@ -479,7 +479,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
           <p className="truncate text-xs text-graphite-600">
             {(() => {
               const cond = humanize(best.condition || best.qualityTier);
-              const tag = best.sourceTag ? (SOURCE_TAG_CONFIG[best.sourceTag]?.label ?? best.sourceTag) : null;
+              const tag = best.sourceTag || null;
               const parts = [cond !== "Used" ? cond : null, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
               return parts.join(" · ");
             })()}

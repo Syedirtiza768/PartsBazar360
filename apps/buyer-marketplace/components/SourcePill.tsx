@@ -23,8 +23,8 @@ export function SourcePill({
   if (!tag) return null;
   const config = SOURCE_TAG_CONFIG[tag] ?? { label: tag, tone: "outline" as BadgeTone };
   return (
-    <Badge tone={config.tone} size={size} className={className}>
-      {config.label}
+    <Badge tone={config.tone} size={size} className={className} title={config.label}>
+      {tag}
     </Badge>
   );
 }

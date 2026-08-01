@@ -31,6 +31,12 @@ export function formatPrice(
 const HIDDEN_SELLER_IDS = new Set(["seed-febest-inventory-supplier"]);
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 
+const SUPERIOR_SELLER_ID = "seller-superior-auto-parts";
+const SUPERFLOUS_SELLER_IDS = new Set([
+  "seller-blackline-auto-parts",
+  "seller-salvage-auto-parts",
+]);
+
 /** Buyer-visible offers only — drops legacy/suspended sellers from card/PDP payloads. */
 export function buyerVisibleOffers<T extends {
   price?: number;
@@ -39,7 +45,7 @@ export function buyerVisibleOffers<T extends {
   status?: string | null;
   seller?: { name?: string | null; onboardingStatus?: string | null } | null;
 }>(offers?: T[] | null): T[] {
-  return (offers || [])
+  const filtered = (offers || [])
     .filter((offer) => {
       if (!offer) return false;
       if (offer.sellerId && HIDDEN_SELLER_IDS.has(offer.sellerId)) return false;
@@ -49,7 +55,13 @@ export function buyerVisibleOffers<T extends {
       if (offer.seller?.onboardingStatus && offer.seller.onboardingStatus !== "ACTIVE") return false;
       if (offer.price === null || offer.price === undefined || Number(offer.price) <= 0) return false;
       return Boolean(offer.sellerId || name);
-    })
+    });
+
+  const hasSuperior = filtered.some((o) => o.sellerId === SUPERIOR_SELLER_ID);
+  return (hasSuperior
+    ? filtered.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ""))
+    : filtered
+  )
     .slice()
     .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
 }

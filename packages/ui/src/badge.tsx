@@ -28,12 +28,14 @@ export interface BadgeProps {
   /** Leading icon element (sized by the badge). */
   icon?: ReactNode;
   className?: string;
+  title?: string;
   children: ReactNode;
 }
 
-export function Badge({ tone = "neutral", size = "md", icon, className, children }: BadgeProps) {
+export function Badge({ tone = "neutral", size = "md", icon, className, title, children }: BadgeProps) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center rounded-full border font-medium whitespace-nowrap",
         size === "sm" ? "gap-1 px-2 py-0.5 text-xs" : "gap-1.5 px-2.5 py-1 text-xs",
