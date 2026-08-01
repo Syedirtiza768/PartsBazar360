@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
-import { sanitizeSearchItem } from './buyer-visible-offers.util';
+import {
+  applySuperiorPriority,
+  sanitizeSearchItem,
+} from './buyer-visible-offers.util';
 import {
   sanitizeIdentifier,
   sanitizeIdentifierList,
@@ -221,7 +224,7 @@ export class OpenSearchService implements OnModuleInit {
   async indexPart(part: any) {
     try {
       const rawOffers = Array.isArray(part.offers) ? part.offers : [];
-      const offers = rawOffers.filter((o: any) => {
+      const visibleOffers = rawOffers.filter((o: any) => {
         if (!o) return false;
         if (o.sellerId === 'seed-febest-inventory-supplier') return false;
         if (o.status && o.status !== 'ACTIVE') return false;
@@ -232,6 +235,10 @@ export class OpenSearchService implements OnModuleInit {
         if (/febest\s+inventory\s+supplier/i.test(sellerName)) return false;
         return true;
       });
+      // Superior takes priority over Blackline/Salvage on the same part. Doing
+      // this before minPrice/sourceTags are derived keeps price sort, price
+      // filters and the source-tag facet consistent with the rendered card.
+      const offers = applySuperiorPriority(visibleOffers);
 
       if (offers.length === 0) {
         try {

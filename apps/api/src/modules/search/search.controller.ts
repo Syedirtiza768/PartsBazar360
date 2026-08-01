@@ -17,7 +17,10 @@ import { OpenSearchService, type BrowseSort } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { FebestWebsiteService } from './febest-website.service';
 import { MvlOeCatalogService } from './mvl-oe-catalog.service';
-import { sanitizeSearchItems } from './buyer-visible-offers.util';
+import {
+  applySuperiorPriority,
+  sanitizeSearchItems,
+} from './buyer-visible-offers.util';
 import { buildPartShippingSummary } from '../checkout/part-shipping-summary.util';
 import { EnrichmentService } from '../enrichment/enrichment.service';
 import { renderInfographicSvg } from '../enrichment/infographic-renderer';
@@ -447,19 +450,7 @@ export class SearchController implements OnModuleDestroy {
 
     // When a Superior offer exists, hide Blackline and Salvage offers —
     // Superior is the preferred seller and takes priority.
-    const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
-    const SUPERFLOUS_SELLER_IDS = new Set([
-      'seller-blackline-auto-parts',
-      'seller-salvage-auto-parts',
-    ]);
-    const hasSuperior = buyerOffers.some(
-      (o) => o.sellerId === SUPERIOR_SELLER_ID,
-    );
-    if (hasSuperior) {
-      buyerOffers = buyerOffers.filter(
-        (o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId),
-      );
-    }
+    buyerOffers = applySuperiorPriority(buyerOffers);
     if (buyerOffers.length === 0) {
       throw new NotFoundException(`Part ${id} has no active offers`);
     }

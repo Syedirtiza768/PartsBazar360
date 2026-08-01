@@ -7,11 +7,27 @@ const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
 
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 
-const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
-const SUPERFLOUS_SELLER_IDS = new Set([
+export const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
+/** Sellers Superior outranks on the same part, regardless of price. */
+export const SUPERFLOUS_SELLER_IDS = new Set([
   'seller-blackline-auto-parts',
   'seller-salvage-auto-parts',
 ]);
+
+/**
+ * Superior takes priority: when a part has a Superior offer, Blackline and
+ * Salvage offers on that same part are not shown to buyers. Applied at index
+ * time (so price sort, price filters and the source-tag facet agree with the
+ * rendered card) and again at read time (so stale OpenSearch docs written
+ * before a reindex still obey the rule).
+ */
+export function applySuperiorPriority<T extends { sellerId?: string | null }>(
+  offers: T[],
+): T[] {
+  const hasSuperior = offers.some((o) => o?.sellerId === SUPERIOR_SELLER_ID);
+  if (!hasSuperior) return offers;
+  return offers.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o?.sellerId ?? ''));
+}
 
 export type IndexedOfferLike = {
   sellerId?: string | null;
@@ -62,11 +78,7 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
   if (!item) return null;
   const filtered = (item.offers || [])
     .filter(isBuyerVisibleIndexedOffer);
-  const hasSuperior = filtered.some((o) => o.sellerId === SUPERIOR_SELLER_ID);
-  const offers = (hasSuperior
-    ? filtered.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ''))
-    : filtered
-  )
+  const offers = applySuperiorPriority(filtered)
     .slice()
     .sort(
       (a, b) => (Number(a.price) || Infinity) - (Number(b.price) || Infinity),

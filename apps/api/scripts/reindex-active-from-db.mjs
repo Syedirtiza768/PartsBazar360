@@ -87,9 +87,29 @@ async function os(path, { method = 'GET', body } = {}) {
   return json;
 }
 
+/**
+ * Mirror of applySuperiorPriority in
+ * apps/api/src/modules/search/buyer-visible-offers.util.ts — kept in sync by
+ * hand for the same reason as sanitizeIdentifier above. When a part has a
+ * Superior offer, its Blackline/Salvage offers are not buyer-visible, so they
+ * must not set minPrice or sourceTags either.
+ */
+const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
+const SUPERFLOUS_SELLER_IDS = new Set([
+  'seller-blackline-auto-parts',
+  'seller-salvage-auto-parts',
+]);
+
+function applySuperiorPriority(offers) {
+  if (!offers.some((o) => o.sellerId === SUPERIOR_SELLER_ID)) return offers;
+  return offers.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ''));
+}
+
 function toDoc(part) {
-  const activeOffers = (part.offers || []).filter(
-    (o) => o.status === 'ACTIVE' && o.seller?.onboardingStatus === 'ACTIVE',
+  const activeOffers = applySuperiorPriority(
+    (part.offers || []).filter(
+      (o) => o.status === 'ACTIVE' && o.seller?.onboardingStatus === 'ACTIVE',
+    ),
   );
   const partNumbers = part.partNumbers || [];
   const minPrice =

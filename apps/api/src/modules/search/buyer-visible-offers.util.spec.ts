@@ -2,9 +2,11 @@
  * Unit checks for buyer-visible offer sanitization.
  */
 import {
+  applySuperiorPriority,
   isBuyerVisibleIndexedOffer,
   sanitizeSearchItem,
   sanitizeSearchItems,
+  type SearchItemLike,
 } from './buyer-visible-offers.util';
 
 describe('buyer-visible-offers', () => {
@@ -29,7 +31,7 @@ describe('buyer-visible-offers', () => {
   });
 
   it('sanitizes dual-offer FEBEST docs to Superior only', () => {
-    const item = sanitizeSearchItem({
+    const item = sanitizeSearchItem<SearchItemLike>({
       id: 'p1',
       offers: [
         {
@@ -45,8 +47,41 @@ describe('buyer-visible-offers', () => {
       ],
     });
     expect(item?.offers).toHaveLength(1);
-    expect(item?.offers[0].sellerName).toBe('Superior Auto Parts');
+    expect(item?.offers?.[0].sellerName).toBe('Superior Auto Parts');
     expect(item?.minPrice).toBe(9);
+  });
+
+  describe('Superior priority', () => {
+    const blk = { sellerId: 'seller-blackline-auto-parts', price: 5 };
+    const sal = { sellerId: 'seller-salvage-auto-parts', price: 6 };
+    const sup = { sellerId: 'seller-superior-auto-parts', price: 90 };
+    const other = { sellerId: 'seller-dynatrade', price: 7 };
+
+    it('suppresses Blackline and Salvage together when Superior is present', () => {
+      expect(applySuperiorPriority([blk, sal, sup])).toEqual([sup]);
+    });
+
+    it('suppresses either one on its own', () => {
+      expect(applySuperiorPriority([blk, sup])).toEqual([sup]);
+      expect(applySuperiorPriority([sal, sup])).toEqual([sup]);
+    });
+
+    it('leaves them alone when there is no Superior offer', () => {
+      expect(applySuperiorPriority([blk, sal])).toEqual([blk, sal]);
+    });
+
+    it('does not touch other sellers', () => {
+      expect(applySuperiorPriority([other, blk, sup])).toEqual([other, sup]);
+    });
+
+    it('wins even when Superior is the more expensive offer', () => {
+      const item = sanitizeSearchItem<SearchItemLike>({
+        id: 'p2',
+        offers: [sal, sup],
+      });
+      expect(item?.offers).toHaveLength(1);
+      expect(item?.minPrice).toBe(90);
+    });
   });
 
   it('drops parts with no buyer-visible offers', () => {

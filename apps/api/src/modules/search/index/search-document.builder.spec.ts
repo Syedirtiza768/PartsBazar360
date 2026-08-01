@@ -105,6 +105,51 @@ describe('buyer visibility', () => {
     expect(offers.map((o: any) => o.id)).toEqual(['offer-1']);
   });
 
+  it('drops Blackline and Salvage offers when the part has a Superior offer', () => {
+    const offers = buyerVisibleOffers({
+      offers: [
+        activeOffer({ id: 'blk', sellerId: 'seller-blackline-auto-parts' }),
+        activeOffer({ id: 'sal', sellerId: 'seller-salvage-auto-parts' }),
+        activeOffer({ id: 'sup', sellerId: 'seller-superior-auto-parts' }),
+      ],
+    });
+    expect(offers.map((o: any) => o.id)).toEqual(['sup']);
+  });
+
+  it('keeps Blackline and Salvage offers when no Superior offer exists', () => {
+    const offers = buyerVisibleOffers({
+      offers: [
+        activeOffer({ id: 'blk', sellerId: 'seller-blackline-auto-parts' }),
+        activeOffer({ id: 'sal', sellerId: 'seller-salvage-auto-parts' }),
+      ],
+    });
+    expect(offers.map((o: any) => o.id)).toEqual(['blk', 'sal']);
+  });
+
+  it('a suppressed cheaper offer cannot set minPrice or sourceTags', () => {
+    const doc = buildSearchDocument({
+      ...salvagePart,
+      offers: [
+        activeOffer({
+          id: 'sal',
+          sellerId: 'seller-salvage-auto-parts',
+          price: 200,
+          sourceTag: 'SAL',
+        }),
+        activeOffer({
+          id: 'sup',
+          sellerId: 'seller-superior-auto-parts',
+          price: 900,
+          sourceTag: 'BST',
+        }),
+      ],
+    })!;
+    expect(doc.minPrice).toBe(900);
+    expect(doc.maxPrice).toBe(900);
+    expect(doc.sourceTags).toEqual(['BST']);
+    expect(doc.offerCount).toBe(1);
+  });
+
   it('returns null when nothing is buyer-visible, so the caller can delete', () => {
     expect(buildSearchDocument({ ...salvagePart, offers: [] })).toBeNull();
     expect(

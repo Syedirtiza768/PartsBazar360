@@ -14,6 +14,7 @@
  */
 
 import { normalizePartNumber } from '../query/part-number.util';
+import { applySuperiorPriority } from '../buyer-visible-offers.util';
 import {
   classifyPartType,
   classifyPositions,
@@ -32,7 +33,7 @@ export interface BuiltSearchDocument {
 /** Keep only offers a buyer is allowed to see. */
 export function buyerVisibleOffers(part: any): any[] {
   const raw = Array.isArray(part?.offers) ? part.offers : [];
-  return raw.filter((offer: any) => {
+  const visible = raw.filter((offer: any) => {
     if (!offer) return false;
     if (HIDDEN_SELLER_IDS.has(offer.sellerId)) return false;
     if (offer.status && offer.status !== 'ACTIVE') return false;
@@ -43,6 +44,9 @@ export function buyerVisibleOffers(part: any): any[] {
     if (offer.price != null && Number(offer.price) <= 0) return false;
     return true;
   });
+  // Superior outranks Blackline/Salvage on the same part, so the suppressed
+  // offers must not reach minPrice, sourceTags or any other rolled-up facet.
+  return applySuperiorPriority(visible);
 }
 
 function uniqueStrings(values: Array<unknown>): string[] {

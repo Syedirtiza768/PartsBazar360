@@ -31,6 +31,10 @@ export function formatPrice(
 const HIDDEN_SELLER_IDS = new Set(["seed-febest-inventory-supplier"]);
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 
+// Superior takes priority: a part's Blackline/Salvage offers are hidden when it
+// has a Superior offer. Mirrors applySuperiorPriority in
+// apps/api/src/modules/search/buyer-visible-offers.util.ts, which also enforces
+// this at index time so price sort and facets agree with the card.
 const SUPERIOR_SELLER_ID = "seller-superior-auto-parts";
 const SUPERFLOUS_SELLER_IDS = new Set([
   "seller-blackline-auto-parts",
