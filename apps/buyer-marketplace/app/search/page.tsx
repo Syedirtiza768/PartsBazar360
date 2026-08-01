@@ -218,6 +218,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const clearHref = clearFiltersHref(paramsShape);
   const interchangeOff = params.includeInterchange === "false";
   const isAtLeast = results?.totalRelation === "gte";
+  // Only meaningful for a keyword search — a filter-only browse is never relaxed.
+  const isRelaxed = Boolean(results?.relaxed && params.q && results.total > 0);
 
   const heading = isFitmentMode
     ? "Parts that fit your vehicle"
@@ -295,6 +297,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
 
         <ActiveFilterChips params={paramsShape} />
+        {isRelaxed && (
+          <p
+            role="status"
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            No exact matches for{" "}
+            <span className="font-semibold">“{params.q}”</span> — showing
+            related parts.
+          </p>
+        )}
         {isFitmentMode && (
           <VehicleModeBanner configId={params.vehicleConfigId!} />
         )}

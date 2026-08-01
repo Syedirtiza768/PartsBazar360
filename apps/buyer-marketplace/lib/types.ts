@@ -232,6 +232,12 @@ export interface BrowseResponse {
   maxPage?: number;
   /** Post-filter facets scoped to the active search/filters — consistent counts. */
   facets?: BrowseFacets;
+  /**
+   * The catalog had almost no exact match, so the API re-ran the query with
+   * terms optional. These are related parts, not matches, and the page says so
+   * rather than letting the buyer read them as exact hits.
+   */
+  relaxed?: boolean;
 }
 
 export interface Facet {

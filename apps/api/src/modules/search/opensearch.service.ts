@@ -2,6 +2,10 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
 import { sanitizeSearchItem } from './buyer-visible-offers.util';
+import {
+  sanitizeIdentifier,
+  sanitizeIdentifierList,
+} from './identifier-sanitize.util';
 
 export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
 
@@ -23,6 +27,12 @@ export interface BrowseResult {
   /** Highest page reachable by offset pagination (result window / page size). */
   maxPage: number;
   facets: BrowseFacets;
+  /**
+   * True when strict matching found almost nothing and the query was retried
+   * with terms optional. These are related parts, not exact ones, and the
+   * buyer UI should say so rather than presenting them as matches.
+   */
+  relaxed?: boolean;
 }
 
 /** Coerce a query param (string | string[] | comma-list) into a de-duplicated string[]. */
@@ -39,6 +49,26 @@ function asArray(value: string | string[] | undefined | null): string[] {
   }
   return out;
 }
+
+/** How strictly the descriptive terms of a browse query must all match. */
+type MatchStrictness = 'strict' | 'relaxed';
+
+/**
+ * `3<75%` — require every term of a short query, 75% beyond three terms.
+ * `relaxed` is the fallback for when the catalogue genuinely has no such part:
+ * strict matching on a long query ("front bumper for 2018 Audi Q7", 6 terms)
+ * would otherwise return an empty page rather than close alternatives.
+ */
+const BROWSE_MSM: Record<MatchStrictness, string> = {
+  strict: '3<75%',
+  relaxed: '2<50%',
+};
+
+/** Below this many strict hits, page 1 is retried relaxed. */
+const BROWSE_RELAX_THRESHOLD = Math.max(
+  1,
+  Number(process.env.SEARCH_RELAX_THRESHOLD || 5),
+);
 
 @Injectable()
 export class OpenSearchService implements OnModuleInit {
@@ -231,7 +261,12 @@ export class OpenSearchService implements OnModuleInit {
           title: part.title,
           partType: part.partType || null,
           brand: part.brand,
-          manufacturerPartNumber: part.manufacturerPartNumber || null,
+          // Guarded: these are the highest-boosted fields in browseParts, and
+          // the feeds write part-name words ("BUMPER", "AUDI") into them. See
+          // identifier-sanitize.util.ts.
+          manufacturerPartNumber: sanitizeIdentifier(
+            part.manufacturerPartNumber,
+          ),
           partNumbers: part.partNumbers || [],
           // Primary-identity numbers only (exclude interchange, which lives in
           // interchangePartNumbers below). This keeps a "primary" number match
@@ -253,7 +288,7 @@ export class OpenSearchService implements OnModuleInit {
               .filter(Boolean),
             ...(part.makes || []).filter(Boolean),
           ])],
-          oeNumbers: part.oeNumbers,
+          oeNumbers: sanitizeIdentifierList(part.oeNumbers),
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
           // (OEM / MPN / genuine) — it is what a "this exact part" match uses.
@@ -431,31 +466,49 @@ export class OpenSearchService implements OnModuleInit {
     // --- relevance clauses (weighted should). Exact normalized part-number
     //     dominates (boost 60); interchange cross-reference is a strong but
     //     secondary signal (boost 25) so it never outranks a primary match. ---
-    const should: any[] = [];
-    if (hasQuery) {
+    //
+    // The descriptive `multi_match` carries an explicit minimum_should_match.
+    // Without it multi_match defaults to `operator: or`, so "Audi bumper"
+    // matched every document containing *either* term — the union, 10,932
+    // results against an Audi-bumper intersection of roughly 208. It was also
+    // non-monotonic in the worst way for buyers: adding a term *widened* the
+    // set ("Audi Q7 bumper" → 11,063) and an unmatchable token was silently
+    // ignored ("zzzz bumper" returned exactly "bumper"'s 1,934).
+    //
+    // `3<75%` reads: with 3 terms or fewer require them ALL, beyond that
+    // require 75%. A bare `75%` rounds *down*, which would still let a
+    // two-token query match on one token and change nothing here.
+    const buildQClause = (strictness: MatchStrictness): any | null => {
+      if (!hasQuery) return null;
       const qq = q!.trim();
-      should.push({
-        multi_match: {
-          query: qq,
-          fields: [
-            'title^2',
-            'brand',
-            'category',
-            'manufacturerPartNumber^3',
-            'oeNumbers^2',
-          ],
-          _name: 'primary',
-        },
-      });
-      should.push({
-        term: {
-          'normalizedPartNumbers.keyword': {
-            value: normalizePartNumber(qq),
-            boost: 60,
+      const should: any[] = [
+        {
+          multi_match: {
+            query: qq,
+            fields: [
+              'title^2',
+              'brand',
+              'category',
+              'manufacturerPartNumber^3',
+              'oeNumbers^2',
+            ],
+            minimum_should_match: BROWSE_MSM[strictness],
             _name: 'primary',
           },
         },
-      });
+        // Part-number clauses stay outside the msm guard: a buyer pasting a
+        // bare number must still resolve it, and the outer minimum_should_match
+        // of 1 lets either signal satisfy the query on its own.
+        {
+          term: {
+            'normalizedPartNumbers.keyword': {
+              value: normalizePartNumber(qq),
+              boost: 60,
+              _name: 'primary',
+            },
+          },
+        },
+      ];
       if (includeInterchange) {
         should.push({
           term: {
@@ -467,12 +520,11 @@ export class OpenSearchService implements OnModuleInit {
           },
         });
       }
-    }
+      return { bool: { should, minimum_should_match: 1 } };
+    };
 
-    const qClause = hasQuery
-      ? { bool: { should, minimum_should_match: 1 } }
-      : null;
-    const must: any[] = qClause ? [qClause] : [{ match_all: {} }];
+    let qClause = buildQClause('strict');
+    let must: any[] = qClause ? [qClause] : [{ match_all: {} }];
 
     // --- filters: AND across dimensions, OR within (terms). ---
     const baseFilters: any[] = [
@@ -516,7 +568,10 @@ export class OpenSearchService implements OnModuleInit {
       if (qClause) f.push(qClause);
       return f;
     };
-    const aggs = {
+    // Rebuilt per attempt: `facetFilter` closes over `qClause`, which the
+    // relaxed retry below reassigns, and facet counts must describe the result
+    // set the buyer is actually looking at.
+    const buildAggs = () => ({
       categories: {
         filter: { bool: { filter: facetFilter('category') } },
         aggs: { names: { terms: { field: 'category.keyword', size: 50 } } },
@@ -537,7 +592,7 @@ export class OpenSearchService implements OnModuleInit {
         filter: { bool: { filter: facetFilter('sourceTag') } },
         aggs: { names: { terms: { field: 'sourceTags.keyword', size: 50 } } },
       },
-    };
+    });
 
     // Deep-page guard: from + size must stay inside max_result_window or
     // OpenSearch throws. Pages beyond the window return empty gracefully
@@ -557,17 +612,40 @@ export class OpenSearchService implements OnModuleInit {
     }
 
     try {
-      const response = await this.client.search({
-        index: this.INDEX_NAME,
-        body: {
-          from,
-          size,
-          track_total_hits: true,
-          query: { bool: { must, filter: baseFilters } },
-          sort: sortClause,
-          aggs,
-        } as any,
-      });
+      const runSearch = () =>
+        this.client.search({
+          index: this.INDEX_NAME,
+          body: {
+            from,
+            size,
+            track_total_hits: true,
+            query: { bool: { must, filter: baseFilters } },
+            sort: sortClause,
+            aggs: buildAggs(),
+          } as any,
+        });
+
+      let response = await runSearch();
+      let relaxed = false;
+
+      // Strict matching is right when the catalogue has the part and wrong when
+      // it does not — "front bumper for 2018 Audi Q7" would return an empty
+      // page rather than close alternatives. A thin first page is retried
+      // relaxed; deeper pages keep the strict query so pagination stays
+      // consistent with the page-1 total the buyer was shown.
+      if (hasQuery && pageNum === 1) {
+        const strictTotalRaw = response.body.hits.total;
+        const strictTotal =
+          typeof strictTotalRaw === 'number'
+            ? strictTotalRaw
+            : Number(strictTotalRaw?.value || 0);
+        if (strictTotal < BROWSE_RELAX_THRESHOLD) {
+          qClause = buildQClause('relaxed');
+          must = qClause ? [qClause] : [{ match_all: {} }];
+          response = await runSearch();
+          relaxed = true;
+        }
+      }
 
       const totalRaw = response.body.hits.total;
       const total =
@@ -611,6 +689,7 @@ export class OpenSearchService implements OnModuleInit {
         limit: size,
         maxPage,
         facets,
+        relaxed,
       };
     } catch (error) {
       this.logger.error('browseParts failed', error.stack);

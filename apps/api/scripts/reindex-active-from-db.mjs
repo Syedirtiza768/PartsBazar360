@@ -34,6 +34,36 @@ function normalizePartNumber(value) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+/**
+ * Mirror of apps/api/src/modules/search/identifier-sanitize.util.ts — kept in
+ * sync by hand because this script runs as plain ESM inside the API container
+ * and cannot import the compiled TS. See that file for why this matters:
+ * manufacturerPartNumber^3 and oeNumbers^2 are the highest-boosted fields, and
+ * the feeds write part-name words ("BUMPER", "AUDI") into them.
+ */
+function isIndexableIdentifier(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.length >= 3 && /\d/.test(trimmed);
+}
+
+function sanitizeIdentifier(value) {
+  return isIndexableIdentifier(value) ? value.trim() : null;
+}
+
+function sanitizeIdentifierList(values) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of values) {
+    const clean = sanitizeIdentifier(raw);
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
+}
+
 async function os(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${OS}${path}`, {
     method,
@@ -72,7 +102,7 @@ function toDoc(part) {
     title: part.title,
     partType: part.partType || null,
     brand: part.brand,
-    manufacturerPartNumber: part.manufacturerPartNumber || null,
+    manufacturerPartNumber: sanitizeIdentifier(part.manufacturerPartNumber),
     partNumbers,
     normalizedPartNumbers: partNumbers
       .filter((n) => n.numberType !== 'OEM_CROSS_REFERENCE')
@@ -87,7 +117,7 @@ function toDoc(part) {
           .filter(Boolean),
       ],
     )],
-    oeNumbers: part.oeNumbers,
+    oeNumbers: sanitizeIdentifierList(part.oeNumbers),
     interchangePartNumbers: partNumbers
       .filter((n) => n.numberType === 'OEM_CROSS_REFERENCE')
       .map((n) => n.normalizedNumber)
