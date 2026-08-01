@@ -6,6 +6,7 @@ import { SupportService } from './support.service';
 import { PricingModule } from '../pricing/pricing.module';
 import { SellerOperationsController } from './sellers.controller';
 import { PricingOperationsController } from './pricing.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PricingOperationsController } from './pricing.controller';
       name: 'ingestion',
     }),
     PricingModule,
+    AuthModule,
   ],
   controllers: [
     OperationsController,
