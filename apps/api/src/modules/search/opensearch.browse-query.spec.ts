@@ -72,7 +72,19 @@ describe('browseParts query construction', () => {
     expect(result.relaxed).toBe(false);
   });
 
-  it('retries relaxed when strict matching finds almost nothing', async () => {
+  it('does not relax a thin but non-empty result set', async () => {
+    // A pasted part number legitimately returns one hit. Labelling that
+    // "no exact matches — showing related parts" mislabels a perfect match,
+    // which is exactly what a threshold-based retry did on 8R0807453C.
+    const { service, calls } = stubService([1, 900]);
+    const result = await service.browseParts({ q: '8R0807453C' });
+
+    expect(calls).toHaveLength(1);
+    expect(result.relaxed).toBe(false);
+    expect(result.total).toBe(1);
+  });
+
+  it('retries relaxed only when strict matching finds nothing at all', async () => {
     // Strict returns 0 (catalogue genuinely lacks the part), relaxed finds 40.
     const { service, calls } = stubService([0, 40]);
     const result = await service.browseParts({

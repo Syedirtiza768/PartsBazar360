@@ -64,12 +64,6 @@ const BROWSE_MSM: Record<MatchStrictness, string> = {
   relaxed: '2<50%',
 };
 
-/** Below this many strict hits, page 1 is retried relaxed. */
-const BROWSE_RELAX_THRESHOLD = Math.max(
-  1,
-  Number(process.env.SEARCH_RELAX_THRESHOLD || 5),
-);
-
 @Injectable()
 export class OpenSearchService implements OnModuleInit {
   private readonly logger = new Logger(OpenSearchService.name);
@@ -630,16 +624,21 @@ export class OpenSearchService implements OnModuleInit {
 
       // Strict matching is right when the catalogue has the part and wrong when
       // it does not — "front bumper for 2018 Audi Q7" would return an empty
-      // page rather than close alternatives. A thin first page is retried
+      // page rather than close alternatives. An empty first page is retried
       // relaxed; deeper pages keep the strict query so pagination stays
       // consistent with the page-1 total the buyer was shown.
+      //
+      // Only a genuinely empty result set triggers the retry. Padding a thin
+      // one is worse than leaving it thin: a pasted part number legitimately
+      // returns a single hit, and treating that as "no exact matches, showing
+      // related parts" mislabels a perfect match as a failure.
       if (hasQuery && pageNum === 1) {
         const strictTotalRaw = response.body.hits.total;
         const strictTotal =
           typeof strictTotalRaw === 'number'
             ? strictTotalRaw
             : Number(strictTotalRaw?.value || 0);
-        if (strictTotal < BROWSE_RELAX_THRESHOLD) {
+        if (strictTotal === 0) {
           qClause = buildQClause('relaxed');
           must = qClause ? [qClause] : [{ match_all: {} }];
           response = await runSearch();
