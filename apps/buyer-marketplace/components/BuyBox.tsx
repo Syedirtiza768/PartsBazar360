@@ -12,7 +12,6 @@ import {
   MessageIcon,
   CopyIcon,
   CheckIcon,
-  StoreIcon,
   MapPinIcon,
   ClockIcon,
 } from "@repo/ui/icons";
@@ -26,6 +25,7 @@ import { pushRecentlyViewed } from "@/lib/recent";
 import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
+import { SourcePill, SOURCE_TAG_CONFIG } from "./SourcePill";
 import { WatchlistButton } from "./WatchlistButton";
 import { ShippingSummaryRow } from "./ShippingSummaryRow";
 import type { Part, Offer } from "@/lib/types";
@@ -240,10 +240,9 @@ function OfferRow({
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-            <StoreIcon className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="truncate">{sellerName}</span>
-          </p>
+          <div className="flex items-center gap-1.5">
+            <SourcePill tag={offer.sourceTag} size="sm" />
+          </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {/* condition is the field sellers actually set per offer;
                 qualityTier has a schema default that can contradict it. */}
@@ -480,7 +479,8 @@ export function StickyMobileBar({ part }: { part: Part }) {
           <p className="truncate text-xs text-graphite-600">
             {(() => {
               const cond = humanize(best.condition || best.qualityTier);
-              const parts = [cond !== "Used" ? cond : null, best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
+              const tag = best.sourceTag ? (SOURCE_TAG_CONFIG[best.sourceTag]?.label ?? best.sourceTag) : null;
+              const parts = [cond !== "Used" ? cond : null, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
               return parts.join(" · ");
             })()}
           </p>

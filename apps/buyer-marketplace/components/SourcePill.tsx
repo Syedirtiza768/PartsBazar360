@@ -1,6 +1,6 @@
 import { Badge, type BadgeTone } from "@repo/ui/badge";
 
-const SOURCE_TAG_CONFIG: Record<string, { label: string; tone: BadgeTone }> = {
+export const SOURCE_TAG_CONFIG: Record<string, { label: string; tone: BadgeTone }> = {
   BST: { label: "FEBEST", tone: "success" },
   AAP: { label: "DXB EXW", tone: "brand" },
   YNTD: { label: "Dynatrade", tone: "info" },
