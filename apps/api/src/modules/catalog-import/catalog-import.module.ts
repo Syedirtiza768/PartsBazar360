@@ -4,6 +4,7 @@ import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogMatchService } from './catalog-match.service';
 import { FitmentCheckService } from './fitment-check.service';
 import { ReviewTaskService } from './review-task.service';
+import { WeightRectifierService } from './weight-rectifier.service';
 import { FitmentController } from './fitment.controller';
 import { AdminCatalogController } from './admin-catalog.controller';
 
@@ -15,6 +16,7 @@ import { AdminCatalogController } from './admin-catalog.controller';
     CatalogMatchService,
     FitmentCheckService,
     ReviewTaskService,
+    WeightRectifierService,
   ],
   exports: [
     SpreadsheetParserService,
@@ -22,6 +24,7 @@ import { AdminCatalogController } from './admin-catalog.controller';
     CatalogMatchService,
     FitmentCheckService,
     ReviewTaskService,
+    WeightRectifierService,
   ],
 })
 export class CatalogImportModule {}

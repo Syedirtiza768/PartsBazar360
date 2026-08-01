@@ -189,13 +189,18 @@ export class EnrichmentProcessor extends WorkerHost {
 
       const rtListingId = this.resolveRealTrackListingId(part.offers);
       if (!rtListingId) {
-        // No RealTrack listing (spreadsheet import). Fall back to AI-only enrichment:
-        // generate infographic spec directly from part data if price qualifies.
         this.logger.log(
-          `No RealTrack listing for ${partId} — attempting AI infographic only`,
+          `No RealTrack listing for ${partId} — AI infographic + weight derivation`,
         );
-        const topPrice = part.offers?.[0]?.price ?? 0;
-        // For spreadsheet imports, always generate infographic regardless of price.
+
+        // Always persist partClassKey and derive billable weight, even for
+        // spreadsheet imports that have no RealTrack listing.
+        const dimensionsCm = parseDimensionsJson(part.dimensions);
+        const billable = deriveBillableWeight({
+          actualKg: part.weight ?? null,
+          dimensionsCm,
+        });
+
         const infographic = this.diagramsEnabled
           ? await this.maybeBuildInfographic(part, null)
           : null;
@@ -203,6 +208,13 @@ export class EnrichmentProcessor extends WorkerHost {
         await this.prisma.canonicalPart.update({
           where: { id: partId },
           data: {
+            partClassKey,
+            ...(billable
+              ? {
+                  dimensionalWeightKg: billable.volumetricKg,
+                  billableWeightKg: billable.billableKg,
+                }
+              : {}),
             ...(infographic
               ? {
                   infographicSpec: infographic.spec as any,

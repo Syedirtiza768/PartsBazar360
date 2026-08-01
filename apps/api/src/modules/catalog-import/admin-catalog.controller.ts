@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { REVIEW_QUEUE_TYPES } from '@repo/catalog-contracts';
 import { ReviewTaskService } from './review-task.service';
 import { CatalogAuditService } from './catalog-audit.service';
+import { WeightRectifierService } from './weight-rectifier.service';
 import { PrismaService } from '../../prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -15,6 +16,7 @@ export class AdminCatalogController {
     private readonly reviews: ReviewTaskService,
     private readonly audit: CatalogAuditService,
     private readonly prisma: PrismaService,
+    private readonly weightRectifier: WeightRectifierService,
   ) {}
 
   @Get('queues')
@@ -113,5 +115,15 @@ export class AdminCatalogController {
       orderBy: { name: 'asc' },
       take: 100,
     });
+  }
+
+  @Get('weights/audit')
+  async weightAudit() {
+    return this.weightRectifier.audit();
+  }
+
+  @Post('weights/rectify')
+  async rectifyWeights() {
+    return this.weightRectifier.rectifyAll();
   }
 }
