@@ -61,10 +61,10 @@ export class WeightRectifierService {
     ] = await Promise.all([
       this.prisma.canonicalPart.count(),
       this.prisma.canonicalPart.count({
-        where: { weight: null, dimensions: Prisma.DbNull },
+        where: { weight: null, dimensions: { equals: Prisma.DbNull } },
       }),
       this.prisma.canonicalPart.count({ where: { weight: null } }),
-      this.prisma.canonicalPart.count({ where: { dimensions: Prisma.DbNull } }),
+      this.prisma.canonicalPart.count({ where: { dimensions: { equals: Prisma.DbNull } } }),
       this.prisma.canonicalPart.count({ where: { partClassKey: null } }),
       this.prisma.canonicalPart.count({
         where: { partClassKey: 'PART_GENERIC' },
