@@ -291,11 +291,6 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   <span className="part-number break-all">{part.oeNumbers.join(", ")}</span>
                 </SpecRow>
               )}
-              {part.ebayItemId && (
-                <SpecRow label="Marketplace item ID">
-                  <span className="part-number">{part.ebayItemId}</span>
-                </SpecRow>
-              )}
               {(part.position || part.itemSpecifics?.position) && (
                 <SpecRow label="Position">{part.position || part.itemSpecifics?.position}</SpecRow>
               )}
