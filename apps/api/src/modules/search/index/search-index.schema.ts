@@ -25,7 +25,7 @@
  */
 
 /** Bump when the mapping changes in a way that requires a rebuild. */
-export const SEARCH_INDEX_VERSION = 2;
+export const SEARCH_INDEX_VERSION = 3;
 
 /** Alias the application reads and writes through. Never a physical index. */
 export const SEARCH_ALIAS = 'parts_search';

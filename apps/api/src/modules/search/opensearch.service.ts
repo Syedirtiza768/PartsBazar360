@@ -44,7 +44,7 @@ function asArray(value: string | string[] | undefined | null): string[] {
 export class OpenSearchService implements OnModuleInit {
   private readonly logger = new Logger(OpenSearchService.name);
   private client!: Client;
-  private readonly INDEX_NAME = 'canonical_parts';
+  private readonly INDEX_NAME = 'parts_search';
   /**
    * OpenSearch caps `from + size` at `index.max_result_window` (default 10_000).
    * Without raising it, deep pages throw and the buyer cannot reach listings
