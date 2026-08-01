@@ -686,7 +686,7 @@ async function main() {
   );
 
   const offers = await prisma.sellerOffer.findMany({
-    where: { sellerId: SELLER_ID },
+    where: { sellerId: SELLER_ID, status: 'ACTIVE' },
     select: { canonicalPartId: true },
     distinct: ['canonicalPartId'],
   });
