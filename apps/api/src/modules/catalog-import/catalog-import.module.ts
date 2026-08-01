@@ -7,8 +7,10 @@ import { ReviewTaskService } from './review-task.service';
 import { WeightRectifierService } from './weight-rectifier.service';
 import { FitmentController } from './fitment.controller';
 import { AdminCatalogController } from './admin-catalog.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
+  imports: [AuthModule],
   controllers: [FitmentController, AdminCatalogController],
   providers: [
     SpreadsheetParserService,
