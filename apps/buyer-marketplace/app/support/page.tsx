@@ -26,6 +26,7 @@ const CATEGORIES = [
   { value: "ORDER_ISSUE", label: "Order issue" },
   { value: "PAYMENT", label: "Payment" },
   { value: "RETURNS", label: "Returns & refunds" },
+  { value: "FREIGHT_QUOTE", label: "Freight / shipping quote" },
   { value: "GENERAL", label: "General question" },
 ];
 
@@ -166,6 +167,27 @@ function SupportForm() {
                 </option>
               ))}
             </Select>
+
+            {form.category === "FREIGHT_QUOTE" && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Shipping country"
+                  placeholder="e.g. United Arab Emirates"
+                  value={form.shippingCountry}
+                  onChange={updateField("shippingCountry")}
+                />
+                <Input
+                  label="Estimated total weight (kg)"
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  inputMode="decimal"
+                  placeholder="e.g. 35"
+                  value={form.estimatedWeightKg}
+                  onChange={updateField("estimatedWeightKg")}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input

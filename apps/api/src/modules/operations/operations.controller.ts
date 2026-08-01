@@ -6,17 +6,24 @@ import {
   Logger,
   Get,
   Patch,
+  UseGuards,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaService } from '../../prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { EmailService } from '../email/email.service';
 import {
   REALTRACK_MARKETPLACE_SELLERS,
   resolveRealTrackSyncTarget,
 } from '../seed/marketplace-sellers.config';
 
 @Controller('operations')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class OperationsController {
   private readonly logger = new Logger(OperationsController.name);
   private readonly redis: Redis;
@@ -24,6 +31,7 @@ export class OperationsController {
   constructor(
     @InjectQueue('ingestion') private readonly ingestionQueue: Queue,
     private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
   ) {
     this.redis = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
@@ -110,7 +118,7 @@ export class OperationsController {
     @Body()
     body: { status?: string; trackingNumber?: string; carrier?: string },
   ) {
-    return this.prisma.sellerOrder.update({
+    const sellerOrder = await this.prisma.sellerOrder.update({
       where: { id: sellerOrderId },
       data: {
         status: body.status || undefined,
@@ -125,6 +133,34 @@ export class OperationsController {
         },
       },
     });
+
+    // Send shipment notification to buyer when tracking number is provided
+    if (body.trackingNumber && sellerOrder.parentOrder?.buyerId) {
+      const buyer = await this.prisma.user.findUnique({
+        where: { id: sellerOrder.parentOrder.buyerId },
+      });
+      if (buyer?.email) {
+        void this.emailService
+          .sendShipmentNotification(buyer.email, {
+            orderId: sellerOrder.parentOrderId,
+            sellerName: sellerOrder.seller?.name || 'Marketplace seller',
+            trackingNumber: body.trackingNumber,
+            carrier: body.carrier,
+            items: sellerOrder.items.map((item) => ({
+              name:
+                item.sellerOffer.canonicalPart?.title ||
+                item.sellerOffer.sellerTitle ||
+                'Auto part',
+              quantity: item.quantity,
+            })),
+          })
+          .catch((err) =>
+            this.logger.error(`Shipment notification failed: ${err}`),
+          );
+      }
+    }
+
+    return sellerOrder;
   }
 
   @Get('stores')

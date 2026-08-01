@@ -6,11 +6,17 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { PRICING_MODES, PricingService } from '../pricing/pricing.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('operations/pricing-policies')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class PricingOperationsController {
   constructor(
     private readonly prisma: PrismaService,

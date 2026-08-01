@@ -5,8 +5,13 @@ import {
   Get,
   Param,
   Patch,
+  UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { EmailService } from '../email/email.service';
 
 const ONBOARDING_STATES = [
   'DRAFT',
@@ -23,8 +28,13 @@ const ONBOARDING_STATES = [
 ];
 
 @Controller('operations/sellers')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class SellerOperationsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   @Get('onboarding')
   list() {
@@ -69,6 +79,8 @@ export class SellerOperationsController {
     });
     if (!seller) throw new BadRequestException('Seller not found');
 
+    const previousStatus = seller.onboardingStatus;
+
     const complianceStatus =
       body.complianceStatus || seller.profile?.complianceStatus;
     const payoutStatus = body.payoutStatus || seller.profile?.payoutStatus;
@@ -111,12 +123,25 @@ export class SellerOperationsController {
       });
     });
 
-    return this.prisma.seller.findUnique({
+    const result = await this.prisma.seller.findUnique({
       where: { id: sellerId },
       include: {
         profile: true,
         pricingAssignments: { include: { pricingPolicy: true } },
       },
     });
+
+    // Notify admin of onboarding state change
+    if (result && previousStatus !== body.status) {
+      this.emailService.sendSellerOnboardingAdminNotification({
+        sellerId,
+        sellerName: seller.name,
+        previousStatus,
+        newStatus: body.status,
+        notes: body.notes,
+      });
+    }
+
+    return result;
   }
 }

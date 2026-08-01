@@ -134,7 +134,7 @@ export class CheckoutService {
       throw new BadRequestException(
         `This order exceeds courier limits (${freightSellers
           .map((q) => `${q.quotedWeightKg}kg+`)
-          .join(', ')}) and needs a freight quote. Please request a shipping quote for these items.`,
+          .join(', ')}) and needs a freight quote. Please submit a freight quote request at ${this.buyerAppUrl}/support?category=FREIGHT_QUOTE.`,
       );
     }
 
@@ -542,8 +542,42 @@ export class CheckoutService {
         void this.sendOrderConfirmationEmail(payment.orderId).catch((err) =>
           this.logger.error(`Order confirmation email failed: ${err}`),
         );
+        void this.sendAdminOrderNotification(payment.orderId).catch((err) =>
+          this.logger.error(`Admin order notification failed: ${err}`),
+        );
       }
       return updated;
+    });
+  }
+
+
+  private async sendAdminOrderNotification(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        sellerOrders: { include: { seller: true, items: true } },
+      },
+    });
+    if (!order?.buyerId) return;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: order.buyerId },
+    });
+    if (!user?.email) return;
+
+    const sellerCount = new Set(order.sellerOrders.map((so) => so.sellerId)).size;
+    const itemCount = order.sellerOrders.reduce(
+      (sum, so) => sum + so.items.reduce((s, i) => s + i.quantity, 0),
+      0,
+    );
+
+    this.emailService.sendNewOrderAdminNotification({
+      orderId: order.id,
+      totalAmount: order.totalAmount,
+      currency: order.currency,
+      buyerEmail: user.email,
+      itemCount,
+      sellerCount,
     });
   }
 

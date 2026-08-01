@@ -1,10 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { REVIEW_QUEUE_TYPES } from '@repo/catalog-contracts';
 import { ReviewTaskService } from './review-task.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { PrismaService } from '../../prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('admin/catalog')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class AdminCatalogController {
   constructor(
     private readonly reviews: ReviewTaskService,

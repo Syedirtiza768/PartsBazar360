@@ -12,7 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/", icon: GaugeIcon },
   { label: "Catalog queues", href: "/catalog", icon: ClipboardIcon, matchPrefix: true },
   { label: "Marketplace health", href: "/", icon: GridIcon },
-  { label: "Portal access", href: "/", icon: ShieldIcon },
+  { label: "Operations", href: "/operations", icon: GridIcon },
 ];
 
 /** Centred, responsive status screen for the pre-authenticated states. */
