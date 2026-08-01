@@ -32,6 +32,7 @@ import { EmailService } from '../email/email.service';
 @Injectable()
 export class CheckoutService {
   private readonly logger = new Logger(CheckoutService.name);
+  private readonly buyerAppUrl: string;
 
   constructor(
     private cartService: CartService,
@@ -42,7 +43,9 @@ export class CheckoutService {
     private tamaraService: TamaraService,
     private prisma: PrismaService,
     private emailService: EmailService,
-  ) {}
+  ) {
+    this.buyerAppUrl = process.env.BUYER_APP_URL || 'http://localhost:3000';
+  }
 
   async processCheckout(
     cartId: string,
