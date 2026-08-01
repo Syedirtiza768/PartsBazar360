@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import {
   resolvePartClassKey,
@@ -60,10 +61,10 @@ export class WeightRectifierService {
     ] = await Promise.all([
       this.prisma.canonicalPart.count(),
       this.prisma.canonicalPart.count({
-        where: { weight: null, dimensions: { equals: null } },
+        where: { weight: null, dimensions: Prisma.DbNull },
       }),
       this.prisma.canonicalPart.count({ where: { weight: null } }),
-      this.prisma.canonicalPart.count({ where: { dimensions: { equals: null } } }),
+      this.prisma.canonicalPart.count({ where: { dimensions: Prisma.DbNull } }),
       this.prisma.canonicalPart.count({ where: { partClassKey: null } }),
       this.prisma.canonicalPart.count({
         where: { partClassKey: 'PART_GENERIC' },
