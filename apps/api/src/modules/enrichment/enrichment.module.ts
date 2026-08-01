@@ -3,8 +3,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { EnrichmentService } from './enrichment.service';
 import { EnrichmentBudgetService } from './enrichment-budget.service';
 import { EnrichmentProcessor } from './enrichment.processor';
+import { AdminEnrichmentController } from './admin-enrichment.controller';
 import { BuyerCacheService } from '../search/buyer-cache.service';
 import { IntegrationModule } from '../integration/integration.module';
+import { AuthModule } from '../auth/auth.module';
 
 /**
  * Listing enrichment.
@@ -19,7 +21,9 @@ const runWorker = process.env.RUN_ENRICHMENT_WORKER !== '0';
   imports: [
     BullModule.registerQueue({ name: 'enrichment' }),
     IntegrationModule,
+    AuthModule,
   ],
+  controllers: [AdminEnrichmentController],
   providers: [
     EnrichmentService,
     EnrichmentBudgetService,

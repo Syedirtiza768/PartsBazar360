@@ -934,23 +934,37 @@ export class SearchController implements OnModuleDestroy {
     const part = await this.prisma.canonicalPart.findUnique({
       where: { id },
       select: {
+        title: true,
         brand: true,
         manufacturerPartNumber: true,
+        category: true,
+        qualityTier: true,
+        partSource: true,
+        itemSpecifics: true,
         infographicSpec: true,
       },
     });
 
+    if (!part) throw new NotFoundException(`Part ${id} not found`);
+
     // Re-normalised on read so a spec written by an older, looser generation
     // can never emit a malformed document.
-    const spec: InfographicSpec | null = part
-      ? normalizeSpec(part.infographicSpec)
-      : null;
-    if (!spec) {
-      throw new NotFoundException(`No infographic for part ${id}`);
+    const spec: InfographicSpec | null = normalizeSpec(part.infographicSpec);
+
+    if (spec) {
+      return renderInfographicSvg(spec, { brand: part.brand });
     }
 
-    return renderInfographicSvg(spec, {
-      brand: part!.brand,
+    // Fall back to placeholder rendered from DB fields (condition, position, etc.)
+    const specifics = (part.itemSpecifics || {}) as Record<string, any>;
+    return renderPlaceholderSvg({
+      title: part.title,
+      brand: part.brand,
+      mpn: part.manufacturerPartNumber,
+      category: part.category,
+      condition: part.qualityTier || null,
+      partSource: part.partSource || null,
+      position: specifics.placementOnVehicle || null,
     });
   }
 
