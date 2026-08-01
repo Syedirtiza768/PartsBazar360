@@ -43,6 +43,8 @@ function SupportForm() {
     category: searchParams.get("category") || "FITMENT",
     subject: searchParams.get("subject") || "",
     message: "",
+    shippingCountry: "",
+    estimatedWeightKg: "",
   });
 
   const hasContext = Boolean(form.orderId || form.canonicalPartId);
