@@ -36,10 +36,15 @@ const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 // apps/api/src/modules/search/buyer-visible-offers.util.ts, which also enforces
 // this at index time so price sort and facets agree with the card.
 const SUPERIOR_SELLER_ID = "seller-superior-auto-parts";
+const SUPERIOR_SELLER_NAME_RE = /superior\s+auto\s+parts/i;
+// Matched by name as well as ID: importer-created sellers get a UUID rather
+// than the seed slug, so production Blackline offers carry a UUID sellerId.
 const SUPERFLOUS_SELLER_IDS = new Set([
   "seller-blackline-auto-parts",
   "seller-salvage-auto-parts",
+  "21924d3c-b345-4dcd-900c-b4bcf92b01c0", // Blackline Auto Parts (production)
 ]);
+const SUPERFLOUS_SELLER_NAME_RE = /\b(?:blackline|salvage)\s+auto\s+parts\b/i;
 
 /** Buyer-visible offers only — drops legacy/suspended sellers from card/PDP payloads. */
 export function buyerVisibleOffers<T extends {
@@ -61,9 +66,16 @@ export function buyerVisibleOffers<T extends {
       return Boolean(offer.sellerId || name);
     });
 
-  const hasSuperior = filtered.some((o) => o.sellerId === SUPERIOR_SELLER_ID);
+  const nameOf = (o: T) => o.sellerName || o.seller?.name || "";
+  const hasSuperior = filtered.some(
+    (o) => o.sellerId === SUPERIOR_SELLER_ID || SUPERIOR_SELLER_NAME_RE.test(nameOf(o)),
+  );
   return (hasSuperior
-    ? filtered.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ""))
+    ? filtered.filter(
+        (o) =>
+          !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? "") &&
+          !SUPERFLOUS_SELLER_NAME_RE.test(nameOf(o)),
+      )
     : filtered
   )
     .slice()

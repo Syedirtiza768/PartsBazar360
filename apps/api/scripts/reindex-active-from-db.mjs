@@ -95,14 +95,30 @@ async function os(path, { method = 'GET', body } = {}) {
  * must not set minPrice or sourceTags either.
  */
 const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
+const SUPERIOR_SELLER_NAME_RE = /superior\s+auto\s+parts/i;
 const SUPERFLOUS_SELLER_IDS = new Set([
   'seller-blackline-auto-parts',
   'seller-salvage-auto-parts',
+  '21924d3c-b345-4dcd-900c-b4bcf92b01c0', // Blackline Auto Parts (production)
 ]);
+const SUPERFLOUS_SELLER_NAME_RE = /\b(?:blackline|salvage)\s+auto\s+parts\b/i;
+
+function sellerNameOf(o) {
+  return o?.sellerName || o?.seller?.name || '';
+}
 
 function applySuperiorPriority(offers) {
-  if (!offers.some((o) => o.sellerId === SUPERIOR_SELLER_ID)) return offers;
-  return offers.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? ''));
+  const hasSuperior = offers.some(
+    (o) =>
+      o.sellerId === SUPERIOR_SELLER_ID ||
+      SUPERIOR_SELLER_NAME_RE.test(sellerNameOf(o)),
+  );
+  if (!hasSuperior) return offers;
+  return offers.filter(
+    (o) =>
+      !SUPERFLOUS_SELLER_IDS.has(o.sellerId ?? '') &&
+      !SUPERFLOUS_SELLER_NAME_RE.test(sellerNameOf(o)),
+  );
 }
 
 function toDoc(part) {

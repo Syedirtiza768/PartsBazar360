@@ -8,11 +8,47 @@ const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
 
 export const SUPERIOR_SELLER_ID = 'seller-superior-auto-parts';
-/** Sellers Superior outranks on the same part, regardless of price. */
+const SUPERIOR_SELLER_NAME_RE = /superior\s+auto\s+parts/i;
+
+/**
+ * Sellers Superior outranks on the same part, regardless of price.
+ *
+ * Matched by name as well as ID on purpose: the seed config assigns slug IDs,
+ * but sellers created through the RealTrack importer get a UUID instead, so
+ * production carries "Blackline Auto Parts" under a UUID and the slug
+ * `seller-blackline-auto-parts` matches nothing. An ID-only rule silently
+ * suppressed Salvage while letting every Blackline offer through.
+ */
 export const SUPERFLOUS_SELLER_IDS = new Set([
   'seller-blackline-auto-parts',
   'seller-salvage-auto-parts',
+  '21924d3c-b345-4dcd-900c-b4bcf92b01c0', // Blackline Auto Parts (production)
 ]);
+const SUPERFLOUS_SELLER_NAME_RE = /\b(?:blackline|salvage)\s+auto\s+parts\b/i;
+
+type OfferSellerLike = {
+  sellerId?: string | null;
+  sellerName?: string | null;
+  seller?: { name?: string | null } | null;
+};
+
+function sellerNameOf(offer: OfferSellerLike | null | undefined): string {
+  return offer?.sellerName || offer?.seller?.name || '';
+}
+
+export function isSuperiorOffer(offer: OfferSellerLike): boolean {
+  return (
+    offer?.sellerId === SUPERIOR_SELLER_ID ||
+    SUPERIOR_SELLER_NAME_RE.test(sellerNameOf(offer))
+  );
+}
+
+export function isOutrankedBySuperior(offer: OfferSellerLike): boolean {
+  return (
+    SUPERFLOUS_SELLER_IDS.has(offer?.sellerId ?? '') ||
+    SUPERFLOUS_SELLER_NAME_RE.test(sellerNameOf(offer))
+  );
+}
 
 /**
  * Superior takes priority: when a part has a Superior offer, Blackline and
@@ -21,12 +57,11 @@ export const SUPERFLOUS_SELLER_IDS = new Set([
  * rendered card) and again at read time (so stale OpenSearch docs written
  * before a reindex still obey the rule).
  */
-export function applySuperiorPriority<T extends { sellerId?: string | null }>(
+export function applySuperiorPriority<T extends OfferSellerLike>(
   offers: T[],
 ): T[] {
-  const hasSuperior = offers.some((o) => o?.sellerId === SUPERIOR_SELLER_ID);
-  if (!hasSuperior) return offers;
-  return offers.filter((o) => !SUPERFLOUS_SELLER_IDS.has(o?.sellerId ?? ''));
+  if (!offers.some(isSuperiorOffer)) return offers;
+  return offers.filter((offer) => !isOutrankedBySuperior(offer));
 }
 
 export type IndexedOfferLike = {

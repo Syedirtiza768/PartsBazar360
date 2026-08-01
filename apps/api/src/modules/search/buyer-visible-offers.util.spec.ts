@@ -74,6 +74,29 @@ describe('buyer-visible-offers', () => {
       expect(applySuperiorPriority([other, blk, sup])).toEqual([other, sup]);
     });
 
+    it('suppresses Blackline when it carries a UUID sellerId, not the slug', () => {
+      // Production shape: the RealTrack importer created Blackline with a UUID,
+      // so an ID-only rule let every Blackline offer through.
+      const blkUuid = {
+        sellerId: '21924d3c-b345-4dcd-900c-b4bcf92b01c0',
+        sellerName: 'Blackline Auto Parts',
+        price: 89.99,
+      };
+      const sup = {
+        sellerId: 'seller-superior-auto-parts',
+        sellerName: 'Superior Auto Parts',
+        price: 406,
+      };
+      expect(applySuperiorPriority([blkUuid, sup])).toEqual([sup]);
+    });
+
+    it('suppresses by seller name even when the id is unrecognised', () => {
+      const unknownBlk = { sellerId: 'some-new-id', sellerName: 'Blackline Auto Parts' };
+      const unknownSal = { sellerId: 'other-new-id', seller: { name: 'Salvage Auto Parts' } };
+      const sup = { sellerId: 'x', sellerName: 'Superior Auto Parts' };
+      expect(applySuperiorPriority([unknownBlk, unknownSal, sup])).toEqual([sup]);
+    });
+
     it('wins even when Superior is the more expensive offer', () => {
       const item = sanitizeSearchItem<SearchItemLike>({
         id: 'p2',
