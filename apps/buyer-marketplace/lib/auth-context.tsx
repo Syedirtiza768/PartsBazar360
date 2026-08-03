@@ -31,6 +31,8 @@ type AuthContextValue = {
   register: (input: { email: string; password: string; name?: string }) => Promise<AuthUser>;
   sendPhoneOtp: (phone: string) => Promise<{ exists: boolean }>;
   verifyPhoneOtp: (phone: string, code: string, password?: string) => Promise<AuthUser>;
+  sendEmailOtp: (email: string) => Promise<{ exists: boolean }>;
+  verifyEmailOtp: (email: string, code: string, phone?: string, password?: string) => Promise<AuthUser>;
   logout: () => void;
   authHeaders: () => HeadersInit;
 };
@@ -148,6 +150,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const sendEmailOtp = useCallback(async (email: string) => {
+    const res = await fetch(`${API_BASE_URL}/auth/email/otp/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error(await parseError(res));
+    return (await res.json()) as { exists: boolean };
+  }, []);
+
+  const verifyEmailOtp = useCallback(
+    async (email: string, code: string, phone?: string, password?: string) => {
+      const res = await fetch(`${API_BASE_URL}/auth/email/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code, phone, password }),
+      });
+      if (!res.ok) throw new Error(await parseError(res));
+      const data = (await res.json()) as { user: AuthUser; accessToken: string };
+      persist(data.accessToken, data.user);
+      return data.user;
+    },
+    [persist],
+  );
+
   const logout = useCallback(() => persist(null, null), [persist]);
 
   const authHeaders = useCallback((): HeadersInit => {
@@ -165,10 +192,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       sendPhoneOtp,
       verifyPhoneOtp,
+      sendEmailOtp,
+      verifyEmailOtp,
       logout,
       authHeaders,
     }),
-    [user, token, ready, login, register, sendPhoneOtp, verifyPhoneOtp, logout, authHeaders],
+    [
+      user,
+      token,
+      ready,
+      login,
+      register,
+      sendPhoneOtp,
+      verifyPhoneOtp,
+      sendEmailOtp,
+      verifyEmailOtp,
+      logout,
+      authHeaders,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -216,7 +216,8 @@ export default function CheckoutPage() {
 function CheckoutContent() {
   const { cart, subtotal, refresh } = useCart();
   const { activeVehicle, ready: garageReady } = useGarage();
-  const { user, authHeaders, isAuthenticated, sendPhoneOtp, verifyPhoneOtp } = useAuth();
+  const { user, authHeaders, isAuthenticated, sendPhoneOtp, verifyPhoneOtp, sendEmailOtp, verifyEmailOtp } =
+    useAuth();
   const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -234,6 +235,11 @@ function CheckoutContent() {
   const [showOtpPanel, setShowOtpPanel] = useState(false);
   const [otpExists, setOtpExists] = useState<boolean | null>(null);
   const [otpCode, setOtpCode] = useState("");
+  // Twilio SMS is the default channel; email is an explicit fallback while
+  // Twilio's account issue is unresolved — see otpChannel below.
+  const [otpChannel, setOtpChannel] = useState<"sms" | "email">("sms");
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpEmailSent, setOtpEmailSent] = useState(false);
   const [otpCreateAccount, setOtpCreateAccount] = useState(false);
   const [otpPassword, setOtpPassword] = useState("");
   const [otpSending, setOtpSending] = useState(false);
@@ -416,7 +422,8 @@ function CheckoutContent() {
     setOtpResending(true);
     setOtpError(null);
     try {
-      const { exists } = await sendPhoneOtp(form.phone);
+      const { exists } =
+        otpChannel === "email" ? await sendEmailOtp(otpEmail) : await sendPhoneOtp(form.phone);
       setOtpExists(exists);
       setOtpCode("");
       setOtpCooldown(RESEND_COOLDOWN_SECONDS);
@@ -437,6 +444,9 @@ function CheckoutContent() {
       return;
     }
     setShowOtpPanel(true);
+    setOtpChannel("sms");
+    setOtpEmail("");
+    setOtpEmailSent(false);
     setOtpExists(null);
     setOtpCode("");
     setOtpCreateAccount(false);
@@ -445,16 +455,44 @@ function CheckoutContent() {
     void startPhoneVerification();
   };
 
+  // "Trouble receiving a text?" — switches the panel to collect an email
+  // and send the code via SendGrid instead, while Twilio SMS is unreliable.
+  const handleSwitchToEmail = () => {
+    setOtpChannel("email");
+    setOtpEmailSent(false);
+    setOtpExists(null);
+    setOtpCode("");
+    setOtpError(null);
+    setOtpCooldown(0);
+  };
+
+  const handleSendEmailOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setOtpSending(true);
+    setOtpError(null);
+    try {
+      const { exists } = await sendEmailOtp(otpEmail.trim());
+      setOtpExists(exists);
+      setOtpEmailSent(true);
+      setOtpCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
   const handleVerifyAndPlaceOrder = async (e: FormEvent) => {
     e.preventDefault();
     setOtpVerifying(true);
     setOtpError(null);
     try {
-      await verifyPhoneOtp(
-        form.phone,
-        otpCode.trim(),
-        otpExists === false && otpCreateAccount ? otpPassword : undefined,
-      );
+      const password = otpExists === false && otpCreateAccount ? otpPassword : undefined;
+      if (otpChannel === "email") {
+        await verifyEmailOtp(otpEmail.trim(), otpCode.trim(), form.phone, password);
+      } else {
+        await verifyPhoneOtp(form.phone, otpCode.trim(), password);
+      }
       setShowOtpPanel(false);
       setPendingPlaceOrder(true);
     } catch (err) {
@@ -797,97 +835,151 @@ function CheckoutContent() {
             )}
 
             {showOtpPanel ? (
-              <section className="rounded-xl border-2 border-graphite-950 bg-white p-4 shadow-card sm:p-6" aria-label="Confirm your mobile number">
-                <h2 className="text-base font-semibold text-slate-900">Confirm your number</h2>
-                <p className="mt-1 text-sm text-graphite-600">
-                  {otpExists === true ? (
-                    <>Welcome back — enter the code we texted to <span className="font-medium text-slate-800">{form.phone}</span>.</>
-                  ) : otpExists === false ? (
-                    <>We texted a code to <span className="font-medium text-slate-800">{form.phone}</span>.</>
-                  ) : (
-                    <>Sending a code to <span className="font-medium text-slate-800">{form.phone}</span>…</>
-                  )}
-                </p>
-                <form onSubmit={handleVerifyAndPlaceOrder} className="mt-4 space-y-4">
-                  <Input
-                    label="Verification code"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    required
-                    maxLength={8}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                    placeholder="000000"
-                  />
-                  {otpExists === false && (
-                    <div>
-                      <Checkbox
-                        checked={otpCreateAccount}
-                        onChange={(e) => setOtpCreateAccount(e.target.checked)}
-                        label="Create an account with a password"
-                        description="Optional — skip this to check out as a guest."
+              <section className="rounded-xl border-2 border-graphite-950 bg-white p-4 shadow-card sm:p-6" aria-label="Confirm your identity">
+                {otpChannel === "email" && !otpEmailSent ? (
+                  <>
+                    <h2 className="text-base font-semibold text-slate-900">Send the code by email instead</h2>
+                    <p className="mt-1 text-sm text-graphite-600">
+                      We&apos;ll email a one-time code to confirm your order.
+                    </p>
+                    <form onSubmit={handleSendEmailOtp} className="mt-4 space-y-4">
+                      <Input
+                        label="Email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        required
+                        value={otpEmail}
+                        onChange={(e) => setOtpEmail(e.target.value)}
                       />
-                      {otpCreateAccount && (
-                        <div className="mt-3">
-                          <Input
-                            label="Password"
-                            type="password"
-                            autoComplete="new-password"
-                            required
-                            minLength={8}
-                            value={otpPassword}
-                            onChange={(e) => setOtpPassword(e.target.value)}
+                      {otpError && (
+                        <p className="text-sm font-medium text-red-600" role="alert">{otpError}</p>
+                      )}
+                      <Button type="submit" size="lg" fullWidth loading={otpSending}>
+                        Send code
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOtpChannel("sms");
+                          setOtpError(null);
+                        }}
+                        className="text-xs font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                      >
+                        Back to text message
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-base font-semibold text-slate-900">
+                      {otpChannel === "email" ? "Confirm your email" : "Confirm your number"}
+                    </h2>
+                    <p className="mt-1 text-sm text-graphite-600">
+                      {otpChannel === "email" ? (
+                        <>We emailed a code to <span className="font-medium text-slate-800">{otpEmail}</span>.</>
+                      ) : otpExists === true ? (
+                        <>Welcome back — enter the code we texted to <span className="font-medium text-slate-800">{form.phone}</span>.</>
+                      ) : otpExists === false ? (
+                        <>We texted a code to <span className="font-medium text-slate-800">{form.phone}</span>.</>
+                      ) : (
+                        <>Sending a code to <span className="font-medium text-slate-800">{form.phone}</span>…</>
+                      )}
+                    </p>
+                    <form onSubmit={handleVerifyAndPlaceOrder} className="mt-4 space-y-4">
+                      <Input
+                        label="Verification code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        required
+                        maxLength={8}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                        placeholder="000000"
+                      />
+                      {otpExists === false && (
+                        <div>
+                          <Checkbox
+                            checked={otpCreateAccount}
+                            onChange={(e) => setOtpCreateAccount(e.target.checked)}
+                            label="Create an account with a password"
+                            description="Optional — skip this to check out as a guest."
                           />
+                          {otpCreateAccount && (
+                            <div className="mt-3">
+                              <Input
+                                label="Password"
+                                type="password"
+                                autoComplete="new-password"
+                                required
+                                minLength={8}
+                                value={otpPassword}
+                                onChange={(e) => setOtpPassword(e.target.value)}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  )}
-                  {otpError && (
-                    <p className="text-sm font-medium text-red-600" role="alert">{otpError}</p>
-                  )}
-                  <Button
-                    type="submit"
-                    size="lg"
-                    fullWidth
-                    loading={otpVerifying || submitting}
-                    disabled={otpSending}
-                  >
-                    Verify &amp; place order
-                  </Button>
-                  <div className="flex items-center justify-between text-xs text-graphite-600">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowOtpPanel(false);
-                        setOtpError(null);
-                      }}
-                      className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={otpResending || otpCooldown > 0}
-                      className={cn(
-                        "font-medium underline-offset-2",
-                        otpResending || otpCooldown > 0
-                          ? "cursor-not-allowed text-graphite-400"
-                          : "text-brand-700 hover:text-brand-800 hover:underline",
+                      {otpError && (
+                        <p className="text-sm font-medium text-red-600" role="alert">{otpError}</p>
                       )}
-                    >
-                      {otpResending
-                        ? "Sending…"
-                        : otpCooldown > 0
-                          ? `Resend in ${otpCooldown}s`
-                          : "Resend code"}
-                    </button>
-                  </div>
-                </form>
+                      <Button
+                        type="submit"
+                        size="lg"
+                        fullWidth
+                        loading={otpVerifying || submitting}
+                        disabled={otpSending}
+                      >
+                        Verify &amp; place order
+                      </Button>
+                      <div className="flex items-center justify-between text-xs text-graphite-600">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowOtpPanel(false);
+                            setOtpError(null);
+                          }}
+                          className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResendOtp}
+                          disabled={otpResending || otpCooldown > 0}
+                          className={cn(
+                            "font-medium underline-offset-2",
+                            otpResending || otpCooldown > 0
+                              ? "cursor-not-allowed text-graphite-400"
+                              : "text-brand-700 hover:text-brand-800 hover:underline",
+                          )}
+                        >
+                          {otpResending
+                            ? "Sending…"
+                            : otpCooldown > 0
+                              ? `Resend in ${otpCooldown}s`
+                              : "Resend code"}
+                        </button>
+                      </div>
+                      {otpChannel === "sms" && (
+                        <button
+                          type="button"
+                          onClick={handleSwitchToEmail}
+                          className="block text-xs font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                        >
+                          Trouble receiving a text? Send the code by email instead
+                        </button>
+                      )}
+                    </form>
+                  </>
+                )}
               </section>
             ) : (
               <>

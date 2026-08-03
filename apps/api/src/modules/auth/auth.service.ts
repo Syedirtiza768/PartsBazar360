@@ -12,6 +12,7 @@ import {
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
+import { SendGridService } from '../email/sendgrid.service';
 import { TwilioService } from '../sms/twilio.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
@@ -41,6 +42,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly sendGridService: SendGridService,
     private readonly twilioService: TwilioService,
   ) {}
 
@@ -216,7 +218,9 @@ export class AuthService {
           },
         });
 
-    void this.emailService.sendEmailVerification(email, verifyToken).catch(() => {});
+    void this.emailService
+      .sendEmailVerification(email, verifyToken)
+      .catch(() => {});
 
     const publicUser = await this.toPublicUser(user.id);
     return {
@@ -329,6 +333,111 @@ export class AuthService {
     };
   }
 
+  /**
+   * Email-via-SendGrid fallback for checkout verification while Twilio SMS
+   * is unavailable. Mirrors sendPhoneOtp/verifyPhoneOtp but keyed by email,
+   * reusing the otpCode/otpExpiry columns the old email-OTP flow left behind.
+   */
+  async sendEmailOtp(email: string): Promise<{ exists: boolean }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required');
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    // The code has to be persisted somewhere to verify against later, so a
+    // brand-new email still gets a bare (unverified) User row created now —
+    // same shape as the old email-OTP flow this replaces for the moment.
+    if (existing) {
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { otpCode: code, otpExpiry },
+      });
+    } else {
+      await this.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          role: 'BUYER',
+          otpCode: code,
+          otpExpiry,
+        },
+      });
+    }
+
+    await this.sendGridService.sendOtpCode(normalizedEmail, code);
+
+    return { exists: Boolean(existing) };
+  }
+
+  async verifyEmailOtp(
+    email: string,
+    code: string,
+    phone?: string,
+    password?: string,
+  ) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !code) {
+      throw new BadRequestException('Email and code are required');
+    }
+    const normalizedPhone = phone ? this.normalizePhone(phone) : undefined;
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { memberships: true },
+    });
+
+    if (
+      !existing ||
+      existing.otpCode !== code ||
+      !existing.otpExpiry ||
+      existing.otpExpiry < new Date()
+    ) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    // Whether this was a pre-existing account or the bare row sendEmailOtp
+    // just created, the "new account?" password only applies the first time
+    // a password isn't already set — returning users keep their own.
+    const user = await this.prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        otpCode: null,
+        otpExpiry: null,
+        emailVerified: true,
+        phone: existing.phone ?? normalizedPhone,
+        passwordHash: existing.passwordHash
+          ? existing.passwordHash
+          : password
+            ? this.hashPassword(password)
+            : null,
+      },
+      include: { memberships: true },
+    });
+
+    const role = (user.role as AuthRole) || 'BUYER';
+    const sellerIds =
+      role === 'ADMIN'
+        ? Object.values(MARKETPLACE_SELLERS).map((s) => s.id)
+        : user.memberships.map((m) => m.sellerId);
+
+    const publicUser = await this.toPublicUser(user.id);
+    return {
+      user: publicUser,
+      accessToken: this.signToken({
+        sub: user.id,
+        email: user.email,
+        role,
+        sellerIds,
+      }),
+    };
+  }
+
   async forgotPassword(email: string) {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -351,7 +460,9 @@ export class AuthService {
         },
       });
 
-      void this.emailService.sendPasswordReset(normalizedEmail, resetToken).catch(() => {});
+      void this.emailService
+        .sendPasswordReset(normalizedEmail, resetToken)
+        .catch(() => {});
     }
 
     return {

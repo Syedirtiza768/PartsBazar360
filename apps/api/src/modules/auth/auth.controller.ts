@@ -57,6 +57,29 @@ class VerifyPhoneOtpDto {
   password?: string;
 }
 
+class SendEmailOtpDto {
+  @IsEmail()
+  email!: string;
+}
+
+class VerifyEmailOtpDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(4)
+  code!: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -101,5 +124,20 @@ export class AuthController {
   @Post('phone/otp/verify')
   verifyPhoneOtp(@Body() body: VerifyPhoneOtpDto) {
     return this.auth.verifyPhoneOtp(body.phone, body.code, body.password);
+  }
+
+  @Post('email/otp/send')
+  sendEmailOtp(@Body() body: SendEmailOtpDto) {
+    return this.auth.sendEmailOtp(body.email);
+  }
+
+  @Post('email/otp/verify')
+  verifyEmailOtp(@Body() body: VerifyEmailOtpDto) {
+    return this.auth.verifyEmailOtp(
+      body.email,
+      body.code,
+      body.phone,
+      body.password,
+    );
   }
 }
