@@ -98,8 +98,10 @@ export const viewport: Viewport = {
   ],
 };
 
-// Category facets power the header rail + search dropdown; cached briefly so
-// the header doesn't hit the API on every request.
+// Broad category-group facets power the header nav rail + "Browse systems"
+// quick list — those are department-level ("Transmission", "Electrical"),
+// not the granular categories within them. Cached briefly so the header
+// doesn't hit the API on every request.
 async function getNavCategories(): Promise<FacetsResponse["categories"]> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
@@ -108,7 +110,7 @@ async function getNavCategories(): Promise<FacetsResponse["categories"]> {
     });
     if (!res.ok) return [];
     const data: FacetsResponse = await res.json();
-    return data.categories ?? [];
+    return (data.categoryGroups ?? []).map(({ name, count }) => ({ name, count }));
   } catch {
     return [];
   }

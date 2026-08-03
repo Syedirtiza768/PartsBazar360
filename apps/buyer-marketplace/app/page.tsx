@@ -44,9 +44,11 @@ async function getFacets(): Promise<FacetsResponse> {
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(8_000),
     });
-    return response.ok ? response.json() : { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
+    return response.ok
+      ? response.json()
+      : { brands: [], categories: [], categoryGroups: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
   } catch {
-    return { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
+    return { brands: [], categories: [], categoryGroups: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
   }
 }
 
@@ -222,12 +224,12 @@ export default async function Home() {
             </Link>
           }
         />
-        {facets.categories.length ? (
+        {facets.categoryGroups.length ? (
           <div className="mt-6 grid grid-cols-2 border-l border-t border-stone-300 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-            {facets.categories.slice(0, 12).map((category, index) => (
+            {facets.categoryGroups.slice(0, 12).map((category, index) => (
               <Link
                 key={category.name}
-                href={`/search?category=${encodeURIComponent(category.name)}`}
+                href={`/search?categoryGroup=${encodeURIComponent(category.name)}`}
                 className="group flex min-h-32 min-w-0 flex-col border-b border-r border-stone-300 bg-white p-3 transition-colors hover:bg-brand-950 hover:text-white sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2">

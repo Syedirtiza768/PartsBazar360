@@ -213,9 +213,17 @@ export interface SalvageUnit {
   } | null;
 }
 
+export interface CategoryGroupFacet {
+  name: string;
+  count: number;
+  /** Specific categories within this group, with their own scoped counts. */
+  categories: Facet[];
+}
+
 export interface BrowseFacets {
   brands: Facet[];
   categories: Facet[];
+  categoryGroups: CategoryGroupFacet[];
   makes: Facet[];
   partTypes: Facet[];
   conditions: Facet[];
@@ -249,6 +257,7 @@ export interface Facet {
 export interface FacetsResponse {
   brands: Facet[];
   categories: Facet[];
+  categoryGroups: CategoryGroupFacet[];
   makes: Facet[];
   partTypes: Facet[];
   conditions: Facet[];

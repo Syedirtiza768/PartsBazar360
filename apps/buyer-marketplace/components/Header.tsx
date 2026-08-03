@@ -106,7 +106,7 @@ function SearchBox({ categories }: { categories: Facet[] }) {
   }, [reset]);
 
   const submit = useCallback(
-    (value: string, category?: string, brand?: string) => {
+    (value: string, category?: string, brand?: string, categoryGroup?: string) => {
       const params = new URLSearchParams();
       const clean = value.trim();
       if (clean) {
@@ -114,6 +114,7 @@ function SearchBox({ categories }: { categories: Facet[] }) {
         pushRecentSearch(clean);
       }
       if (category) params.set("category", category);
+      if (categoryGroup) params.set("categoryGroup", categoryGroup);
       if (brand) params.set("brand", brand);
       setOpen(false);
       reset();
@@ -481,7 +482,7 @@ function SearchBox({ categories }: { categories: Facet[] }) {
                   <button
                     key={category.name}
                     type="button"
-                    onClick={() => submit("", category.name)}
+                    onClick={() => submit("", undefined, undefined, category.name)}
                     className="flex min-h-touch w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm text-graphite-700 hover:bg-stone-100"
                   >
                     <span className="min-w-0 truncate">{category.name}</span>
@@ -675,7 +676,7 @@ export function Header({ categories }: { categories: Facet[] }) {
             {categoryNames.map((category) => (
               <Link
                 key={category}
-                href={`/search?category=${encodeURIComponent(category)}`}
+                href={`/search?categoryGroup=${encodeURIComponent(category)}`}
                 className="flex min-h-11 shrink-0 items-center border-r border-stone-300 px-3.5 text-xs font-bold text-graphite-700 hover:bg-white hover:text-graphite-950 sm:px-4"
               >
                 {category}
@@ -740,7 +741,7 @@ export function Header({ categories }: { categories: Facet[] }) {
             {categoryNames.map((category) => (
               <Link
                 key={category}
-                href={`/search?category=${encodeURIComponent(category)}`}
+                href={`/search?categoryGroup=${encodeURIComponent(category)}`}
                 className="flex min-h-touch items-center border-b border-r border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-graphite-700"
               >
                 {category}

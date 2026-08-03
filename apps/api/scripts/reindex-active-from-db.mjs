@@ -145,6 +145,7 @@ function toDoc(part) {
       .map((n) => n.normalizedNumber)
       .filter(Boolean),
     category: part.category,
+    categoryGroup: part.categoryGroup ?? null,
     makes: [...new Set(
       [
         ...(Array.isArray(part.compatibility) ? part.compatibility.map((c) => c.make).filter(Boolean) : []),

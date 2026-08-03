@@ -36,6 +36,7 @@ interface SearchPageProps {
     vehicleConfigId?: string;
     q?: string;
     category?: string;
+    categoryGroup?: string;
     brand?: string;
     make?: string;
     partType?: string;
@@ -56,6 +57,7 @@ async function getResults(
   if (params.vehicleConfigId) qs.set("vehicleConfigId", params.vehicleConfigId);
   if (params.q) qs.set("q", params.q);
   if (params.category) qs.set("category", params.category);
+  if (params.categoryGroup) qs.set("categoryGroup", params.categoryGroup);
   if (params.brand) qs.set("brand", params.brand);
   if (params.make) qs.set("make", params.make);
   if (params.partType) qs.set("partType", params.partType);
@@ -181,6 +183,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const facets: FacetsResponse = results?.facets ?? {
     brands: [],
     categories: [],
+    categoryGroups: [],
     makes: [],
     partTypes: [],
     conditions: [],
@@ -200,6 +203,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     vehicleConfigId: params.vehicleConfigId,
     q: params.q,
     category: params.category,
+    categoryGroup: params.categoryGroup,
     brand: params.brand,
     make: params.make,
     partType: params.partType,
@@ -216,6 +220,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     (Boolean(params.q) ||
       activeFilterCount > 0 ||
       facets.categories.length > 0 ||
+      facets.categoryGroups.length > 0 ||
       facets.brands.length > 0 ||
       facets.makes.length > 0 ||
       facets.partTypes.length > 0 ||
@@ -233,9 +238,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ? `Results for “${params.q}”`
       : params.category
         ? `${params.category} parts`
-        : params.brand
-          ? `${params.brand} parts`
-          : "Shop all parts";
+        : params.categoryGroup
+          ? `${params.categoryGroup} parts`
+          : params.brand
+            ? `${params.brand} parts`
+            : "Shop all parts";
 
   const rangeStart =
     results && results.total > 0 ? (page - 1) * pageSize + 1 : 0;

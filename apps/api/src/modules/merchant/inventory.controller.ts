@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../../prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { BuyerCacheService } from '../search/buyer-cache.service';
+import { OpenSearchService } from '../search/opensearch.service';
 
 @Controller('merchant/inventory')
 export class InventoryController {
@@ -17,6 +18,7 @@ export class InventoryController {
     private readonly prisma: PrismaService,
     private readonly pricing: PricingService,
     private readonly buyerCache: BuyerCacheService,
+    private readonly search: OpenSearchService,
   ) {}
 
   @Get()
@@ -80,6 +82,30 @@ export class InventoryController {
         where: { id: offerId },
         data: { status: body.status },
       });
+
+      // A status flip (e.g. a seller pausing a listing) previously never
+      // reached OpenSearch — only a Next.js cache revalidation ran below —
+      // so the doc stayed searchable/buyable long after the seller turned
+      // it off. Sync both the durable outbox (feeds the newer index path)
+      // and the live legacy index directly, matching the pattern used in
+      // merchant/uploads.service.ts.
+      await this.prisma.searchOutbox.create({
+        data: {
+          entityType: 'CanonicalPart',
+          entityId: offer.canonicalPartId,
+          operation: 'UPSERT',
+          payload: { source: 'MERCHANT_INVENTORY_STATUS_UPDATE', offerId },
+          status: 'PENDING',
+        },
+      });
+      const part = await this.prisma.canonicalPart.findUnique({
+        where: { id: offer.canonicalPartId },
+        include: {
+          offers: { include: { seller: true } },
+          partNumbers: true,
+        },
+      });
+      if (part) await this.search.indexPart(part);
     }
 
     let result;

@@ -15,6 +15,17 @@ export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
 export interface BrowseFacets {
   brands: Array<{ name: string; count: number }>;
   categories: Array<{ name: string; count: number }>;
+  /**
+   * Broader grouping over `categories` (e.g. "Transmission" over "Gearbox
+   * Support", "Transmission Mounts"). Each group carries its own nested
+   * category buckets so the sidebar can render group -> category hierarchy
+   * from one aggregation instead of guessing a mapping client-side.
+   */
+  categoryGroups: Array<{
+    name: string;
+    count: number;
+    categories: Array<{ name: string; count: number }>;
+  }>;
   makes: Array<{ name: string; count: number }>;
   partTypes: Array<{ name: string; count: number }>;
   conditions: Array<{ name: string; count: number }>;
@@ -191,6 +202,7 @@ export class OpenSearchService implements OnModuleInit {
       normalizedPartNumbers: { type: 'keyword' },
       interchangePartNumbers: { type: 'keyword' },
       category: { type: 'keyword' },
+      categoryGroup: { type: 'keyword' },
       makes: { type: 'keyword' },
       oeNumbers: { type: 'keyword' },
       imageUrls: { type: 'keyword', index: false },
@@ -282,6 +294,7 @@ export class OpenSearchService implements OnModuleInit {
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           category: part.category,
+          categoryGroup: part.categoryGroup ?? null,
           // Extract unique makes from both compatibility data and any
           // explicit makes array passed by callers (e.g. from structured
           // fitments where the caller already resolved the make name).
@@ -433,6 +446,7 @@ export class OpenSearchService implements OnModuleInit {
   async browseParts(opts: {
     q?: string;
     category?: string | string[];
+    categoryGroup?: string | string[];
     brand?: string | string[];
     make?: string | string[];
     partType?: string | string[];
@@ -463,6 +477,7 @@ export class OpenSearchService implements OnModuleInit {
     const hasQuery = !!(q && q.trim());
 
     const cats = asArray(opts.category);
+    const groups = asArray(opts.categoryGroup);
     const brands = asArray(opts.brand);
     const makes = asArray(opts.make);
     const partTypes = asArray(opts.partType);
@@ -538,6 +553,8 @@ export class OpenSearchService implements OnModuleInit {
       { exists: { field: 'offers.sellerId' } },
     ];
     if (cats.length) baseFilters.push({ terms: { 'category.keyword': cats } });
+    if (groups.length)
+      baseFilters.push({ terms: { 'categoryGroup.keyword': groups } });
     if (brands.length) baseFilters.push({ terms: { 'brand.keyword': brands } });
     if (makes.length) baseFilters.push({ terms: { 'makes.keyword': makes } });
     if (partTypes.length)
@@ -561,19 +578,28 @@ export class OpenSearchService implements OnModuleInit {
     // --- scoped facets. Each dimension aggregates over every OTHER active
     //     filter (incl. the keyword), so counts answer "if I add this, how
     //     many results?" rather than the global total. ---
-    const facetFilter = (exclude: string): any[] => {
+    const facetFilter = (exclude: string | string[]): any[] => {
+      // category + categoryGroup are one conceptual dimension (a category
+      // belongs to exactly one group) — excluding either alone would let a
+      // selected category zero out every *other* group's count/nested
+      // categories, trapping the buyer in whichever group their pick
+      // happens to belong to. Both callers below exclude both together.
+      const excluded = Array.isArray(exclude) ? exclude : [exclude];
+      const skip = (field: string) => excluded.includes(field);
       const f: any[] = [{ exists: { field: 'offers.sellerId' } }];
-      if (exclude !== 'category' && cats.length)
+      if (!skip('category') && cats.length)
         f.push({ terms: { 'category.keyword': cats } });
-      if (exclude !== 'brand' && brands.length)
+      if (!skip('categoryGroup') && groups.length)
+        f.push({ terms: { 'categoryGroup.keyword': groups } });
+      if (!skip('brand') && brands.length)
         f.push({ terms: { 'brand.keyword': brands } });
-      if (exclude !== 'make' && makes.length)
+      if (!skip('make') && makes.length)
         f.push({ terms: { 'makes.keyword': makes } });
-      if (exclude !== 'partType' && partTypes.length)
+      if (!skip('partType') && partTypes.length)
         f.push({ terms: { 'partType.keyword': partTypes } });
-      if (exclude !== 'condition' && conditions.length)
+      if (!skip('condition') && conditions.length)
         f.push({ terms: { 'conditions.keyword': conditions } });
-      if (exclude !== 'sourceTag' && sourceTags.length)
+      if (!skip('sourceTag') && sourceTags.length)
         f.push({ terms: { 'sourceTags.keyword': sourceTags } });
       if (qClause) f.push(qClause);
       return f;
@@ -583,8 +609,24 @@ export class OpenSearchService implements OnModuleInit {
     // set the buyer is actually looking at.
     const buildAggs = () => ({
       categories: {
-        filter: { bool: { filter: facetFilter('category') } },
+        filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
         aggs: { names: { terms: { field: 'category.keyword', size: 50 } } },
+      },
+      // Nested: each group bucket carries its own category sub-buckets, so
+      // the sidebar can render group -> category hierarchy from one response
+      // instead of guessing a category->group mapping client-side. Parts
+      // with no categoryGroup (not yet covered by a categorization pass)
+      // fall into "Other" rather than vanishing from the facet entirely.
+      categoryGroups: {
+        filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
+        aggs: {
+          names: {
+            terms: { field: 'categoryGroup.keyword', size: 50, missing: 'Other' },
+            aggs: {
+              categories: { terms: { field: 'category.keyword', size: 50 } },
+            },
+          },
+        },
       },
       brands: {
         filter: { bool: { filter: facetFilter('brand') } },
@@ -675,16 +717,17 @@ export class OpenSearchService implements OnModuleInit {
           : 'eq';
 
       const aggsBody = (response.body.aggregations ?? {}) as Record<
-        keyof BrowseFacets,
-        FacetAgg
+        string,
+        FacetAgg | GroupFacetAgg
       >;
       const facets: BrowseFacets = {
-        categories: bucketsOf(aggsBody.categories),
-        brands: bucketsOf(aggsBody.brands),
-        makes: bucketsOf(aggsBody.makes),
-        partTypes: bucketsOf(aggsBody.partTypes),
-        conditions: bucketsOf(aggsBody.conditions),
-        sourceTags: bucketsOf(aggsBody.sourceTags),
+        categories: bucketsOf(aggsBody.categories as FacetAgg),
+        categoryGroups: bucketsOfGroups(aggsBody.categoryGroups as GroupFacetAgg),
+        brands: bucketsOf(aggsBody.brands as FacetAgg),
+        makes: bucketsOf(aggsBody.makes as FacetAgg),
+        partTypes: bucketsOf(aggsBody.partTypes as FacetAgg),
+        conditions: bucketsOf(aggsBody.conditions as FacetAgg),
+        sourceTags: bucketsOf(aggsBody.sourceTags as FacetAgg),
       };
 
       return {
@@ -878,6 +921,12 @@ export class OpenSearchService implements OnModuleInit {
           aggs: {
             brands: { terms: { field: 'brand.keyword', size: 50 } },
             categories: { terms: { field: 'category.keyword', size: 50 } },
+            categoryGroups: {
+              terms: { field: 'categoryGroup.keyword', size: 50, missing: 'Other' },
+              aggs: {
+                categories: { terms: { field: 'category.keyword', size: 50 } },
+              },
+            },
             makes: { terms: { field: 'makes.keyword', size: 50 } },
             partTypes: { terms: { field: 'partType.keyword', size: 50 } },
             conditions: { terms: { field: 'conditions.keyword', size: 50 } },
@@ -889,6 +938,7 @@ export class OpenSearchService implements OnModuleInit {
       const aggs = (response.body.aggregations ?? {}) as {
         brands: FacetAgg;
         categories: FacetAgg;
+        categoryGroups: { buckets?: Array<{ key: string; doc_count: number; categories?: { buckets?: Array<{ key: string; doc_count: number }> } }> };
         makes: FacetAgg;
         partTypes: FacetAgg;
         conditions: FacetAgg;
@@ -897,6 +947,7 @@ export class OpenSearchService implements OnModuleInit {
       return {
         brands: bucketsOf(aggs.brands),
         categories: bucketsOf(aggs.categories),
+        categoryGroups: bucketsOfGroups({ names: aggs.categoryGroups }),
         makes: bucketsOf(aggs.makes),
         partTypes: bucketsOf(aggs.partTypes),
         conditions: bucketsOf(aggs.conditions),
@@ -904,13 +955,21 @@ export class OpenSearchService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
-      return { brands: [], categories: [], makes: [], partTypes: [], conditions: [] };
+      return { brands: [], categories: [], categoryGroups: [], makes: [], partTypes: [], conditions: [] };
     }
   }
 }
 
 function emptyFacets(): BrowseFacets {
-  return { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
+  return {
+    brands: [],
+    categories: [],
+    categoryGroups: [],
+    makes: [],
+    partTypes: [],
+    conditions: [],
+    sourceTags: [],
+  };
 }
 
 /** Shape of a scoped `filter + terms` aggregation bucket list. */
@@ -924,5 +983,33 @@ function bucketsOf(
   return (agg?.names?.buckets ?? []).map((b) => ({
     name: b.key,
     count: b.doc_count,
+  }));
+}
+
+/** Shape of a scoped `filter + terms` agg whose buckets nest a sub-terms agg. */
+type GroupFacetAgg = {
+  names?: {
+    buckets?: Array<{
+      key: string;
+      doc_count: number;
+      categories?: { buckets?: Array<{ key: string; doc_count: number }> };
+    }>;
+  };
+};
+
+function bucketsOfGroups(
+  agg: GroupFacetAgg | undefined,
+): Array<{
+  name: string;
+  count: number;
+  categories: Array<{ name: string; count: number }>;
+}> {
+  return (agg?.names?.buckets ?? []).map((b) => ({
+    name: b.key,
+    count: b.doc_count,
+    categories: (b.categories?.buckets ?? []).map((c) => ({
+      name: c.key,
+      count: c.doc_count,
+    })),
   }));
 }

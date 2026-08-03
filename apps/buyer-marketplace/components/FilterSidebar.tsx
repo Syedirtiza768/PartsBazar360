@@ -15,18 +15,11 @@ import type { FacetsResponse } from "@/lib/types";
 
 export type SearchParamsShape = Record<string, string | undefined>;
 
-const CAR_PART_CATEGORY_NAMES = new Set([
-  "body",
-  "brakes",
-  "cooling",
-  "electrical",
-  "engine",
-  "exhaust",
-  "interior",
-  "suspension",
-  "transmission",
-  "wheels",
-]);
+type CategoryGroupFacetShape = {
+  name: string;
+  count: number;
+  categories: { name: string; count: number }[];
+};
 
 export function buildHref(
   base: SearchParamsShape,
@@ -62,7 +55,14 @@ function csvHas(value: string | undefined, item: string): boolean {
   return csvList(value).includes(item);
 }
 
-type FacetField = "category" | "brand" | "make" | "partType" | "condition" | "sourceTag";
+type FacetField =
+  | "category"
+  | "categoryGroup"
+  | "brand"
+  | "make"
+  | "partType"
+  | "condition"
+  | "sourceTag";
 
 function displayLabelFor(field: FacetField, name: string): string {
   return field === "partType" ? partTypeLabel(name) : name;
@@ -75,9 +75,6 @@ function cleanFacets(
   return facets.filter((facet) => {
     const name = facet.name.trim();
     if (!name) return false;
-    if (field === "category") {
-      return CAR_PART_CATEGORY_NAMES.has(name.toLowerCase());
-    }
     if (field === "make") return name !== "-";
     return true;
   });
@@ -99,6 +96,7 @@ function toggleCsv(
 export function countActiveFilters(params: SearchParamsShape): number {
   return (
     csvList(params.category).length +
+    csvList(params.categoryGroup).length +
     csvList(params.brand).length +
     csvList(params.make).length +
     csvList(params.partType).length +
@@ -112,6 +110,7 @@ export function countActiveFilters(params: SearchParamsShape): number {
 export function clearFiltersHref(params: SearchParamsShape): string {
   return buildHref(params, {
     category: undefined,
+    categoryGroup: undefined,
     brand: undefined,
     make: undefined,
     partType: undefined,
@@ -121,9 +120,15 @@ export function clearFiltersHref(params: SearchParamsShape): string {
   });
 }
 
-/** Build href that clears a single filter group while keeping all others. */
-function clearGroupHref(params: SearchParamsShape, field: FacetField): string {
-  return buildHref(params, { [field]: undefined });
+/** Build href that clears one or more filter fields while keeping all others. */
+function clearGroupHref(
+  params: SearchParamsShape,
+  field: FacetField | FacetField[],
+): string {
+  const fields = Array.isArray(field) ? field : [field];
+  const overrides: Record<string, string | undefined> = {};
+  for (const f of fields) overrides[f] = undefined;
+  return buildHref(params, overrides);
 }
 
 function FilterOption({
@@ -208,7 +213,7 @@ function FilterGroup({
   params,
 }: {
   title: string;
-  field?: FacetField;
+  field?: FacetField | FacetField[];
   children: React.ReactNode;
   defaultOpen?: boolean;
   selectedCount?: number;
@@ -345,6 +350,126 @@ function FacetGroup({
   );
 }
 
+/**
+ * Hierarchical Category filter: broad groups (e.g. "Transmission") at the top
+ * level, each expandable to the specific categories within it (e.g. "Gearbox
+ * Support", "Transmission Mounts"). Selecting a group narrows broadly via the
+ * `categoryGroup` param; selecting a nested category narrows further via
+ * `category` — both are independent multi-select csv params ANDed together
+ * like every other facet, so either can be used alone or combined.
+ */
+function CategoryFacetGroup({
+  categoryGroups,
+  params,
+}: {
+  categoryGroups: CategoryGroupFacetShape[];
+  params: SearchParamsShape;
+}) {
+  if (categoryGroups.length === 0) return null;
+  const selectedGroups = new Set(csvList(params.categoryGroup));
+  const selectedCats = new Set(csvList(params.category));
+
+  const sorted = categoryGroups
+    .filter((g) => g.name.trim())
+    .sort((a, b) => {
+      const aSel = selectedGroups.has(a.name);
+      const bSel = selectedGroups.has(b.name);
+      if (aSel !== bSel) return aSel ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+  if (sorted.length === 0) return null;
+
+  const selectedItems = sorted.filter((g) => selectedGroups.has(g.name));
+  const unselectedItems = sorted.filter((g) => !selectedGroups.has(g.name));
+  const previewCount = Math.max(7, selectedItems.length);
+  const preview = [
+    ...selectedItems,
+    ...unselectedItems.slice(0, Math.max(0, previewCount - selectedItems.length)),
+  ];
+  const visibleNames = new Set(preview.map((g) => g.name));
+  const rest = sorted.filter((g) => !visibleNames.has(g.name));
+
+  const totalSelected = selectedGroups.size + selectedCats.size;
+
+  const renderGroup = (g: CategoryGroupFacetShape) => {
+    const groupSelected = selectedGroups.has(g.name);
+    const hasSelectedChild = g.categories.some((c) => selectedCats.has(c.name));
+    const cats = g.categories
+      .filter((c) => c.name.trim())
+      .sort((a, b) => {
+        const aSel = selectedCats.has(a.name);
+        const bSel = selectedCats.has(b.name);
+        if (aSel !== bSel) return aSel ? -1 : 1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      });
+
+    return (
+      <div key={g.name}>
+        <FilterOption
+          href={buildHref(params, {
+            categoryGroup: toggleCsv(params.categoryGroup, g.name),
+          })}
+          active={groupSelected}
+          disabled={g.count === 0 && !groupSelected}
+          label={g.name}
+          count={g.count}
+        />
+        {cats.length > 0 && (
+          <details
+            className="group/cat ml-5"
+            open={groupSelected || hasSelectedChild}
+          >
+            <summary className="flex min-h-touch cursor-pointer list-none items-center px-2.5 py-1 text-xs font-semibold text-brand-700 hover:text-brand-800 lg:min-h-0 [&::-webkit-details-marker]:hidden">
+              <span className="group-open/cat:hidden">
+                Show categories ({cats.length})
+              </span>
+              <span className="hidden group-open/cat:inline">
+                Hide categories
+              </span>
+            </summary>
+            <div className="ml-2.5 space-y-0.5 border-l border-slate-100 pl-2.5">
+              {cats.map((c) => (
+                <FilterOption
+                  key={c.name}
+                  href={buildHref(params, {
+                    category: toggleCsv(params.category, c.name),
+                  })}
+                  active={selectedCats.has(c.name)}
+                  disabled={c.count === 0 && !selectedCats.has(c.name)}
+                  label={c.name}
+                  count={c.count}
+                />
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <FilterGroup
+      title="Category"
+      field={["categoryGroup", "category"]}
+      selectedCount={totalSelected}
+      params={params}
+    >
+      <div className="space-y-1">{preview.map(renderGroup)}</div>
+      {rest.length > 0 && (
+        <details className="group/more">
+          <summary className="flex min-h-touch cursor-pointer list-none items-center px-2.5 py-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800 lg:min-h-0 [&::-webkit-details-marker]:hidden">
+            <span className="group-open/more:hidden">
+              Show {rest.length} more
+            </span>
+            <span className="hidden group-open/more:inline">Show fewer</span>
+          </summary>
+          <div className="space-y-1">{rest.map(renderGroup)}</div>
+        </details>
+      )}
+    </FilterGroup>
+  );
+}
+
 export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
   const chips: Array<{ field: string; value: string; label: string }> = [];
   const refinementCount = countActiveFilters(params);
@@ -352,6 +477,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
     chips.push({ field: "q", value: "", label: `\u201c${params.q}\u201d` });
   for (const field of [
     "category",
+    "categoryGroup",
     "brand",
     "make",
     "partType",
@@ -417,7 +543,7 @@ export function FilterSections({
   facets: FacetsResponse;
   params: SearchParamsShape;
 }) {
-  const categories = facets.categories ?? [];
+  const categoryGroups = facets.categoryGroups ?? [];
   const brands = facets.brands ?? [];
   const makes = facets.makes ?? [];
   const partTypes = facets.partTypes ?? [];
@@ -467,12 +593,7 @@ export function FilterSections({
         </FilterGroup>
       )}
 
-      <FacetGroup
-        field="category"
-        title="Category"
-        facets={categories}
-        params={params}
-      />
+      <CategoryFacetGroup categoryGroups={categoryGroups} params={params} />
       <FacetGroup
         field="partType"
         title="Part type"

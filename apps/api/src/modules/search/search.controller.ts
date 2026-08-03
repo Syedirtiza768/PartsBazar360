@@ -157,6 +157,7 @@ export class SearchController implements OnModuleDestroy {
     @Query('vehicleConfigId') vehicleConfigId?: string,
     @Query('q') q?: string,
     @Query('category') category?: string,
+    @Query('categoryGroup') categoryGroup?: string,
     @Query('brand') brand?: string,
     @Query('make') make?: string,
     @Query('partType') partType?: string,
@@ -215,7 +216,7 @@ export class SearchController implements OnModuleDestroy {
 
     const pageNum = page ? parseInt(page, 10) : 1;
     const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
-    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, condition, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const cacheK = this.cacheKey('browse', { q, category, categoryGroup, brand, make, partType, condition, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
     const cached = await this.cacheGet<any>(cacheK);
     if (cached) return cached;
 
@@ -223,6 +224,7 @@ export class SearchController implements OnModuleDestroy {
     const result = await this.searchService.browseParts({
       q,
       category,
+      categoryGroup,
       brand,
       make,
       partType,
