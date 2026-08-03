@@ -62,15 +62,14 @@ function csvHas(value: string | undefined, item: string): boolean {
   return csvList(value).includes(item);
 }
 
-function displayLabelFor(
-  field: "category" | "brand" | "make" | "partType" | "sourceTag",
-  name: string,
-): string {
+type FacetField = "category" | "brand" | "make" | "partType" | "condition" | "sourceTag";
+
+function displayLabelFor(field: FacetField, name: string): string {
   return field === "partType" ? partTypeLabel(name) : name;
 }
 
 function cleanFacets(
-  field: "category" | "brand" | "make" | "partType" | "sourceTag",
+  field: FacetField,
   facets: { name: string; count: number }[],
 ) {
   return facets.filter((facet) => {
@@ -103,6 +102,7 @@ export function countActiveFilters(params: SearchParamsShape): number {
     csvList(params.brand).length +
     csvList(params.make).length +
     csvList(params.partType).length +
+    csvList(params.condition).length +
     csvList(params.sourceTag).length +
     (params.includeInterchange === "false" ? 1 : 0)
   );
@@ -115,22 +115,50 @@ export function clearFiltersHref(params: SearchParamsShape): string {
     brand: undefined,
     make: undefined,
     partType: undefined,
+    condition: undefined,
     sourceTag: undefined,
     includeInterchange: undefined,
   });
 }
 
+/** Build href that clears a single filter group while keeping all others. */
+function clearGroupHref(params: SearchParamsShape, field: FacetField): string {
+  return buildHref(params, { [field]: undefined });
+}
+
 function FilterOption({
   href,
   active,
+  disabled,
   label,
   count,
 }: {
   href: string;
   active: boolean;
+  disabled?: boolean;
   label: string;
   count?: number;
 }) {
+  if (disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        className="group flex min-h-touch items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-slate-300 lg:min-h-0"
+      >
+        <span
+          aria-hidden="true"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-50"
+        />
+        <span className="min-w-0 flex-1 truncate text-pretty">{label}</span>
+        {count != null && (
+          <span className="shrink-0 font-mono text-xs tabular-nums text-slate-300">
+            0
+          </span>
+        )}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={href}
@@ -173,14 +201,18 @@ function FilterOption({
 
 function FilterGroup({
   title,
+  field,
   children,
   defaultOpen = true,
   selectedCount = 0,
+  params,
 }: {
   title: string;
+  field?: FacetField;
   children: React.ReactNode;
   defaultOpen?: boolean;
   selectedCount?: number;
+  params?: SearchParamsShape;
 }) {
   return (
     <details
@@ -196,16 +228,28 @@ function FilterGroup({
             </span>
           )}
         </span>
-        <svg
-          className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
-        >
-          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <div className="flex items-center gap-1">
+          {selectedCount > 0 && field && params && (
+            <Link
+              href={clearGroupHref(params, field)}
+              rel="nofollow"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800"
+            >
+              Clear
+            </Link>
+          )}
+          <svg
+            className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       </summary>
       <div className="mt-1 space-y-0.5">{children}</div>
     </details>
@@ -220,7 +264,7 @@ function FacetGroup({
   params,
   defaultOpen = true,
 }: {
-  field: "category" | "brand" | "make" | "partType" | "sourceTag";
+  field: FacetField;
   title: string;
   facets: { name: string; count: number }[];
   params: SearchParamsShape;
@@ -229,6 +273,10 @@ function FacetGroup({
   if (facets.length === 0) return null;
   const selected = new Set(csvList(params[field]));
   const sorted = cleanFacets(field, facets).sort((a, b) => {
+    // Selected items first, then alphabetical
+    const aSelected = selected.has(a.name);
+    const bSelected = selected.has(b.name);
+    if (aSelected !== bSelected) return aSelected ? -1 : 1;
     const labelA = displayLabelFor(field, a.name);
     const labelB = displayLabelFor(field, b.name);
     return (
@@ -238,15 +286,24 @@ function FacetGroup({
   });
   if (sorted.length === 0) return null;
 
-  const preview = sorted.slice(0, 7);
+  // Show selected items + top unselected items up to 7 total
+  const selectedItems = sorted.filter((f) => selected.has(f.name));
+  const unselectedItems = sorted.filter((f) => !selected.has(f.name));
+  const previewCount = Math.max(7, selectedItems.length);
+  const preview = [
+    ...selectedItems,
+    ...unselectedItems.slice(0, Math.max(0, previewCount - selectedItems.length)),
+  ];
   const visible = new Set(preview.map((facet) => facet.name));
   const rest = sorted.filter((facet) => !visible.has(facet.name));
 
   return (
     <FilterGroup
       title={title}
+      field={field}
       defaultOpen={defaultOpen}
       selectedCount={selected.size}
+      params={params}
     >
       {preview.map((f) => (
         <FilterOption
@@ -255,6 +312,7 @@ function FacetGroup({
             [field]: toggleCsv(params[field], f.name),
           })}
           active={csvHas(params[field], f.name)}
+          disabled={f.count === 0 && !selected.has(f.name)}
           label={displayLabelFor(field, f.name)}
           count={f.count}
         />
@@ -275,6 +333,7 @@ function FacetGroup({
                   [field]: toggleCsv(params[field], f.name),
                 })}
                 active={csvHas(params[field], f.name)}
+                disabled={f.count === 0 && !selected.has(f.name)}
                 label={displayLabelFor(field, f.name)}
                 count={f.count}
               />
@@ -296,6 +355,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
     "brand",
     "make",
     "partType",
+    "condition",
     "sourceTag",
   ] as const) {
     for (const value of csvList(params[field])) {
@@ -361,6 +421,7 @@ export function FilterSections({
   const brands = facets.brands ?? [];
   const makes = facets.makes ?? [];
   const partTypes = facets.partTypes ?? [];
+  const conditions = facets.conditions ?? [];
   const sourceTags = facets.sourceTags ?? [];
   // Interchange matching is on unless the buyer turned it off.
   const interchangeOn = params.includeInterchange !== "false";
@@ -416,6 +477,12 @@ export function FilterSections({
         field="partType"
         title="Part type"
         facets={partTypes}
+        params={params}
+      />
+      <FacetGroup
+        field="condition"
+        title="Condition"
+        facets={conditions}
         params={params}
       />
       <FacetGroup field="brand" title="Brand" facets={brands} params={params} />

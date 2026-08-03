@@ -39,6 +39,7 @@ interface SearchPageProps {
     brand?: string;
     make?: string;
     partType?: string;
+    condition?: string;
     sourceTag?: string;
     sort?: "relevance" | "newest" | "price_asc" | "price_desc";
     page?: string;
@@ -58,6 +59,7 @@ async function getResults(
   if (params.brand) qs.set("brand", params.brand);
   if (params.make) qs.set("make", params.make);
   if (params.partType) qs.set("partType", params.partType);
+  if (params.condition) qs.set("condition", params.condition);
   if (params.sourceTag) qs.set("sourceTag", params.sourceTag);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
@@ -115,6 +117,7 @@ export async function generateMetadata({
     Boolean(params.q) ||
     isPriceSort ||
     Boolean(params.partType) ||
+    Boolean(params.condition) ||
     Boolean(params.sourceTag) ||
     Boolean(params.includeInterchange === "false") ||
     Boolean(isPageSizeVariant) ||
@@ -180,6 +183,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     categories: [],
     makes: [],
     partTypes: [],
+    conditions: [],
     sourceTags: [],
   };
 
@@ -199,6 +203,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     brand: params.brand,
     make: params.make,
     partType: params.partType,
+    condition: params.condition,
     sourceTag: params.sourceTag,
     sort: params.sort,
     includeInterchange: params.includeInterchange,
@@ -214,6 +219,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       facets.brands.length > 0 ||
       facets.makes.length > 0 ||
       facets.partTypes.length > 0 ||
+      facets.conditions.length > 0 ||
       facets.sourceTags.length > 0);
   const clearHref = clearFiltersHref(paramsShape);
   const interchangeOff = params.includeInterchange === "false";

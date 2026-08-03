@@ -17,6 +17,7 @@ export interface BrowseFacets {
   categories: Array<{ name: string; count: number }>;
   makes: Array<{ name: string; count: number }>;
   partTypes: Array<{ name: string; count: number }>;
+  conditions: Array<{ name: string; count: number }>;
   sourceTags: Array<{ name: string; count: number }>;
 }
 
@@ -218,6 +219,7 @@ export class OpenSearchService implements OnModuleInit {
         },
       },
       sourceTags: { type: 'keyword' },
+      conditions: { type: 'keyword' },
     };
   }
 
@@ -336,6 +338,7 @@ export class OpenSearchService implements OnModuleInit {
             sourceTag: o.sourceTag || null,
           })),
           sourceTags: [...new Set(offers.map((o: any) => o.sourceTag).filter(Boolean))],
+          conditions: [...new Set(offers.map((o: any) => o.condition).filter(Boolean))],
         },
         refresh: process.env.OPENSEARCH_REFRESH_ON_INDEX === 'true',
       });
@@ -433,6 +436,7 @@ export class OpenSearchService implements OnModuleInit {
     brand?: string | string[];
     make?: string | string[];
     partType?: string | string[];
+    condition?: string | string[];
     sourceTag?: string | string[];
     sort?: BrowseSort;
     page?: number;
@@ -462,6 +466,7 @@ export class OpenSearchService implements OnModuleInit {
     const brands = asArray(opts.brand);
     const makes = asArray(opts.make);
     const partTypes = asArray(opts.partType);
+    const conditions = asArray(opts.condition);
     const sourceTags = asArray(opts.sourceTag);
 
     // --- relevance clauses (weighted should). Exact normalized part-number
@@ -537,6 +542,8 @@ export class OpenSearchService implements OnModuleInit {
     if (makes.length) baseFilters.push({ terms: { 'makes.keyword': makes } });
     if (partTypes.length)
       baseFilters.push({ terms: { 'partType.keyword': partTypes } });
+    if (conditions.length)
+      baseFilters.push({ terms: { 'conditions.keyword': conditions } });
     if (sourceTags.length)
       baseFilters.push({ terms: { 'sourceTags.keyword': sourceTags } });
 
@@ -564,6 +571,8 @@ export class OpenSearchService implements OnModuleInit {
         f.push({ terms: { 'makes.keyword': makes } });
       if (exclude !== 'partType' && partTypes.length)
         f.push({ terms: { 'partType.keyword': partTypes } });
+      if (exclude !== 'condition' && conditions.length)
+        f.push({ terms: { 'conditions.keyword': conditions } });
       if (exclude !== 'sourceTag' && sourceTags.length)
         f.push({ terms: { 'sourceTags.keyword': sourceTags } });
       if (qClause) f.push(qClause);
@@ -588,6 +597,10 @@ export class OpenSearchService implements OnModuleInit {
       partTypes: {
         filter: { bool: { filter: facetFilter('partType') } },
         aggs: { names: { terms: { field: 'partType.keyword', size: 50 } } },
+      },
+      conditions: {
+        filter: { bool: { filter: facetFilter('condition') } },
+        aggs: { names: { terms: { field: 'conditions.keyword', size: 50 } } },
       },
       sourceTags: {
         filter: { bool: { filter: facetFilter('sourceTag') } },
@@ -670,6 +683,7 @@ export class OpenSearchService implements OnModuleInit {
         brands: bucketsOf(aggsBody.brands),
         makes: bucketsOf(aggsBody.makes),
         partTypes: bucketsOf(aggsBody.partTypes),
+        conditions: bucketsOf(aggsBody.conditions),
         sourceTags: bucketsOf(aggsBody.sourceTags),
       };
 
@@ -866,6 +880,7 @@ export class OpenSearchService implements OnModuleInit {
             categories: { terms: { field: 'category.keyword', size: 50 } },
             makes: { terms: { field: 'makes.keyword', size: 50 } },
             partTypes: { terms: { field: 'partType.keyword', size: 50 } },
+            conditions: { terms: { field: 'conditions.keyword', size: 50 } },
             sourceTags: { terms: { field: 'sourceTags.keyword', size: 50 } },
           },
         },
@@ -876,6 +891,7 @@ export class OpenSearchService implements OnModuleInit {
         categories: FacetAgg;
         makes: FacetAgg;
         partTypes: FacetAgg;
+        conditions: FacetAgg;
         sourceTags: FacetAgg;
       };
       return {
@@ -883,17 +899,18 @@ export class OpenSearchService implements OnModuleInit {
         categories: bucketsOf(aggs.categories),
         makes: bucketsOf(aggs.makes),
         partTypes: bucketsOf(aggs.partTypes),
+        conditions: bucketsOf(aggs.conditions),
         sourceTags: bucketsOf(aggs.sourceTags),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
-      return { brands: [], categories: [], makes: [], partTypes: [] };
+      return { brands: [], categories: [], makes: [], partTypes: [], conditions: [] };
     }
   }
 }
 
 function emptyFacets(): BrowseFacets {
-  return { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
+  return { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
 }
 
 /** Shape of a scoped `filter + terms` aggregation bucket list. */

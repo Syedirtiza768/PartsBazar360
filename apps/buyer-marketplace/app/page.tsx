@@ -44,9 +44,9 @@ async function getFacets(): Promise<FacetsResponse> {
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(8_000),
     });
-    return response.ok ? response.json() : { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
+    return response.ok ? response.json() : { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
   } catch {
-    return { brands: [], categories: [], makes: [], partTypes: [], sourceTags: [] };
+    return { brands: [], categories: [], makes: [], partTypes: [], conditions: [], sourceTags: [] };
   }
 }
 

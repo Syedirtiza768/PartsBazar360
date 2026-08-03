@@ -218,6 +218,7 @@ export interface BrowseFacets {
   categories: Facet[];
   makes: Facet[];
   partTypes: Facet[];
+  conditions: Facet[];
   sourceTags: Facet[];
 }
 
@@ -250,5 +251,6 @@ export interface FacetsResponse {
   categories: Facet[];
   makes: Facet[];
   partTypes: Facet[];
+  conditions: Facet[];
   sourceTags: Facet[];
 }

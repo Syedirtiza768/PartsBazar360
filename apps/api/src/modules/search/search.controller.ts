@@ -160,6 +160,7 @@ export class SearchController implements OnModuleDestroy {
     @Query('brand') brand?: string,
     @Query('make') make?: string,
     @Query('partType') partType?: string,
+    @Query('condition') condition?: string,
     @Query('sourceTag') sourceTag?: string,
     @Query('sort') sort?: BrowseSort,
     @Query('page') page?: string,
@@ -214,7 +215,7 @@ export class SearchController implements OnModuleDestroy {
 
     const pageNum = page ? parseInt(page, 10) : 1;
     const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
-    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const cacheK = this.cacheKey('browse', { q, category, brand, make, partType, condition, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
     const cached = await this.cacheGet<any>(cacheK);
     if (cached) return cached;
 
@@ -225,6 +226,7 @@ export class SearchController implements OnModuleDestroy {
       brand,
       make,
       partType,
+      condition,
       sourceTag,
       sort,
       page: pageNum,
@@ -952,6 +954,18 @@ export class SearchController implements OnModuleDestroy {
     const spec: InfographicSpec | null = normalizeSpec(part.infographicSpec);
 
     if (spec) {
+      // Override baked-in Condition with live qualityTier from DB so the
+      // card always reflects the current value, not whatever the LLM wrote
+      // at enrichment time.
+      if (part.qualityTier) {
+        const cond = part.qualityTier.charAt(0) + part.qualityTier.slice(1).toLowerCase();
+        const row = spec.specs.find((s) => s.label === 'Condition');
+        if (row) {
+          row.value = cond;
+        } else if (spec.specs.length < 4) {
+          spec.specs.push({ label: 'Condition', value: cond });
+        }
+      }
       return renderInfographicSvg(spec, { brand: part.brand });
     }
 
