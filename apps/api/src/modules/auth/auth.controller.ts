@@ -38,18 +38,23 @@ class ResetPasswordDto {
   newPassword!: string;
 }
 
-class SendOtpDto {
-  @IsEmail()
-  email!: string;
+class SendPhoneOtpDto {
+  @IsString()
+  phone!: string;
 }
 
-class VerifyOtpDto {
-  @IsEmail()
-  email!: string;
+class VerifyPhoneOtpDto {
+  @IsString()
+  phone!: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(4)
   code!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
 }
 
 @Controller('auth')
@@ -88,13 +93,13 @@ export class AuthController {
     return this.auth.resetPassword(body.token, body.newPassword);
   }
 
-  @Post('otp/send')
-  sendOtp(@Body() body: SendOtpDto) {
-    return this.auth.sendOtp(body.email);
+  @Post('phone/otp/send')
+  sendPhoneOtp(@Body() body: SendPhoneOtpDto) {
+    return this.auth.sendPhoneOtp(body.phone);
   }
 
-  @Post('otp/verify')
-  verifyOtp(@Body() body: VerifyOtpDto) {
-    return this.auth.verifyOtp(body.email, body.code);
+  @Post('phone/otp/verify')
+  verifyPhoneOtp(@Body() body: VerifyPhoneOtpDto) {
+    return this.auth.verifyPhoneOtp(body.phone, body.code, body.password);
   }
 }

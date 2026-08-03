@@ -645,7 +645,9 @@ model SourceRecord {
 
 model User {
   id                   String             @id @default(uuid())
-  email                String             @unique
+  email                String?            @unique
+  phone                String?            @unique
+  phoneVerified        Boolean            @default(false)
   name                 String?
   /** BUYER | SELLER | ADMIN */
   role                 String             @default("BUYER")

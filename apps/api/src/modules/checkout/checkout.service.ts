@@ -51,7 +51,7 @@ export class CheckoutService {
     cartId: string,
     buyer: {
       buyerId: string;
-      email: string;
+      email: string | null;
       name?: string;
       phone?: string;
     },
@@ -219,7 +219,12 @@ export class CheckoutService {
           currency: tamaraMarket.currency,
           countryCode: tamaraMarket.countryCode,
           customer: {
-            email: buyer.email || dbUser.email,
+            // Tamara requires an email; phone-only guests don't have one, so
+            // fall back to a placeholder tied to their verified phone number.
+            email:
+              buyer.email ||
+              dbUser.email ||
+              `${(buyer.phone || dbUser.phone || order.id).replace(/[^a-zA-Z0-9]/g, '')}@guest.partsbazar360.com`,
             firstName: customerName.firstName,
             lastName: customerName.lastName,
             phoneNumber: buyer.phone!.trim(),
@@ -246,7 +251,7 @@ export class CheckoutService {
           orderId: order.id,
           amount: order.totalAmount,
           currency: order.currency,
-          customerEmail: buyer.email || dbUser.email,
+          customerEmail: buyer.email || dbUser.email || undefined,
           lineItems: [
             {
               name: `PartsBazar360 order (${cart.items.length} item${cart.items.length === 1 ? '' : 's'})`,

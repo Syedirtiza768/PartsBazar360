@@ -15,7 +15,8 @@ const TOKEN_KEY = "pb360_access_token";
 
 export type AuthUser = {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string | null;
   role: string;
   memberships: Array<{ sellerId: string; sellerName: string; role: string }>;
@@ -28,8 +29,8 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (input: { email: string; password: string; name?: string }) => Promise<AuthUser>;
-  sendOtp: (email: string) => Promise<void>;
-  verifyOtp: (email: string, code: string) => Promise<AuthUser>;
+  sendPhoneOtp: (phone: string) => Promise<{ exists: boolean }>;
+  verifyPhoneOtp: (phone: string, code: string, password?: string) => Promise<AuthUser>;
   logout: () => void;
   authHeaders: () => HeadersInit;
 };
@@ -122,21 +123,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const sendOtp = useCallback(async (email: string) => {
-    const res = await fetch(`${API_BASE_URL}/auth/otp/send`, {
+  const sendPhoneOtp = useCallback(async (phone: string) => {
+    const res = await fetch(`${API_BASE_URL}/auth/phone/otp/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ phone }),
     });
     if (!res.ok) throw new Error(await parseError(res));
+    return (await res.json()) as { exists: boolean };
   }, []);
 
-  const verifyOtp = useCallback(
-    async (email: string, code: string) => {
-      const res = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
+  const verifyPhoneOtp = useCallback(
+    async (phone: string, code: string, password?: string) => {
+      const res = await fetch(`${API_BASE_URL}/auth/phone/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ phone, code, password }),
       });
       if (!res.ok) throw new Error(await parseError(res));
       const data = (await res.json()) as { user: AuthUser; accessToken: string };
@@ -161,12 +163,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user && token),
       login,
       register,
-      sendOtp,
-      verifyOtp,
+      sendPhoneOtp,
+      verifyPhoneOtp,
       logout,
       authHeaders,
     }),
-    [user, token, ready, login, register, sendOtp, verifyOtp, logout, authHeaders],
+    [user, token, ready, login, register, sendPhoneOtp, verifyPhoneOtp, logout, authHeaders],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

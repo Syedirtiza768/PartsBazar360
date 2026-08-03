@@ -39,7 +39,7 @@ export default function AccountOverviewPage() {
             <h2 className="mt-1 font-display text-2xl font-black uppercase text-slate-950">
               {user.name || "Buyer"}
             </h2>
-            <p className="mt-1 text-sm text-graphite-600">{user.email}</p>
+            <p className="mt-1 text-sm text-graphite-600">{user.email || user.phone}</p>
             <button
               type="button"
               onClick={logout}

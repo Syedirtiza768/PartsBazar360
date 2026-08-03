@@ -31,9 +31,8 @@ class CheckoutDto {
   @IsString()
   name?: string;
 
-  @IsOptional()
   @IsString()
-  phone?: string;
+  phone!: string;
 
   @IsOptional()
   @Transform(({ value }) =>

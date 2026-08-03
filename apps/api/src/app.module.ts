@@ -18,6 +18,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ListingPipelineModule } from './modules/listing-pipeline/listing-pipeline.module';
 import { EnrichmentModule } from './modules/enrichment/enrichment.module';
 import { EmailModule } from './modules/email/email.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { EmailModule } from './modules/email/email.module';
       },
     }),
     EmailModule,
+    SmsModule,
     IntegrationModule,
     IngestionModule,
     OperationsModule,

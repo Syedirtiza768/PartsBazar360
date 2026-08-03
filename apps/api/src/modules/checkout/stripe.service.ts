@@ -37,7 +37,7 @@ export class StripeService {
     orderId: string;
     amount: number;
     currency: string;
-    customerEmail: string;
+    customerEmail?: string;
     lineItems: Array<{ name: string; quantity: number; unitAmount: number }>;
     successUrl: string;
     cancelUrl: string;
@@ -47,7 +47,7 @@ export class StripeService {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      customer_email: input.customerEmail,
+      ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
       client_reference_id: input.orderId,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,

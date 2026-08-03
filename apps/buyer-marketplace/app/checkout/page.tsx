@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { isValidPhoneNumber } from "libphonenumber-js";
 import { Button, buttonClasses } from "@repo/ui/button";
 import { Input, Select, Checkbox } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
@@ -53,7 +54,10 @@ const EMPTY_FORM: FormState = {
   postalCode: "",
 };
 
-const REQUIRED: Array<keyof FormState> = ["name", "line1", "city", "country"];
+const REQUIRED: Array<keyof FormState> = ["name", "phone", "line1", "city", "country"];
+
+/** Sending a new code invalidates the previous one, so throttle resends. */
+const RESEND_COOLDOWN_SECONDS = 45;
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
@@ -67,14 +71,13 @@ const LABELS: Record<keyof FormState, string> = {
 
 function validate(
   form: FormState,
-  paymentProvider: "stripe" | "tamara",
 ): Partial<Record<keyof FormState, string>> {
   const errors: Partial<Record<keyof FormState, string>> = {};
   for (const field of REQUIRED) {
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
-  if (paymentProvider === "tamara" && !form.phone.trim()) {
-    errors.phone = "Mobile number is required for Tamara.";
+  if (!errors.phone && !isValidPhoneNumber(form.phone.trim(), "AE")) {
+    errors.phone = "Enter a valid mobile number — we'll text a code here to confirm your order.";
   }
   return errors;
 }
@@ -206,155 +209,14 @@ function SummaryCard({
   );
 }
 
-function EmailOtpGate({ children }: { children: React.ReactNode }) {
-  const { sendOtp, verifyOtp, isAuthenticated, ready } = useAuth();
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-
-  if (!ready) {
-    return (
-      <div className="mx-auto max-w-md gutter py-16 text-center text-sm text-graphite-600">
-        Checking your account…
-      </div>
-    );
-  }
-
-  if (isAuthenticated) {
-    return <>{children}</>;
-  }
-
-  const handleSendOtp = async (e: FormEvent) => {
-    e.preventDefault();
-    setSending(true);
-    setError(null);
-    try {
-      await sendOtp(email.trim());
-      setOtpSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send code");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: FormEvent) => {
-    e.preventDefault();
-    setVerifying(true);
-    setError(null);
-    try {
-      await verifyOtp(email.trim(), code.trim());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid code");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  return (
-    <div className="mx-auto max-w-md gutter py-10 sm:py-16">
-      <p className="eyebrow">Quick sign in</p>
-      <h1 className="mt-2 font-display text-display-sm font-black tracking-tight text-graphite-950">
-        Enter your email
-      </h1>
-      <p className="mt-2 text-sm text-graphite-600">
-        We&apos;ll send a one-time code to verify your email — no password needed.
-      </p>
-
-      {!otpSent ? (
-        <form onSubmit={handleSendOtp} className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6">
-          <Input
-            label="Email"
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          {error && (
-            <p className="text-sm font-medium text-red-600" role="alert">{error}</p>
-          )}
-          <Button type="submit" size="lg" fullWidth loading={sending}>
-            Send verification code
-          </Button>
-          <p className="text-center text-xs text-graphite-600">
-            Existing user?{" "}
-            <Link href="/login" className="font-semibold text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline">
-              Sign in with password
-            </Link>
-          </p>
-        </form>
-      ) : (
-        <form onSubmit={handleVerifyOtp} className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6">
-          <p className="text-sm text-graphite-600">
-            We sent a 6-digit code to <span className="font-medium text-slate-800">{email}</span>.
-          </p>
-          <Input
-            label="Verification code"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            required
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            placeholder="000000"
-          />
-          {error && (
-            <p className="text-sm font-medium text-red-600" role="alert">{error}</p>
-          )}
-          <Button type="submit" size="lg" fullWidth loading={verifying}>
-            Verify &amp; continue
-          </Button>
-          <div className="flex items-center justify-between text-xs text-graphite-600">
-            <button
-              type="button"
-              onClick={() => { setOtpSent(false); setCode(""); setError(null); }}
-              className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
-            >
-              Change email
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                setError(null);
-                try { await sendOtp(email.trim()); } catch (err) {
-                  setError(err instanceof Error ? err.message : "Failed to resend");
-                }
-              }}
-              className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
-            >
-              Resend code
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
 export default function CheckoutPage() {
-  return (
-    <EmailOtpGate>
-      <CheckoutContent />
-    </EmailOtpGate>
-  );
+  return <CheckoutContent />;
 }
 
 function CheckoutContent() {
   const { cart, subtotal, refresh } = useCart();
   const { activeVehicle, ready: garageReady } = useGarage();
-  const { user, authHeaders } = useAuth();
+  const { user, authHeaders, isAuthenticated, sendPhoneOtp, verifyPhoneOtp } = useAuth();
   const { format, currency: displayCurrency, settlementCurrency } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -366,6 +228,28 @@ function CheckoutContent() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+
+  // Phone verification, shown just before "Place order" for anyone not
+  // already signed in — keeps checkout guest-feeling until the last step.
+  const [showOtpPanel, setShowOtpPanel] = useState(false);
+  const [otpExists, setOtpExists] = useState<boolean | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpCreateAccount, setOtpCreateAccount] = useState(false);
+  const [otpPassword, setOtpPassword] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  // Verifying updates auth state asynchronously; placeOrder must run only
+  // once that's landed so it sends the fresh token, not a stale closure.
+  const [pendingPlaceOrder, setPendingPlaceOrder] = useState(false);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setTimeout(() => setOtpCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
 
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
@@ -427,7 +311,7 @@ function CheckoutContent() {
 
   const goToReview = (e: FormEvent) => {
     e.preventDefault();
-    const nextErrors = validate(form, paymentProvider);
+    const nextErrors = validate(form);
     if (paymentProvider === "tamara" && !tamaraMarket(form.country)) {
       nextErrors.country = "Tamara is available for UAE and Saudi Arabia deliveries.";
     }
@@ -481,7 +365,7 @@ function CheckoutContent() {
         items,
         shippingAddress: {
           name: form.name,
-          email: user?.email || "",
+          email: user?.email || form.phone,
           line1: form.line1,
           line2: form.line2 || undefined,
           city: form.city,
@@ -500,6 +384,83 @@ function CheckoutContent() {
     } catch (err: unknown) {
       setServerError(err instanceof Error ? err.message : "Checkout failed. Please try again.");
       setSubmitting(false);
+    }
+  };
+
+  // Runs after a successful verification re-renders with the fresh token,
+  // so placeOrder's authHeaders() picks up the just-issued session.
+  useEffect(() => {
+    if (pendingPlaceOrder && isAuthenticated) {
+      setPendingPlaceOrder(false);
+      placeOrder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPlaceOrder, isAuthenticated]);
+
+  const startPhoneVerification = async () => {
+    setOtpSending(true);
+    setOtpError(null);
+    try {
+      const { exists } = await sendPhoneOtp(form.phone);
+      setOtpExists(exists);
+      setOtpCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpResending || otpCooldown > 0) return;
+    setOtpResending(true);
+    setOtpError(null);
+    try {
+      const { exists } = await sendPhoneOtp(form.phone);
+      setOtpExists(exists);
+      setOtpCode("");
+      setOtpCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Failed to resend");
+    } finally {
+      setOtpResending(false);
+    }
+  };
+
+  const handlePlaceOrderClick = () => {
+    if (!confirmedFit) {
+      setConfirmError(true);
+      return;
+    }
+    if (isAuthenticated) {
+      placeOrder();
+      return;
+    }
+    setShowOtpPanel(true);
+    setOtpExists(null);
+    setOtpCode("");
+    setOtpCreateAccount(false);
+    setOtpPassword("");
+    setOtpError(null);
+    void startPhoneVerification();
+  };
+
+  const handleVerifyAndPlaceOrder = async (e: FormEvent) => {
+    e.preventDefault();
+    setOtpVerifying(true);
+    setOtpError(null);
+    try {
+      await verifyPhoneOtp(
+        form.phone,
+        otpCode.trim(),
+        otpExists === false && otpCreateAccount ? otpPassword : undefined,
+      );
+      setShowOtpPanel(false);
+      setPendingPlaceOrder(true);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Invalid code");
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -533,8 +494,9 @@ function CheckoutContent() {
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
               <h2 className="text-base font-semibold text-slate-900">Contact and payment</h2>
               <p className="mt-1 text-sm text-graphite-600">
-                Signed in as <span className="font-medium text-slate-800">{user?.email}</span>.
-                Payment continues securely with your selected provider.
+                {isAuthenticated
+                  ? "You're signed in, so we'll skip straight to payment."
+                  : "No account needed — we'll text a code to your mobile number to confirm the order right before payment."}
               </p>
               <fieldset className="mt-4">
                 <legend className="text-sm font-semibold text-slate-800">Payment method</legend>
@@ -586,8 +548,8 @@ function CheckoutContent() {
                   label="Mobile number"
                   autoComplete="tel"
                   type="tel"
-                  required={paymentProvider === "tamara"}
-                  hint={paymentProvider === "tamara" ? "Required by Tamara" : "Optional"}
+                  required
+                  hint="We'll text a code here to confirm your order"
                   value={form.phone}
                   onChange={setField("phone")}
                   error={errors.phone}
@@ -676,7 +638,7 @@ function CheckoutContent() {
                     <br />
                     {[form.city, form.postalCode].filter(Boolean).join(" ")}, {form.country}
                     <br />
-                    <span className="text-graphite-600">{user?.email}</span>
+                    <span className="text-graphite-600">{form.phone}</span>
                   </p>
                 </div>
                 <button
@@ -834,41 +796,138 @@ function CheckoutContent() {
               </section>
             )}
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="inline-flex min-h-touch items-center justify-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-graphite-800 sm:justify-start"
-              >
-                <ArrowLeftIcon className="h-4 w-4" />
-                Back to details
-              </button>
-              <Button
-                size="lg"
-                onClick={placeOrder}
-                loading={submitting}
-                disabled={freightSellers.length > 0}
-                fullWidth
-                className="sm:w-auto"
-              >
-                {/* The full label runs to three lines in a 288px button, so
-                    phones get the amount and desktops get the full sentence. */}
-                <span className="sm:hidden">
-                  Pay {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
-                </span>
-                <span className="hidden sm:inline">
-                  Pay with {paymentProvider === "tamara" ? "Tamara" : "Stripe"} —{" "}
-                  {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
-                </span>
-              </Button>
-            </div>
+            {showOtpPanel ? (
+              <section className="rounded-xl border-2 border-graphite-950 bg-white p-4 shadow-card sm:p-6" aria-label="Confirm your mobile number">
+                <h2 className="text-base font-semibold text-slate-900">Confirm your number</h2>
+                <p className="mt-1 text-sm text-graphite-600">
+                  {otpExists === true ? (
+                    <>Welcome back — enter the code we texted to <span className="font-medium text-slate-800">{form.phone}</span>.</>
+                  ) : otpExists === false ? (
+                    <>We texted a code to <span className="font-medium text-slate-800">{form.phone}</span>.</>
+                  ) : (
+                    <>Sending a code to <span className="font-medium text-slate-800">{form.phone}</span>…</>
+                  )}
+                </p>
+                <form onSubmit={handleVerifyAndPlaceOrder} className="mt-4 space-y-4">
+                  <Input
+                    label="Verification code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    maxLength={8}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="000000"
+                  />
+                  {otpExists === false && (
+                    <div>
+                      <Checkbox
+                        checked={otpCreateAccount}
+                        onChange={(e) => setOtpCreateAccount(e.target.checked)}
+                        label="Create an account with a password"
+                        description="Optional — skip this to check out as a guest."
+                      />
+                      {otpCreateAccount && (
+                        <div className="mt-3">
+                          <Input
+                            label="Password"
+                            type="password"
+                            autoComplete="new-password"
+                            required
+                            minLength={8}
+                            value={otpPassword}
+                            onChange={(e) => setOtpPassword(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {otpError && (
+                    <p className="text-sm font-medium text-red-600" role="alert">{otpError}</p>
+                  )}
+                  <Button
+                    type="submit"
+                    size="lg"
+                    fullWidth
+                    loading={otpVerifying || submitting}
+                    disabled={otpSending}
+                  >
+                    Verify &amp; place order
+                  </Button>
+                  <div className="flex items-center justify-between text-xs text-graphite-600">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowOtpPanel(false);
+                        setOtpError(null);
+                      }}
+                      className="font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={otpResending || otpCooldown > 0}
+                      className={cn(
+                        "font-medium underline-offset-2",
+                        otpResending || otpCooldown > 0
+                          ? "cursor-not-allowed text-graphite-400"
+                          : "text-brand-700 hover:text-brand-800 hover:underline",
+                      )}
+                    >
+                      {otpResending
+                        ? "Sending…"
+                        : otpCooldown > 0
+                          ? `Resend in ${otpCooldown}s`
+                          : "Resend code"}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            ) : (
+              <>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="inline-flex min-h-touch items-center justify-center gap-1.5 text-sm font-medium text-graphite-600 transition-colors hover:text-graphite-800 sm:justify-start"
+                  >
+                    <ArrowLeftIcon className="h-4 w-4" />
+                    Back to details
+                  </button>
+                  <Button
+                    size="lg"
+                    onClick={handlePlaceOrderClick}
+                    loading={submitting}
+                    disabled={freightSellers.length > 0}
+                    fullWidth
+                    className="sm:w-auto"
+                  >
+                    {/* The full label runs to three lines in a 288px button, so
+                        phones get the amount and desktops get the full sentence. */}
+                    <span className="sm:hidden">
+                      Pay {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
+                    </span>
+                    <span className="hidden sm:inline">
+                      Pay with {paymentProvider === "tamara" ? "Tamara" : "Stripe"} —{" "}
+                      {format(shippingQuote?.totalAmount ?? subtotal, shippingQuote?.currency ?? currency)}
+                    </span>
+                  </Button>
+                </div>
 
-            <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
-              <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-              You&apos;ll be redirected to {paymentProvider === "tamara" ? "Tamara" : "Stripe"} and
-              charged in {checkoutCurrency}. Payment details stay with the provider; PartsBazar360
-              settles in {settlementCurrency}.
-            </p>
+                <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
+                  <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  You&apos;ll be redirected to {paymentProvider === "tamara" ? "Tamara" : "Stripe"} and
+                  charged in {checkoutCurrency}. Payment details stay with the provider; PartsBazar360
+                  settles in {settlementCurrency}.
+                </p>
+              </>
+            )}
           </div>
         )}
 

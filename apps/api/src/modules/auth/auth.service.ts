@@ -9,8 +9,10 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
+import { TwilioService } from '../sms/twilio.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
 export type AuthRole = 'BUYER' | 'SELLER' | 'ADMIN';
@@ -18,7 +20,7 @@ export type SellerMemberRole = 'OWNER' | 'MANAGER' | 'STAFF';
 
 export interface AuthTokenPayload {
   sub: string;
-  email: string;
+  email: string | null;
   role: AuthRole;
   sellerIds: string[];
   iat: number;
@@ -27,7 +29,8 @@ export interface AuthTokenPayload {
 
 export interface PublicUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string | null;
   role: string;
   memberships: Array<{ sellerId: string; sellerName: string; role: string }>;
@@ -38,7 +41,17 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly twilioService: TwilioService,
   ) {}
+
+  /** Normalizes to E.164 (assumes UAE if no country code is given, since that's the primary market). */
+  private normalizePhone(phone: string): string {
+    const parsed = parsePhoneNumberFromString(phone, 'AE');
+    if (!parsed || !parsed.isValid()) {
+      throw new BadRequestException('Enter a valid mobile number');
+    }
+    return parsed.number;
+  }
 
   private jwtSecret() {
     return (
@@ -111,6 +124,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
+      phone: user.phone,
       name: user.name,
       role: user.role,
       memberships: user.memberships.map((m) => ({
@@ -243,68 +257,59 @@ export class AuthService {
     return { message: 'Email verified successfully' };
   }
 
-  async sendOtp(email: string) {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      throw new BadRequestException('Email is required');
-    }
-
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+  /**
+   * Sends the checkout phone OTP and reports whether the number already has
+   * an account, so the buyer-marketplace client knows whether to offer the
+   * "create an account" password prompt alongside the code field.
+   */
+  async sendPhoneOtp(phone: string): Promise<{ exists: boolean }> {
+    const normalizedPhone = this.normalizePhone(phone);
 
     const existing = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+      where: { phone: normalizedPhone },
     });
 
-    if (existing) {
-      await this.prisma.user.update({
-        where: { id: existing.id },
-        data: { otpCode: code, otpExpiry },
-      });
-    } else {
-      await this.prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          role: 'BUYER',
-          otpCode: code,
-          otpExpiry,
-        },
-      });
-    }
+    await this.twilioService.startVerification(normalizedPhone);
 
-    void this.emailService.sendOtpCode(normalizedEmail, code).catch(() => {});
-
-    return { message: 'Verification code sent to your email' };
+    return { exists: Boolean(existing) };
   }
 
-  async verifyOtp(email: string, code: string) {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !code) {
-      throw new BadRequestException('Email and code are required');
+  async verifyPhoneOtp(phone: string, code: string, password?: string) {
+    const normalizedPhone = this.normalizePhone(phone);
+    if (!code) {
+      throw new BadRequestException('Verification code is required');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      include: { memberships: true },
-    });
-
-    if (
-      !user ||
-      user.otpCode !== code ||
-      !user.otpExpiry ||
-      user.otpExpiry < new Date()
-    ) {
+    const approved = await this.twilioService.checkVerification(
+      normalizedPhone,
+      code,
+    );
+    if (!approved) {
       throw new BadRequestException('Invalid or expired verification code');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        otpCode: null,
-        otpExpiry: null,
-        emailVerified: true,
-      },
+    const existing = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+      include: { memberships: true },
     });
+
+    // Returning numbers never get a password prompt, so any `password` here
+    // only applies to brand-new accounts.
+    const user = existing
+      ? await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { phoneVerified: true },
+          include: { memberships: true },
+        })
+      : await this.prisma.user.create({
+          data: {
+            phone: normalizedPhone,
+            phoneVerified: true,
+            role: 'BUYER',
+            passwordHash: password ? this.hashPassword(password) : null,
+          },
+          include: { memberships: true },
+        });
 
     const role = (user.role as AuthRole) || 'BUYER';
     const sellerIds =
