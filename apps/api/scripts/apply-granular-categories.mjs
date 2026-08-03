@@ -8,11 +8,17 @@
  * that is currently ACTIVE fell out somewhere upstream (non-English title,
  * SAL/BLK dedup, etc.) and should be removed:
  *
- *   - hard-DELETE the offer if it has zero OrderItem/CartItem/Inventory/
- *     SalvageUnit references (detaching the optional SourceRecord/
- *     SellerUploadRow/SupportTicket FKs first; OfferPrice cascades)
- *   - otherwise (it has real order/cart/inventory/salvage history) just
- *     set status = INACTIVE, matching the pattern used elsewhere in
+ *   - hard-DELETE the offer if it has zero OrderItem/CartItem/SalvageUnit
+ *     references (real transaction/history signals). Inventory rows are
+ *     NOT a blocker — they're a 1:1 stock-bookkeeping row created for
+ *     essentially every offer at ingestion regardless of sales activity
+ *     (220,806 Inventory rows for 220,805 offers, vs. 6 OrderItems / 20
+ *     CartItems / 0 SalvageUnits total in the DB) — so its own Inventory
+ *     row(s) are deleted alongside the offer. The optional SourceRecord/
+ *     SellerUploadRow/SupportTicket FKs are detached first; OfferPrice
+ *     cascades.
+ *   - otherwise (it has real order/cart/salvage history) just set
+ *     status = INACTIVE, matching the pattern used elsewhere in
  *     scripts/deactivate-nonenglish-offers.mjs and dedup-sal-blk-offers.mjs
  *
  * For every offer that IS in the keep-list, category/categoryGroup from the
@@ -76,16 +82,14 @@ async function readCsv(path) {
 }
 
 async function distinctIdsBlockingDelete(prisma, slice) {
-  const [orderItems, cartItems, inventory, salvage] = await Promise.all([
+  const [orderItems, cartItems, salvage] = await Promise.all([
     prisma.orderItem.findMany({ where: { sellerOfferId: { in: slice } }, select: { sellerOfferId: true }, distinct: ['sellerOfferId'] }),
     prisma.cartItem.findMany({ where: { sellerOfferId: { in: slice } }, select: { sellerOfferId: true }, distinct: ['sellerOfferId'] }),
-    prisma.inventory.findMany({ where: { offerId: { in: slice } }, select: { offerId: true }, distinct: ['offerId'] }),
     prisma.salvageUnit.findMany({ where: { sellerOfferId: { in: slice } }, select: { sellerOfferId: true }, distinct: ['sellerOfferId'] }),
   ]);
   return new Set([
     ...orderItems.map((x) => x.sellerOfferId),
     ...cartItems.map((x) => x.sellerOfferId),
-    ...inventory.map((x) => x.offerId),
     ...salvage.map((x) => x.sellerOfferId),
   ]);
 }
@@ -164,6 +168,7 @@ async function main() {
         prisma.sourceRecord.updateMany({ where: { sellerOfferId: { in: slice } }, data: { sellerOfferId: null } }),
         prisma.sellerUploadRow.updateMany({ where: { sellerOfferId: { in: slice } }, data: { sellerOfferId: null } }),
         prisma.supportTicket.updateMany({ where: { sellerOfferId: { in: slice } }, data: { sellerOfferId: null } }),
+        prisma.inventory.deleteMany({ where: { offerId: { in: slice } } }),
         prisma.sellerOffer.deleteMany({ where: { id: { in: slice } } }),
       ]);
       hardDeleted += slice.length;
