@@ -206,6 +206,7 @@ model CanonicalPart {
   brand                    String?
   manufacturer             String?
   category                 String?
+  categoryGroup            String? // broader grouping over `category`, e.g. "Transmission", "Electrical"
   weight                   Float? // Actual weight in kg for shipping calculations
   weightSource             String? // SPREADSHEET | SELLER | MEASURED | SIBLING_MPN | AI | CLASS_DEFAULT
   weightConfidence         Float?
