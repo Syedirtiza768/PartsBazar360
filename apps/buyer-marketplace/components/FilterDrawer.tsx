@@ -1,76 +1,31 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useState } from "react";
 import { SlidersIcon } from "@repo/ui/icons";
-import { Button, buttonClasses } from "@repo/ui/button";
 import { Sheet } from "@repo/ui/sheet";
-
-const DRAWER_KEY = "pb360:filterDrawer";
+import { FilterSectionsClient } from "@/components/FilterSectionsClient";
+import type { SearchParamsShape } from "@/lib/filter-params";
+import type { FacetsResponse } from "@/lib/types";
 
 /**
- * Mobile filter experience: a trigger button + full-height drawer. The filter
- * links themselves are server-rendered and passed in as children, so the
- * drawer is just presentation.
- *
- * Intercepts filter-link clicks inside the drawer so the buyer can tick
- * multiple checkboxes without the sheet closing on every selection. The
- * drawer re-opens automatically after each SSR navigation via sessionStorage.
+ * Mobile filter experience: a trigger button + full-height drawer wrapping
+ * FilterSectionsClient. Selections stage locally (zero navigation per tap);
+ * the drawer only navigates — and closes — when the buyer taps "Apply
+ * filters" in the sticky bar at the top of the content. There's no need to
+ * keep the drawer open across navigations here (the old sessionStorage
+ * bridge existed because every tap used to navigate immediately); a single
+ * Apply is the one moment we want it to close.
  */
 export function FilterDrawer({
-  children,
   activeCount = 0,
-  resultCount,
-  clearHref,
+  facets,
+  params,
 }: {
-  children: ReactNode;
   activeCount?: number;
-  resultCount?: number;
-  clearHref: string;
+  facets: FacetsResponse;
+  params: SearchParamsShape;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
-
-  // Re-open the drawer after SSR navigation replaces the component tree.
-  // The loading boundary unmounts us; sessionStorage bridges the gap.
-  useEffect(() => {
-    if (sessionStorage.getItem(DRAWER_KEY) === "1") {
-      setOpen(true);
-      sessionStorage.removeItem(DRAWER_KEY);
-    }
-  }, []);
-
-  // Persist open state so it survives the loading boundary unmount.
-  useEffect(() => {
-    if (open) {
-      sessionStorage.setItem(DRAWER_KEY, "1");
-    } else {
-      sessionStorage.removeItem(DRAWER_KEY);
-    }
-  }, [open]);
-
-  // Intercept filter-link clicks so the drawer stays open while the URL
-  // updates. Only targets <a> elements whose href starts with /search —
-  // the "Clear" link in the footer and the close button are outside the
-  // intercepted zone.
-  const handleFilterClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const anchor = (e.target as HTMLElement).closest(
-        'a[href^="/search"]',
-      ) as HTMLAnchorElement | null;
-      if (!anchor) return;
-      e.preventDefault();
-      // Persist before navigation so the re-mounted drawer knows to open.
-      sessionStorage.setItem(DRAWER_KEY, "1");
-      router.push(anchor.href);
-    },
-    [router],
-  );
-
-  const handleClose = useCallback(() => {
-    setOpen(false);
-  }, []);
 
   return (
     <>
@@ -91,33 +46,13 @@ export function FilterDrawer({
 
       <Sheet
         open={open}
-        onClose={handleClose}
+        onClose={() => setOpen(false)}
         side="right"
         size="md"
         title={activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
-        description="Select one or more options. Counts update as you refine."
-        footer={
-          <div className="flex items-center gap-3">
-            {activeCount > 0 && (
-              <Link
-                href={clearHref}
-                rel="nofollow"
-                className={`${buttonClasses({ variant: "outline" })} shrink-0`}
-                onClick={() => setOpen(false)}
-              >
-                Clear
-              </Link>
-            )}
-            <Button fullWidth onClick={() => setOpen(false)}>
-              {resultCount == null
-                ? "Show results"
-                : `Show ${resultCount.toLocaleString()} ${resultCount === 1 ? "result" : "results"}`}
-            </Button>
-          </div>
-        }
+        description="Select one or more options, then tap Apply filters."
       >
-        {/* Intercept filter clicks so multi-select doesn't close the drawer */}
-        <div onClick={handleFilterClick}>{children}</div>
+        <FilterSectionsClient facets={facets} params={params} onApply={() => setOpen(false)} />
       </Sheet>
     </>
   );

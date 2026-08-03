@@ -36,6 +36,12 @@ const MAKE_NAMED_CATEGORIES = [
   'Chrysler', 'Ford', 'Mini', 'Chevrolet / Daewoo', 'Dodge', 'GMC',
   'Chevrolet', 'Lexus', 'Bentley', 'Jeep', 'Peugeot', 'Truck - SINOTRUK',
   'Audi', 'Hyundai / Kia',
+  // Long-tail stragglers found on a follow-up full-distribution check (each
+  // 1-2 docs, too small to appear in the original top-60 sample).
+  'Renault', 'Buick / Chevrolet / GMC', 'Cadillac', 'Cadillac / Chevrolet',
+  'Citroen', 'Daewoo', 'Hino', 'Honda / Hyundai', 'Hyundai / Toyota',
+  'Land Rover', 'Maserati', 'Mitsubishi / Toyota', 'Nissan / Toyota',
+  'Peugeot / Citroen', 'Toyota / Daihatsu', 'Volvo / Kia',
 ];
 
 // First match wins, so specific compound phrases are ordered before the

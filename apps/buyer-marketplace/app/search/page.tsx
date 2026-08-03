@@ -11,8 +11,8 @@ import { PageSizeSelect } from "@/components/PageSizeSelect";
 import { Pagination } from "@/components/Pagination";
 import { VehicleModeBanner } from "@/components/VehicleModeBanner";
 import { FilterDrawer } from "@/components/FilterDrawer";
+import { FilterSectionsClient } from "@/components/FilterSectionsClient";
 import {
-  FilterSections,
   ActiveFilterChips,
   countActiveFilters,
   buildHref,
@@ -286,13 +286,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
           <div className="flex w-full items-center gap-2.5 sm:w-auto">
             {showFilters && (
-              <FilterDrawer
-                activeCount={activeFilterCount}
-                resultCount={results?.total}
-                clearHref={clearHref}
-              >
-                <FilterSections facets={facets} params={paramsShape} />
-              </FilterDrawer>
+              <FilterDrawer activeCount={activeFilterCount} facets={facets} params={paramsShape} />
             )}
             {isFitmentMode ? (
               <p className="text-sm text-graphite-600">
@@ -326,7 +320,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       </div>
 
       <div className="flex flex-col gap-8 pt-6 lg:flex-row">
-        {/* Filters sidebar — plain links so filtering works without JS and is fully crawlable */}
+        {/* Filters sidebar — check multiple options, then Apply commits them in one navigation */}
         {showFilters && (
           <aside
             className="hidden w-64 shrink-0 self-start border-r border-slate-200 pr-5 lg:sticky lg:top-28 lg:block lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
@@ -344,7 +338,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 </Link>
               )}
             </div>
-            <FilterSections facets={facets} params={paramsShape} />
+            <FilterSectionsClient facets={facets} params={paramsShape} />
           </aside>
         )}
 
