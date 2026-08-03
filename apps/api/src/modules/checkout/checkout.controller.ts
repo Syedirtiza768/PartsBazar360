@@ -114,9 +114,13 @@ export class CheckoutController {
     );
   }
 
-  /** Authenticated checkout → Stripe hosted Checkout Session. */
+  /**
+   * Live shipping estimate for a cart destination. Deliberately public —
+   * checkout only requires sign-in at the final "Place order" step, and this
+   * quote doesn't read the buyer's identity at all (cartId + country/currency
+   * is all `quoteShipping` needs).
+   */
   @Post(':cartId/shipping-quote')
-  @UseGuards(JwtAuthGuard)
   shippingQuote(
     @Param('cartId') cartId: string,
     @Body() body: ShippingQuoteDto,

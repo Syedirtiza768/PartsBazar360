@@ -28,8 +28,9 @@ export type ShippingQuote = {
 type AuthHeaders = () => HeadersInit;
 
 /**
- * Debounced live shipping quote for a cart destination.
- * Requires auth — the quote endpoint is JWT-guarded.
+ * Debounced live shipping quote for a cart destination. Public endpoint —
+ * works for guests browsing checkout before they've verified a phone/email.
+ * `authHeaders` is still sent when available; the server just ignores it.
  */
 export function useShippingQuote(options: {
   cartId: string | null | undefined;
