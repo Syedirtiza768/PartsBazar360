@@ -238,7 +238,6 @@ function FilterGroup({
             <Link
               href={clearGroupHref(params, field)}
               rel="nofollow"
-              onClick={(e) => e.stopPropagation()}
               className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800"
             >
               Clear
