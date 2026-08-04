@@ -25,16 +25,37 @@ const PART_TYPE_TONES: Record<string, BadgeTone> = {
   UNCLASSIFIED: "neutral",
 };
 
+// Genuine OEM needs no condition qualifier — the type badge ("Genuine OEM")
+// is the only badge. Condition badges are suppressed for this type.
+function isPartTypeGenuine(partSource?: string | null, partType?: string | null): boolean {
+  const resolved = partTypeFromLegacy(partSource, partType);
+  return resolved === 'GENUINE_OEM';
+}
+
+/** Returns true when condition should be hidden (GENUINE_OEM or equivalent). */
+export function shouldSuppressCondition(
+  partSource?: string | null,
+  partType?: string | null,
+): boolean {
+  if (!partSource && !partType) return false;
+  return isPartTypeGenuine(partSource, partType);
+}
+
 export function ConditionBadge({
   qualityTier,
+  partSource,
+  partType: _partType,
   size = "md",
   className,
 }: {
   qualityTier?: string | null;
+  partSource?: string | null;
+  partType?: string | null;
   size?: "sm" | "md";
   className?: string;
 }) {
   if (!qualityTier) return null;
+  if (shouldSuppressCondition(partSource, _partType)) return null;
   const key = qualityTier.toUpperCase();
   return (
     <Badge tone={TIER_TONES[key] ?? "neutral"} size={size} className={className}>

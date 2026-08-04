@@ -23,8 +23,10 @@ export interface CartItem {
     price: number;
     currency?: string;
     condition?: string;
+    partSource?: string;
+    partType?: string;
     seller?: { id: string; name: string };
-    canonicalPart?: { id: string; title: string; imageUrls?: string[] };
+    canonicalPart?: { id: string; title: string; imageUrls?: string[]; partSource?: string; partType?: string };
   };
 }
 

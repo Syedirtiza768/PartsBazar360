@@ -20,6 +20,7 @@ import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
 import { humanize } from "@/lib/format";
+import { partTypeFromLegacy } from "@repo/catalog-contracts";
 import { useCurrency } from "@/lib/currency-context";
 import { SETTLEMENT_CURRENCY } from "@/lib/currency";
 import { CartLineFitment } from "@/components/CartLineFitment";
@@ -713,7 +714,7 @@ function CheckoutContent() {
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
                         </p>
                         <p className="mt-0.5 text-xs text-graphite-600">
-                          {(() => { const c = humanize(item.sellerOffer.condition || ""); return c || null; })()}
+                          {(() => { const c = humanize(item.sellerOffer.condition || ""); const pt = partTypeFromLegacy(item.sellerOffer.partSource || item.sellerOffer.canonicalPart?.partSource, item.sellerOffer.partType || item.sellerOffer.canonicalPart?.partType); return (c && pt !== 'GENUINE_OEM') ? c : null; })()}
                         </p>
                         <div className="mt-1.5">
                           <CartLineFitment partId={item.sellerOffer.canonicalPart?.id} />

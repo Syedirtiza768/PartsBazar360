@@ -11,6 +11,7 @@ import {
   type StoredOrder,
 } from "@/lib/order-history";
 import { formatPrice, humanize } from "@/lib/format";
+import { partTypeFromLegacy } from "@repo/catalog-contracts";
 
 export default function PurchaseDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -38,7 +39,7 @@ export default function PurchaseDetailsPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
           {order.items.map((item) => (
-            <article key={item.id} className="flex gap-4 border border-stone-300 bg-white p-4"><div className="h-20 w-20 shrink-0 bg-stone-100" /> <div className="min-w-0 flex-1"><Link href={item.sellerOffer.canonicalPart?.id ? `/part/${item.sellerOffer.canonicalPart.id}` : "/search"} className="line-clamp-2 text-sm font-bold text-slate-950 hover:text-brand-700">{item.sellerOffer.canonicalPart?.title || "Marketplace part"}</Link><p className="mt-1 text-xs text-graphite-600">{[humanize(item.sellerOffer.condition || "") || null, `Quantity ${item.quantity}`].filter(Boolean).join(" · ")}</p><p className="mt-2 text-sm font-semibold text-slate-700">Seller: {item.sellerOffer.seller?.name || "Marketplace seller"}</p></div><p className="price text-sm">{formatPrice(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}</p></article>
+            <article key={item.id} className="flex gap-4 border border-stone-300 bg-white p-4"><div className="h-20 w-20 shrink-0 bg-stone-100" /> <div className="min-w-0 flex-1"><Link href={item.sellerOffer.canonicalPart?.id ? `/part/${item.sellerOffer.canonicalPart.id}` : "/search"} className="line-clamp-2 text-sm font-bold text-slate-950 hover:text-brand-700">{item.sellerOffer.canonicalPart?.title || "Marketplace part"}</Link><p className="mt-1 text-xs text-graphite-600">{[(partTypeFromLegacy(item.sellerOffer.partSource || item.sellerOffer.canonicalPart?.partSource, item.sellerOffer.partType || item.sellerOffer.canonicalPart?.partType) !== 'GENUINE_OEM' ? humanize(item.sellerOffer.condition || "") || null : null), `Quantity ${item.quantity}`].filter(Boolean).join(" · ")}</p><p className="mt-2 text-sm font-semibold text-slate-700">Seller: {item.sellerOffer.seller?.name || "Marketplace seller"}</p></div><p className="price text-sm">{formatPrice(item.sellerOffer.price * item.quantity, item.sellerOffer.currency)}</p></article>
           ))}
         </div>
         <aside className="space-y-4">

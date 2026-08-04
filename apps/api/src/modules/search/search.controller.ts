@@ -944,6 +944,7 @@ export class SearchController implements OnModuleDestroy {
         category: true,
         qualityTier: true,
         partSource: true,
+        partType: true,
         itemSpecifics: true,
         infographicSpec: true,
       },
@@ -951,15 +952,21 @@ export class SearchController implements OnModuleDestroy {
 
     if (!part) throw new NotFoundException(`Part ${id} not found`);
 
+    // GENUINE_OEM: suppress condition — the type badge is sufficient
+    const isGenuineOem = !!(part.partType && part.partType === 'GENUINE_OEM');
+
     // Re-normalised on read so a spec written by an older, looser generation
     // can never emit a malformed document.
     const spec: InfographicSpec | null = normalizeSpec(part.infographicSpec);
 
     if (spec) {
-      // Override baked-in Condition with live qualityTier from DB so the
-      // card always reflects the current value, not whatever the LLM wrote
-      // at enrichment time.
-      if (part.qualityTier) {
+      if (isGenuineOem) {
+        // Strip any Condition row for Genuine OEM parts
+        spec.specs = spec.specs.filter((s) => s.label !== 'Condition');
+      } else if (part.qualityTier) {
+        // Override baked-in Condition with live qualityTier from DB so the
+        // card always reflects the current value, not whatever the LLM wrote
+        // at enrichment time.
         const cond = part.qualityTier.charAt(0) + part.qualityTier.slice(1).toLowerCase();
         const row = spec.specs.find((s) => s.label === 'Condition');
         if (row) {
@@ -1020,14 +1027,16 @@ export class SearchController implements OnModuleDestroy {
         category: true,
         qualityTier: true,
         partSource: true,
+        partType: true,
         itemSpecifics: true,
       },
     });
     if (!part) throw new NotFoundException(`Part ${id} not found`);
     const specifics = (part.itemSpecifics || {}) as Record<string, any>;
-    // Humanize qualityTier so the SVG shows "Used" not "USED"
+    // Suppress condition for GENUINE_OEM — "Genuine OEM" type badge is sufficient
+    const isGenuineOem = part.partType === 'GENUINE_OEM';
     const rawCondition = part.qualityTier || null;
-    const condition = rawCondition
+    const condition = (!isGenuineOem && rawCondition)
       ? rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase()
       : null;
     return renderPlaceholderSvg({

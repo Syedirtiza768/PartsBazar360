@@ -9,6 +9,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { SalvagePanel } from "@/components/SalvagePanel";
 import { buyerVisibleOffers, lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
+import { partTypeFromLegacy } from "@repo/catalog-contracts";
 import type { Part } from "@/lib/types";
 
 // Short ISR window: PDPs are mostly catalog data. Merchant edits trigger
@@ -238,11 +239,13 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
           {part.itemSpecifics?.detailBullets && (() => {
             const rawBullets = String(part.itemSpecifics.detailBullets).split(' | ').filter(Boolean);
             // Strip hardcoded condition bullet (e.g. "Condition/source: Used / OEM")
-            // and replace with dynamic value from DB
             const filtered = rawBullets.filter((b) => !/^condition\s*\/\s*source\s*:/i.test(b.trim()));
+            // Suppress condition bullet entirely for Genuine OEM
+            const resolvedPartType = partTypeFromLegacy(part.partSource || part.offers?.[0]?.partSource, part.partType || part.offers?.[0]?.partType);
+            const isGenuineOem = resolvedPartType === 'GENUINE_OEM';
             const condition = humanize(part.qualityTier || part.offers?.[0]?.qualityTier || '');
             const partSource = part.partSource || part.offers?.[0]?.partSource || '';
-            const conditionBullet = condition
+            const conditionBullet = (!isGenuineOem && condition)
               ? `Condition: ${condition}${partSource ? ` / ${humanize(partSource)}` : ''}`
               : null;
             const bullets = conditionBullet
@@ -340,7 +343,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.manufacturer && part.manufacturer !== part.brand && (
                 <SpecRow label="Manufacturer">{part.manufacturer}</SpecRow>
               )}
-              {(part.qualityTier || part.offers?.[0]?.qualityTier) && (
+              {(part.qualityTier || part.offers?.[0]?.qualityTier) && partTypeFromLegacy(part.partSource || part.offers?.[0]?.partSource, part.partType || part.offers?.[0]?.partType) !== 'GENUINE_OEM' && (
                 <SpecRow label="Condition">{humanize(part.qualityTier || part.offers?.[0]?.qualityTier)}</SpecRow>
               )}
               {(part.partSource || part.offers?.[0]?.partSource) && (

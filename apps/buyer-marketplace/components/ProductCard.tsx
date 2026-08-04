@@ -140,7 +140,7 @@ export function ProductCard({
         )}
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <ConditionBadge qualityTier={qualityTier} size="sm" />
+          <ConditionBadge qualityTier={qualityTier} partSource={partSource} partType={partType} size="sm" />
           <SourceBadge partSource={partSource} partType={partType} size="sm" />
           <SourcePill tag={sourceTag} size="sm" />
         </div>

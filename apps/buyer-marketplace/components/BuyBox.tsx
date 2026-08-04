@@ -24,7 +24,7 @@ import { fitmentForConfig, FITMENT_COPY } from "@/lib/fitment";
 import { pushRecentlyViewed } from "@/lib/recent";
 import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { FitmentBadge } from "./FitmentBadge";
-import { ConditionBadge, SourceBadge } from "./ConditionBadge";
+import { ConditionBadge, SourceBadge, shouldSuppressCondition } from "./ConditionBadge";
 import { SourcePill } from "./SourcePill";
 import { WatchlistButton } from "./WatchlistButton";
 import { ShippingSummaryRow } from "./ShippingSummaryRow";
@@ -246,7 +246,7 @@ function OfferRow({
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {/* condition is the field sellers actually set per offer;
                 qualityTier has a schema default that can contradict it. */}
-            <ConditionBadge qualityTier={offer.condition || offer.qualityTier} size="sm" />
+            <ConditionBadge qualityTier={offer.condition || offer.qualityTier} partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
             <SourceBadge partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
           </div>
         </div>
@@ -341,8 +341,8 @@ export function BuyBox({ part }: { part: Part }) {
       {/* Title block */}
       <div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <ConditionBadge qualityTier={part.qualityTier || best?.condition || best?.qualityTier} />
-          <SourceBadge partSource={part.partSource || best?.partSource} />
+          <ConditionBadge qualityTier={part.qualityTier || best?.condition || best?.qualityTier} partSource={part.partSource || best?.partSource} partType={part.partType || best?.partType} />
+          <SourceBadge partSource={part.partSource || best?.partSource} partType={part.partType || best?.partType} />
           {part.category && <Badge tone="neutral">{part.category}</Badge>}
         </div>
         <h1 className="mt-2.5 text-balance text-xl font-bold leading-snug tracking-tight text-slate-900 sm:text-2xl">
@@ -480,7 +480,8 @@ export function StickyMobileBar({ part }: { part: Part }) {
             {(() => {
               const cond = humanize(best.condition || best.qualityTier);
               const tag = best.sourceTag || null;
-              const parts = [cond, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
+              const suppressed = shouldSuppressCondition(best.partSource, best.partType || part.partType);
+              const parts = [suppressed ? null : cond, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
               return parts.join(" · ");
             })()}
           </p>

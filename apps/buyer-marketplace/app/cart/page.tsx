@@ -17,6 +17,7 @@ import {
 import { useCart, type CartItem } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { humanize } from "@/lib/format";
+import { partTypeFromLegacy } from "@repo/catalog-contracts";
 import { useCurrency } from "@/lib/currency-context";
 import { PartImage } from "@/components/PartImage";
 import { QuantityStepper } from "@/components/QuantityStepper";
@@ -55,7 +56,7 @@ function CartLine({ item }: { item: CartItem }) {
               {part?.title || "Part"}
             </Link>
             <p className="mt-1 text-xs text-graphite-600">
-              {(() => { const c = humanize(item.sellerOffer.condition || ""); return c ? `Condition: ${c}` : null; })()}
+              {(() => { const c = humanize(item.sellerOffer.condition || ""); const pt = partTypeFromLegacy(item.sellerOffer.partSource || part?.partSource, item.sellerOffer.partType || part?.partType); return (c && pt !== 'GENUINE_OEM') ? `Condition: ${c}` : null; })()}
             </p>
             <div className="mt-1.5">
               <CartLineFitment partId={part?.id} />
