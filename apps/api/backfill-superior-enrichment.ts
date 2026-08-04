@@ -337,6 +337,11 @@ async function main() {
       }
 
       if (enr) {
+        // Title: use enriched title if available (cleaner title-cased version)
+        if (enr.enrichedTitle && enr.enrichedTitle !== part.title) {
+          updateData.title = enr.enrichedTitle;
+          needsUpdate = true;
+        }
         if (enr.description && (!part.description || part.description.trim() === '')) {
           updateData.description = enr.description;
           needsUpdate = true;

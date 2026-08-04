@@ -713,7 +713,7 @@ function CheckoutContent() {
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
                         </p>
                         <p className="mt-0.5 text-xs text-graphite-600">
-                          {(() => { const c = humanize(item.sellerOffer.condition || ""); return c !== "Used" ? c : null; })()}
+                          {(() => { const c = humanize(item.sellerOffer.condition || ""); return c || null; })()}
                         </p>
                         <div className="mt-1.5">
                           <CartLineFitment partId={item.sellerOffer.canonicalPart?.id} />

@@ -480,7 +480,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
             {(() => {
               const cond = humanize(best.condition || best.qualityTier);
               const tag = best.sourceTag || null;
-              const parts = [cond !== "Used" ? cond : null, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
+              const parts = [cond, tag || best.seller?.name || best.sellerName || "Marketplace seller"].filter(Boolean);
               return parts.join(" · ");
             })()}
           </p>

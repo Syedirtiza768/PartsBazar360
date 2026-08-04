@@ -235,21 +235,35 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
           )}
 
           {/* Detail bullets from enrichment */}
-          {part.itemSpecifics?.detailBullets && (
-            <section aria-labelledby="details-heading">
-              <h2 id="details-heading" className="text-lg font-bold tracking-tight text-slate-900">
-                Key details
-              </h2>
-              <ul className="mt-3 space-y-1.5">
-                {String(part.itemSpecifics.detailBullets).split(' | ').filter(Boolean).map((bullet, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
-                    <span>{bullet}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {part.itemSpecifics?.detailBullets && (() => {
+            const rawBullets = String(part.itemSpecifics.detailBullets).split(' | ').filter(Boolean);
+            // Strip hardcoded condition bullet (e.g. "Condition/source: Used / OEM")
+            // and replace with dynamic value from DB
+            const filtered = rawBullets.filter((b) => !/^condition\s*\/\s*source\s*:/i.test(b.trim()));
+            const condition = humanize(part.qualityTier || part.offers?.[0]?.qualityTier || '');
+            const partSource = part.partSource || part.offers?.[0]?.partSource || '';
+            const conditionBullet = condition
+              ? `Condition: ${condition}${partSource ? ` / ${humanize(partSource)}` : ''}`
+              : null;
+            const bullets = conditionBullet
+              ? [...filtered.slice(0, 2), conditionBullet, ...filtered.slice(2)]
+              : filtered;
+            return bullets.length > 0 ? (
+              <section aria-labelledby="details-heading">
+                <h2 id="details-heading" className="text-lg font-bold tracking-tight text-slate-900">
+                  Key details
+                </h2>
+                <ul className="mt-3 space-y-1.5">
+                  {bullets.map((bullet, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null;
+          })()}
 
           {/* Fitment hints from enrichment */}
           {part.itemSpecifics?.fitmentHints && (
@@ -326,7 +340,9 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {part.manufacturer && part.manufacturer !== part.brand && (
                 <SpecRow label="Manufacturer">{part.manufacturer}</SpecRow>
               )}
-              {(part.qualityTier || part.offers?.[0]?.qualityTier) && (() => { const t = humanize(part.qualityTier || part.offers?.[0]?.qualityTier); return t !== "Used" ? <SpecRow label="Condition tier">{t}</SpecRow> : null; })()}
+              {(part.qualityTier || part.offers?.[0]?.qualityTier) && (
+                <SpecRow label="Condition">{humanize(part.qualityTier || part.offers?.[0]?.qualityTier)}</SpecRow>
+              )}
               {(part.partSource || part.offers?.[0]?.partSource) && (
                 <SpecRow label="Part source">
                   {(part.partSource || part.offers?.[0]?.partSource) === "OEM"

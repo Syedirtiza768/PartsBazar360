@@ -55,7 +55,7 @@ function CartLine({ item }: { item: CartItem }) {
               {part?.title || "Part"}
             </Link>
             <p className="mt-1 text-xs text-graphite-600">
-              {(() => { const c = humanize(item.sellerOffer.condition || ""); return c !== "Used" ? `Condition: ${c}` : null; })()}
+              {(() => { const c = humanize(item.sellerOffer.condition || ""); return c ? `Condition: ${c}` : null; })()}
             </p>
             <div className="mt-1.5">
               <CartLineFitment partId={part?.id} />
