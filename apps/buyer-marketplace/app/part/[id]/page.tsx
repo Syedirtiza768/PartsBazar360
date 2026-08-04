@@ -217,6 +217,56 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
             <SalvagePanel units={part.salvageUnits || []} />
           )}
 
+          {/* Product description from enrichment */}
+          {part.description && (
+            <section aria-labelledby="description-heading">
+              <h2 id="description-heading" className="text-lg font-bold tracking-tight text-slate-900">
+                Product description
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700">
+                {part.description}
+              </p>
+              {part.itemSpecifics?.compatibilityNote && (
+                <p className="mt-3 text-xs leading-relaxed text-graphite-600 italic">
+                  {part.itemSpecifics.compatibilityNote}
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* Detail bullets from enrichment */}
+          {part.itemSpecifics?.detailBullets && (
+            <section aria-labelledby="details-heading">
+              <h2 id="details-heading" className="text-lg font-bold tracking-tight text-slate-900">
+                Key details
+              </h2>
+              <ul className="mt-3 space-y-1.5">
+                {String(part.itemSpecifics.detailBullets).split(' | ').filter(Boolean).map((bullet, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Fitment hints from enrichment */}
+          {part.itemSpecifics?.fitmentHints && (
+            <section aria-labelledby="fitment-hints-heading">
+              <h2 id="fitment-hints-heading" className="text-lg font-bold tracking-tight text-slate-900">
+                Fitment information
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {String(part.itemSpecifics.fitmentHints).split(',').map((hint) => hint.trim()).filter(Boolean).map((hint, i) => (
+                  <span key={i} className="inline-flex items-center rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-200">
+                    {hint}
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
+
           <CompatibilitySection rows={compatibilityRows} compatibleVehicles={compatibleVehicles} />
 
           {crossReferences.length > 0 && (
@@ -256,6 +306,11 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                   >
                     {part.category}
                   </Link>
+                </SpecRow>
+              )}
+              {(part.itemSpecifics?.inferredProductType || part.itemSpecifics?.productType) && (
+                <SpecRow label="Product type">
+                  {String(part.itemSpecifics.inferredProductType || part.itemSpecifics.productType)}
                 </SpecRow>
               )}
               {part.brand && (

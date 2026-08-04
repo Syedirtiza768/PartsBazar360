@@ -86,6 +86,10 @@ export function ProductCard({
   const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];
   const identityNumber = part.manufacturerPartNumber || oeNumber;
   const sourceTag = part.sourceTags?.[0] || bestOffer?.sourceTag || null;
+  // Prefer top-level categoryGroup/category (indexed in OpenSearch, available in
+  // browse results) over itemSpecifics (only available on PDP).
+  const inferredProductType = part.categoryGroup || part.itemSpecifics?.inferredProductType || part.itemSpecifics?.productType || null;
+  const inferredSystemCategory = (part.category && part.category !== 'General' ? part.category : null) || part.itemSpecifics?.inferredSystemCategory || part.itemSpecifics?.systemCategory || null;
 
   if (offerCount === 0) return null;
 
@@ -140,6 +144,12 @@ export function ProductCard({
           <SourceBadge partSource={partSource} partType={partType} size="sm" />
           <SourcePill tag={sourceTag} size="sm" />
         </div>
+
+        {inferredProductType && (
+          <p className="mb-1 text-[11px] font-medium text-teal-700">
+            {inferredProductType}{inferredSystemCategory ? ` · ${inferredSystemCategory}` : ''}
+          </p>
+        )}
 
         {/* Found via a cross-reference number, not this part's own — say so,
             so the buyer trusts why a "different" number surfaced this part. */}

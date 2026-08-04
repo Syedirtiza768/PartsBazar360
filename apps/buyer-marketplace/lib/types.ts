@@ -105,6 +105,15 @@ export interface ItemSpecifics {
   interchangeNumbers?: string[];
   vehicleSystem?: string | null;
   categoryType?: string | null;
+  enrichedTitle?: string | null;
+  inferredProductType?: string | null;
+  inferredSystemCategory?: string | null;
+  fitmentHints?: string | null;
+  compatibilityNote?: string | null;
+  detailBullets?: string | null;
+  searchKeywords?: string | null;
+  productType?: string | null;
+  systemCategory?: string | null;
 }
 
 /**
@@ -134,6 +143,7 @@ export interface PartShipping {
 export interface Part {
   id: string;
   title: string;
+  description?: string | null;
   brand?: string | null;
   manufacturer?: string | null;
   manufacturerPartNumber?: string | null;
@@ -141,6 +151,7 @@ export interface Part {
   partNumbers?: PartNumberRecord[];
   oemCrossReferences?: OemCrossReference[];
   category?: string | null;
+  categoryGroup?: string | null;
   weight?: number | null;
   shipping?: PartShipping | null;
   enrichmentStatus?: string | null;
