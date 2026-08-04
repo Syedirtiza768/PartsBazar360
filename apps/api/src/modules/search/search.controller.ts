@@ -1025,12 +1025,17 @@ export class SearchController implements OnModuleDestroy {
     });
     if (!part) throw new NotFoundException(`Part ${id} not found`);
     const specifics = (part.itemSpecifics || {}) as Record<string, any>;
+    // Humanize qualityTier so the SVG shows "Used" not "USED"
+    const rawCondition = part.qualityTier || null;
+    const condition = rawCondition
+      ? rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase()
+      : null;
     return renderPlaceholderSvg({
       title: part.title,
       brand: part.brand,
       mpn: part.manufacturerPartNumber,
       category: part.category,
-      condition: part.qualityTier || null,
+      condition,
       partSource: part.partSource || null,
       position: specifics.placementOnVehicle || null,
     });
