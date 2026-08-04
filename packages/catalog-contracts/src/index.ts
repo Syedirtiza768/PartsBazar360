@@ -17,8 +17,8 @@ export type PartType = (typeof PART_TYPES)[number];
 export const PART_TYPE_LABELS: Record<PartType, string> = {
   GENUINE_OEM: 'Genuine OEM',
   OEM_EQUIVALENT: 'OEM-equivalent',
-  AFTERMARKET: 'Aftermarket',
-  SALVAGE_OEM: 'Used',
+  AFTERMARKET: 'New Aftermarket',
+  SALVAGE_OEM: 'Salvage OEM',
   REMANUFACTURED: 'Remanufactured',
   REFURBISHED: 'Refurbished',
   PERFORMANCE: 'Performance / Upgrade',
