@@ -32,11 +32,24 @@ export class SendGridService {
         <p style="font-size:13px;color:#71717a;">If you didn't request this code, you can safely ignore this email.</p>
       </div>
     `;
+    await this.send(to, subject, html);
+  }
 
+  /** General-purpose transactional send, shared by EmailService's templated notifications. */
+  async send(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string,
+  ): Promise<void> {
     if (!this.apiKey) {
       this.logger.log(`[DRY RUN] To: ${to} | Subject: ${subject}`);
       return;
     }
+
+    const content: Array<{ type: string; value: string }> = [];
+    if (text) content.push({ type: 'text/plain', value: text });
+    content.push({ type: 'text/html', value: html });
 
     const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
@@ -48,7 +61,7 @@ export class SendGridService {
         personalizations: [{ to: [{ email: to }] }],
         from: { email: this.fromEmail, name: this.fromName },
         subject,
-        content: [{ type: 'text/html', value: html }],
+        content,
       }),
     });
 

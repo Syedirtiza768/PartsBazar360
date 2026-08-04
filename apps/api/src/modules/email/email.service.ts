@@ -1,35 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MailerSend, EmailParams, Sender, Recipient } from 'mailersend';
+import { SendGridService } from './sendgrid.service';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private mailersend: MailerSend | null = null;
-  private fromEmail: string;
-  private fromName: string;
   private buyerAppUrl: string;
   /** Where admin notifications are delivered (info@partsbazar360.com). */
   private adminEmail: string;
   private adminAppUrl: string;
-  private operationsAppUrl: string;
 
-  constructor() {
-    const apiKey = process.env.MAILERSEND_API_KEY;
-    this.fromEmail = process.env.MAILERSEND_FROM_EMAIL || 'info@partsbazar360.com';
-    this.fromName = process.env.MAILERSEND_FROM_NAME || 'PartsBazar360';
+  constructor(private readonly sendGridService: SendGridService) {
     this.buyerAppUrl = process.env.BUYER_APP_URL || 'http://localhost:3000';
     this.adminEmail = process.env.ADMIN_EMAIL || 'info@partsbazar360.com';
-    this.adminAppUrl = process.env.ADMIN_APP_URL || 'http://localhost:3002';
-    this.operationsAppUrl = process.env.OPERATIONS_APP_URL || 'http://localhost:3003';
-
-    if (apiKey) {
-      this.mailersend = new MailerSend({ apiKey });
-      this.logger.log('MailerSend email service initialized');
-    } else {
-      this.logger.warn(
-        'MAILERSEND_API_KEY not set — emails will be logged but not sent',
-      );
-    }
+    this.adminAppUrl =
+      process.env.ADMIN_APP_URL || 'http://localhost:3002/admin';
   }
 
   // --- Private helpers ------------------------------------------
@@ -40,22 +24,13 @@ export class EmailService {
     html: string,
     text?: string,
   ): Promise<void> {
-    if (!this.mailersend) {
-      this.logger.log(`[DRY RUN] To: ${to} | Subject: ${subject}`);
-      this.logger.debug(`[DRY RUN] HTML: ${html.substring(0, 200)}...`);
-      return;
-    }
-
-    const emailParams = new EmailParams()
-      .setFrom(new Sender(this.fromEmail, this.fromName))
-      .setTo([new Recipient(to)])
-      .setSubject(subject)
-      .setHtml(html)
-      .setText(text || this.stripHtml(html));
-
     try {
-      await this.mailersend.email.send(emailParams);
-      this.logger.log(`Email sent to ${to}: ${subject}`);
+      await this.sendGridService.send(
+        to,
+        subject,
+        html,
+        text || this.stripHtml(html),
+      );
     } catch (err) {
       this.logger.error(`Failed to send email to ${to}: ${err}`);
       throw err;
@@ -64,9 +39,7 @@ export class EmailService {
 
   /** Fire-and-forget wrapper that swallows errors (for non-critical notifications). */
   private fireAndForget(promise: Promise<void>, context: string): void {
-    void promise.catch((err) =>
-      this.logger.error(`${context}: ${err}`),
-    );
+    void promise.catch((err) => this.logger.error(`${context}: ${err}`));
   }
 
   private stripHtml(html: string): string {
@@ -207,7 +180,7 @@ export class EmailService {
       <a href="${this.buyerAppUrl}/account/purchases" class="btn">View order</a>
       <p style="font-size:13px;color:#71717a;">You'll receive another email when your order ships.</p>
     `);
-    await this.send(to, `Order confirmed — ${order.orderId}`, html);
+    await this.send(to, `Order confirmed ï¿½ ${order.orderId}`, html);
   }
 
   // --- Buyer shipment notification ------------------------------
@@ -239,7 +212,11 @@ export class EmailService {
       <ul style="padding-left:20px;margin:8px 0 16px;">${itemsHtml}</ul>
       <a href="${this.buyerAppUrl}/account/purchases/${encodeURIComponent(shipment.orderId)}" class="btn">View order details</a>
     `);
-    await this.send(to, `Order shipped — ${shipment.orderId} (tracking: ${shipment.trackingNumber})`, html);
+    await this.send(
+      to,
+      `Order shipped ï¿½ ${shipment.orderId} (tracking: ${shipment.trackingNumber})`,
+      html,
+    );
   }
 
   // --- Ticket reply to buyer ------------------------------------
@@ -262,7 +239,11 @@ export class EmailService {
       <div class="msg-block">${ticket.replyMessage}</div>
       <a href="${this.buyerAppUrl}/support" class="btn-outline">Open support</a>
     `);
-    await this.send(to, `Re: ${ticket.subject} [Ticket ${ticket.ticketId}]`, html);
+    await this.send(
+      to,
+      `Re: ${ticket.subject} [Ticket ${ticket.ticketId}]`,
+      html,
+    );
   }
 
   // --- Admin notification (to info@partsbazar360.com) -----------
@@ -289,25 +270,39 @@ export class EmailService {
     customerName?: string;
     message: string;
     priority: string;
+    shippingCountry?: string;
+    estimatedWeightKg?: number;
   }): void {
     const priorityBadge =
       ticket.priority === 'HIGH'
         ? '<span class="badge badge-danger">HIGH</span>'
         : '<span class="badge badge-warning">NORMAL</span>';
 
-    const opsUrl = `${this.operationsAppUrl}/`;
+    const freightFields =
+      ticket.shippingCountry || ticket.estimatedWeightKg
+        ? `
+      ${ticket.shippingCountry ? `<p class="field"><strong>Shipping to:</strong> ${ticket.shippingCountry}</p>` : ''}
+      ${ticket.estimatedWeightKg ? `<p class="field"><strong>Estimated weight:</strong> ${ticket.estimatedWeightKg}kg</p>` : ''}
+    `
+        : '';
+
+    const ticketUrl = `${this.adminAppUrl}/support/${ticket.id}/`;
     const html = `
       ${priorityBadge}
       <p class="field"><strong>Category:</strong> ${ticket.category}</p>
       <p class="field"><strong>From:</strong> ${ticket.customerName || 'Unknown'} &lt;${ticket.customerEmail}&gt;</p>
       <p class="field"><strong>Ticket ID:</strong> ${ticket.id}</p>
+      ${freightFields}
       <hr class="divider" />
       <p style="font-weight:600;color:#18181b;">${ticket.subject}</p>
       <div class="msg-block">${ticket.message}</div>
-      <a href="${opsUrl}" class="btn">View in Operations Portal</a>
+      <a href="${ticketUrl}" class="btn">View in Admin Console</a>
     `;
     this.fireAndForget(
-      this.sendAdminNotification(`New ${ticket.category} ticket — ${ticket.subject}`, html),
+      this.sendAdminNotification(
+        `New ${ticket.category} ticket ï¿½ ${ticket.subject}`,
+        html,
+      ),
       `Admin ticket notification (${ticket.id})`,
     );
   }
@@ -321,7 +316,7 @@ export class EmailService {
     itemCount: number;
     sellerCount: number;
   }): void {
-    const opsUrl = `${this.operationsAppUrl}/`;
+    const opsUrl = `${this.adminAppUrl}/operations/`;
     const html = `
       <span class="badge badge-info">New Order</span>
       <p class="field"><strong>Order ID:</strong> ${order.orderId}</p>
@@ -329,10 +324,13 @@ export class EmailService {
       <p class="field"><strong>Items:</strong> ${order.itemCount} across ${order.sellerCount} seller(s)</p>
       <p class="field"><strong>Total:</strong> ${order.currency} ${order.totalAmount.toFixed(2)}</p>
       <hr class="divider" />
-      <a href="${opsUrl}" class="btn">View in Operations Portal</a>
+      <a href="${opsUrl}" class="btn">View in Admin Console</a>
     `;
     this.fireAndForget(
-      this.sendAdminNotification(`New order ${order.orderId} — ${order.currency} ${order.totalAmount.toFixed(2)}`, html),
+      this.sendAdminNotification(
+        `New order ${order.orderId} ï¿½ ${order.currency} ${order.totalAmount.toFixed(2)}`,
+        html,
+      ),
       `Admin order notification (${order.orderId})`,
     );
   }
@@ -345,14 +343,14 @@ export class EmailService {
     newStatus: string;
     notes?: string;
   }): void {
-    const opsUrl = `${this.operationsAppUrl}/sellers`;
+    const opsUrl = `${this.adminAppUrl}/sellers/`;
     const html = `
       <span class="badge badge-warning">Seller Onboarding</span>
       <p class="field"><strong>Seller:</strong> ${seller.sellerName} (${seller.sellerId})</p>
       <p class="field"><strong>Status change:</strong> ${seller.previousStatus} &rarr; ${seller.newStatus}</p>
       ${seller.notes ? `<p class="field"><strong>Notes:</strong> ${seller.notes}</p>` : ''}
       <hr class="divider" />
-      <a href="${opsUrl}" class="btn">View in Operations Portal</a>
+      <a href="${opsUrl}" class="btn">View in Admin Console</a>
     `;
     this.fireAndForget(
       this.sendAdminNotification(
