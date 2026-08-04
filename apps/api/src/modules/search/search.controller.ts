@@ -932,7 +932,7 @@ export class SearchController implements OnModuleDestroy {
   @Header('Content-Type', 'image/svg+xml; charset=utf-8')
   @Header(
     'Cache-Control',
-    'public, max-age=600, stale-while-revalidate=604800',
+    'public, max-age=300, stale-while-revalidate=600, must-revalidate',
   )
   async getPartInfographic(@Param('id') id: string) {
     const part = await this.prisma.canonicalPart.findUnique({
@@ -1016,7 +1016,7 @@ export class SearchController implements OnModuleDestroy {
    */
   @Get('parts/:id/placeholder.svg')
   @Header('Content-Type', 'image/svg+xml; charset=utf-8')
-  @Header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600, must-revalidate')
   async getPartPlaceholder(@Param('id') id: string) {
     const part = await this.prisma.canonicalPart.findUnique({
       where: { id },
