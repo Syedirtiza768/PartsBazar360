@@ -9,7 +9,6 @@ services:
       - admin-portal
       - buyer-marketplace
       - seller-portal
-      - operations-portal
       - workshop-portal
 
   api:

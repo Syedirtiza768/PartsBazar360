@@ -66,6 +66,8 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.com/buyer}
       BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
+      ADMIN_APP_URL: ${ADMIN_APP_URL:-https://partsbazar360.com/admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-info@partsbazar360.com}
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -74,9 +76,6 @@ services:
       TAMARA_API_TOKEN: ${TAMARA_API_TOKEN:-}
       TAMARA_NOTIFICATION_TOKEN: ${TAMARA_NOTIFICATION_TOKEN:-}
       TAMARA_PUBLIC_KEY: ${TAMARA_PUBLIC_KEY:-}
-      MAILERSEND_API_KEY: ${MAILERSEND_API_KEY:-}
-      MAILERSEND_FROM_EMAIL: ${MAILERSEND_FROM_EMAIL:-info@partsbazar360.com}
-      MAILERSEND_FROM_NAME: ${MAILERSEND_FROM_NAME:-PartsBazar360}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_VERIFY_SERVICE_SID: ${TWILIO_VERIFY_SERVICE_SID:-}
@@ -157,9 +156,11 @@ services:
       SHIPPING_MAX_PARCEL_KG: ${SHIPPING_MAX_PARCEL_KG:-30}
       SHIPPING_ESTIMATE_MARGIN_PCT: ${SHIPPING_ESTIMATE_MARGIN_PCT:-15}
       SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR: ${SHIPPING_ESTIMATED_VOLUMETRIC_FACTOR:-0.8}
-      MAILERSEND_API_KEY: ${MAILERSEND_API_KEY:-}
-      MAILERSEND_FROM_EMAIL: ${MAILERSEND_FROM_EMAIL:-info@partsbazar360.com}
-      MAILERSEND_FROM_NAME: ${MAILERSEND_FROM_NAME:-PartsBazar360}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-info@partsbazar360.com}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-PartsBazar360}
+      ADMIN_APP_URL: ${ADMIN_APP_URL:-https://partsbazar360.com/admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-info@partsbazar360.com}
     volumes:
       - enrichment_media:/app/data/enrichment
     depends_on:
@@ -210,16 +211,6 @@ services:
     networks:
       - app-network
 
-  operations-portal:
-    build:
-      context: .
-      dockerfile: apps/next.Dockerfile
-      args:
-        APP_NAME: operations-portal
-    restart: unless-stopped
-    networks:
-      - app-network
-
   workshop-portal:
     build:
       context: .
@@ -245,7 +236,6 @@ services:
       - admin-portal
       - buyer-marketplace
       - seller-portal
-      - operations-portal
       - workshop-portal
     restart: unless-stopped
     networks:

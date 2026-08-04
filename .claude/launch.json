@@ -20,12 +20,6 @@
       "port": 3200
     },
     {
-      "name": "operations-portal",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "apps/operations-portal", "--port", "3300"],
-      "port": 3300
-    },
-    {
       "name": "workshop-portal",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "dev", "apps/workshop-portal", "--port", "3400"],
