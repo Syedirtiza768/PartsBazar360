@@ -1,24 +1,10 @@
-import * as fs from 'node:fs/promises';
+import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { OpenSearchService } from './src/modules/search/opensearch.service';
-
-/**
- * Backfill Superior Auto Parts listings with real product images and
- * enrichment data (descriptions, item specifics, fitment hints, etc.).
- *
- * Two CSV sources:
- *   1. Image URLs CSV  — outputs/superior-listings-enriched.csv
- *      Columns: listing_id, ..., imageUrls (pipe-separated), imageLookupStatus
- *   2. Enrichment CSV  — exports/superior_listings_enriched.csv
- *      Columns: listing_id, ..., enriched_title, description, item_specifics_json, ...
- *
- * Usage:
- *   npx ts-node --transpile-only backfill-superior-enrichment.ts
- *   npx ts-node --transpile-only backfill-superior-enrichment.ts --dry-run
- *   npx ts-node --transpile-only backfill-superior-enrichment.ts --limit 100
- */
 
 const IMAGE_CSV =
   process.env.SUPERIOR_IMAGE_CSV ||
@@ -31,7 +17,37 @@ const dryRun = process.argv.includes('--dry-run');
 const limitArg = process.argv.indexOf('--limit');
 const limit =
   limitArg >= 0 ? Math.max(0, Number(process.argv[limitArg + 1] || 0)) : 0;
-const chunkSize = 200;
+const chunkSize = 100;
+
+function parseCsvLine(line: string): string[] {
+  const row: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        value += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        value += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',') {
+      row.push(value);
+      value = '';
+    } else {
+      value += ch;
+    }
+  }
+  row.push(value);
+  return row;
+}
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -72,11 +88,6 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-function headerIndex(headers: string[], name: string): number {
-  const idx = headers.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
-  return idx;
-}
-
 interface ImageRecord {
   imageUrls: string[];
   status: string;
@@ -96,9 +107,10 @@ interface EnrichmentRecord {
 
 function loadImageCsv(csvText: string): Map<string, ImageRecord> {
   const [headers, ...rows] = parseCsv(csvText);
-  const idIdx = headerIndex(headers, 'listing_id');
-  const urlIdx = headerIndex(headers, 'imageurls');
-  const statusIdx = headerIndex(headers, 'imagelookupstatus');
+  const lcHeaders = headers.map((h) => h.trim().toLowerCase());
+  const idIdx = lcHeaders.indexOf('listing_id');
+  const urlIdx = lcHeaders.indexOf('imageurls');
+  const statusIdx = lcHeaders.indexOf('imagelookupstatus');
 
   if (idIdx < 0) throw new Error('Image CSV missing listing_id column');
   if (urlIdx < 0) throw new Error('Image CSV missing imageUrls column');
@@ -108,11 +120,8 @@ function loadImageCsv(csvText: string): Map<string, ImageRecord> {
     const id = row[idIdx]?.trim();
     if (!id) continue;
     const rawUrls = row[urlIdx]?.trim() || '';
-    const status = row[statusIdx]?.trim() || 'pending';
-    const urls = rawUrls
-      .split('|')
-      .map((u) => u.trim())
-      .filter(Boolean);
+    const status = statusIdx >= 0 ? row[statusIdx]?.trim() || 'pending' : 'pending';
+    const urls = rawUrls.split('|').map((u) => u.trim()).filter(Boolean);
     if (urls.length > 0) {
       map.set(id, { imageUrls: urls, status });
     }
@@ -120,45 +129,61 @@ function loadImageCsv(csvText: string): Map<string, ImageRecord> {
   return map;
 }
 
-function loadEnrichmentCsv(csvText: string): Map<string, EnrichmentRecord> {
-  const [headers, ...rows] = parseCsv(csvText);
-  const lcHeaders = headers.map((h) => h.trim().toLowerCase());
-
-  const idIdx = lcHeaders.indexOf('listing_id');
-  const titleIdx = lcHeaders.indexOf('enriched_title');
-  const productTypeIdx = lcHeaders.indexOf('inferred_product_type');
-  const systemCatIdx = lcHeaders.indexOf('inferred_system_category');
-  const fitmentIdx = lcHeaders.indexOf('fitment_hints');
-  const compatIdx = lcHeaders.indexOf('compatibility_note');
-  const specificsIdx = lcHeaders.indexOf('item_specifics_json');
-  const descIdx = lcHeaders.indexOf('description');
-  const bulletsIdx = lcHeaders.indexOf('detail_bullets');
-  const keywordsIdx = lcHeaders.indexOf('search_keywords');
-
-  if (idIdx < 0) throw new Error('Enrichment CSV missing listing_id column');
-
+async function streamEnrichmentCsv(
+  filePath: string,
+): Promise<Map<string, EnrichmentRecord>> {
   const map = new Map<string, EnrichmentRecord>();
-  for (const row of rows) {
+  const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+  let headers: string[] = [];
+  let idIdx = -1;
+  let titleIdx = -1;
+  let productTypeIdx = -1;
+  let systemCatIdx = -1;
+  let fitmentIdx = -1;
+  let compatIdx = -1;
+  let specificsIdx = -1;
+  let descIdx = -1;
+  let bulletsIdx = -1;
+  let keywordsIdx = -1;
+  let lineNum = 0;
+
+  for await (const line of rl) {
+    lineNum++;
+    if (lineNum === 1) {
+      headers = parseCsvLine(line).map((h) => h.trim().toLowerCase());
+      idIdx = headers.indexOf('listing_id');
+      titleIdx = headers.indexOf('enriched_title');
+      productTypeIdx = headers.indexOf('inferred_product_type');
+      systemCatIdx = headers.indexOf('inferred_system_category');
+      fitmentIdx = headers.indexOf('fitment_hints');
+      compatIdx = headers.indexOf('compatibility_note');
+      specificsIdx = headers.indexOf('item_specifics_json');
+      descIdx = headers.indexOf('description');
+      bulletsIdx = headers.indexOf('detail_bullets');
+      keywordsIdx = headers.indexOf('search_keywords');
+      if (idIdx < 0) throw new Error('Enrichment CSV missing listing_id column');
+      continue;
+    }
+
+    const row = parseCsvLine(line);
     const id = row[idIdx]?.trim();
     if (!id) continue;
+
     map.set(id, {
       enrichedTitle: titleIdx >= 0 ? row[titleIdx]?.trim() || null : null,
-      inferredProductType:
-        productTypeIdx >= 0 ? row[productTypeIdx]?.trim() || null : null,
-      inferredSystemCategory:
-        systemCatIdx >= 0 ? row[systemCatIdx]?.trim() || null : null,
+      inferredProductType: productTypeIdx >= 0 ? row[productTypeIdx]?.trim() || null : null,
+      inferredSystemCategory: systemCatIdx >= 0 ? row[systemCatIdx]?.trim() || null : null,
       fitmentHints: fitmentIdx >= 0 ? row[fitmentIdx]?.trim() || null : null,
-      compatibilityNote:
-        compatIdx >= 0 ? row[compatIdx]?.trim() || null : null,
-      itemSpecificsJson:
-        specificsIdx >= 0 ? row[specificsIdx]?.trim() || null : null,
+      compatibilityNote: compatIdx >= 0 ? row[compatIdx]?.trim() || null : null,
+      itemSpecificsJson: specificsIdx >= 0 ? row[specificsIdx]?.trim() || null : null,
       description: descIdx >= 0 ? row[descIdx]?.trim() || null : null,
-      detailBullets:
-        bulletsIdx >= 0 ? row[bulletsIdx]?.trim() || null : null,
-      searchKeywords:
-        keywordsIdx >= 0 ? row[keywordsIdx]?.trim() || null : null,
+      detailBullets: bulletsIdx >= 0 ? row[bulletsIdx]?.trim() || null : null,
+      searchKeywords: keywordsIdx >= 0 ? row[keywordsIdx]?.trim() || null : null,
     });
   }
+
   return map;
 }
 
@@ -168,52 +193,32 @@ function mergeItemSpecifics(
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...(existing || {}) };
 
-  // Parse the enrichment item_specifics_json (flat object with Title Case keys)
   if (enrichment.itemSpecificsJson) {
     try {
       const parsed = JSON.parse(enrichment.itemSpecificsJson);
       if (parsed && typeof parsed === 'object') {
-        // Map Title Case keys to camelCase and merge
         for (const [key, value] of Object.entries(parsed)) {
           if (value == null || value === '') continue;
           const camelKey =
             key.charAt(0).toLowerCase() +
-            key
-              .slice(1)
-              .replace(/ ([A-Z])/g, (_, c) => c.toUpperCase());
-          // Don't overwrite existing values with empty ones
+            key.slice(1).replace(/ ([A-Z])/g, (_: string, c: string) => c.toUpperCase());
           if (!merged[camelKey] || merged[camelKey] === '') {
             merged[camelKey] = value;
           }
         }
       }
     } catch {
-      // malformed JSON — skip
+      // malformed JSON
     }
   }
 
-  // Store enrichment-specific fields that don't have dedicated columns
-  if (enrichment.enrichedTitle && !merged.enrichedTitle) {
-    merged.enrichedTitle = enrichment.enrichedTitle;
-  }
-  if (enrichment.inferredProductType) {
-    merged.inferredProductType = enrichment.inferredProductType;
-  }
-  if (enrichment.inferredSystemCategory) {
-    merged.inferredSystemCategory = enrichment.inferredSystemCategory;
-  }
-  if (enrichment.fitmentHints) {
-    merged.fitmentHints = enrichment.fitmentHints;
-  }
-  if (enrichment.compatibilityNote) {
-    merged.compatibilityNote = enrichment.compatibilityNote;
-  }
-  if (enrichment.detailBullets) {
-    merged.detailBullets = enrichment.detailBullets;
-  }
-  if (enrichment.searchKeywords) {
-    merged.searchKeywords = enrichment.searchKeywords;
-  }
+  if (enrichment.enrichedTitle && !merged.enrichedTitle) merged.enrichedTitle = enrichment.enrichedTitle;
+  if (enrichment.inferredProductType) merged.inferredProductType = enrichment.inferredProductType;
+  if (enrichment.inferredSystemCategory) merged.inferredSystemCategory = enrichment.inferredSystemCategory;
+  if (enrichment.fitmentHints) merged.fitmentHints = enrichment.fitmentHints;
+  if (enrichment.compatibilityNote) merged.compatibilityNote = enrichment.compatibilityNote;
+  if (enrichment.detailBullets) merged.detailBullets = enrichment.detailBullets;
+  if (enrichment.searchKeywords) merged.searchKeywords = enrichment.searchKeywords;
 
   return merged;
 }
@@ -226,21 +231,18 @@ async function main() {
   if (limit) console.log(`Limit:           ${limit} parts`);
   console.log();
 
-  // Load CSVs
-  const imageText = await fs.readFile(IMAGE_CSV, 'utf8');
+  const imageText = await fsp.readFile(IMAGE_CSV, 'utf8');
   const imageData = loadImageCsv(imageText);
   console.log(`Loaded ${imageData.size} image records (matched status)`);
 
-  const enrichmentText = await fs.readFile(ENRICHMENT_CSV, 'utf8');
-  const enrichmentData = loadEnrichmentCsv(enrichmentText);
+  console.log('Streaming enrichment CSV (this may take a moment)...');
+  const enrichmentData = await streamEnrichmentCsv(ENRICHMENT_CSV);
   console.log(`Loaded ${enrichmentData.size} enrichment records`);
 
-  // Collect all unique listing IDs
   const allIds = new Set([...imageData.keys(), ...enrichmentData.keys()]);
   console.log(`Total unique listing IDs: ${allIds.size}`);
 
   if (dryRun) {
-    // Show sample
     const sample = [...allIds].slice(0, 5);
     for (const id of sample) {
       const img = imageData.get(id);
@@ -251,10 +253,9 @@ async function main() {
         console.log(`    title: ${enr.enrichedTitle}`);
         console.log(`    type: ${enr.inferredProductType}`);
         console.log(`    category: ${enr.inferredSystemCategory}`);
-        console.log(`    description: ${(enr.description || '').slice(0, 80)}...`);
       }
     }
-    console.log('\nDry run complete — no database changes made.');
+    console.log('\nDry run complete.');
     return;
   }
 
@@ -271,41 +272,28 @@ async function main() {
 
   const ids = [...allIds];
   const batch = limit ? ids.slice(0, limit) : ids;
-
   console.log(`Processing ${batch.length} parts in chunks of ${chunkSize}...\n`);
 
   for (let i = 0; i < batch.length; i += chunkSize) {
     const chunk = batch.slice(i, i + chunkSize);
-
-    // Fetch all CanonicalParts in this chunk
     const parts = await prisma.canonicalPart.findMany({
       where: { id: { in: chunk } },
       include: { fitments: true, offers: { include: { seller: true } } },
     });
-
     const foundIds = new Set(parts.map((p) => p.id));
 
     for (const id of chunk) {
-      if (!foundIds.has(id)) {
-        notFound++;
-        continue;
-      }
+      if (!foundIds.has(id)) { notFound++; continue; }
 
       const part = parts.find((p) => p.id === id)!;
       const img = imageData.get(id);
       const enr = enrichmentData.get(id);
-
       const updateData: Record<string, unknown> = {};
       let needsUpdate = false;
 
-      // Images: only update if the part currently has no real images
-      // (has placeholder SVGs or empty array)
       if (img && img.imageUrls.length > 0) {
         const currentUrls = part.imageUrls || [];
-        const hasRealImages = currentUrls.some(
-          (u) =>
-            u.startsWith('http://') || u.startsWith('https://'),
-        );
+        const hasRealImages = currentUrls.some((u) => u.startsWith('http://') || u.startsWith('https://'));
         if (!hasRealImages) {
           updateData.imageUrls = img.imageUrls;
           needsUpdate = true;
@@ -313,51 +301,36 @@ async function main() {
         }
       }
 
-      // Enrichment: description + itemSpecifics
       if (enr) {
-        // Description: update if empty
         if (enr.description && (!part.description || part.description.trim() === '')) {
           updateData.description = enr.description;
           needsUpdate = true;
         }
-
-        // Item specifics: merge enrichment data with existing
         const existingIs = (part.itemSpecifics as Record<string, unknown>) || null;
         const merged = mergeItemSpecifics(existingIs, enr);
         if (JSON.stringify(merged) !== JSON.stringify(existingIs)) {
           updateData.itemSpecifics = merged;
           needsUpdate = true;
         }
-
-        // Category: update if enrichment provides a more specific one
         if (enr.inferredSystemCategory && (!part.category || part.category === 'General')) {
           updateData.category = enr.inferredSystemCategory;
           needsUpdate = true;
         }
-
-        // Category group: use inferred product type (e.g. "Thermostat", "Brake Disc")
         if (enr.inferredProductType && (!part.categoryGroup || part.categoryGroup === '')) {
           updateData.categoryGroup = enr.inferredProductType;
           needsUpdate = true;
         }
-
         enrichmentUpdated++;
       }
 
       if (!needsUpdate) continue;
 
       try {
-        await prisma.canonicalPart.update({
-          where: { id },
-          data: updateData as any,
-        });
-
-        // Reindex in OpenSearch
+        await prisma.canonicalPart.update({ where: { id }, data: updateData as any });
         const updatedPart = await prisma.canonicalPart.findUnique({
           where: { id },
           include: { fitments: true, offers: { include: { seller: true } } },
         });
-
         if (updatedPart) {
           await searchService.indexPart({
             id: updatedPart.id,
@@ -382,16 +355,12 @@ async function main() {
         }
       } catch (err) {
         errors++;
-        if (errors <= 10) {
-          console.error(`  Error updating ${id}:`, (err as Error).message);
-        }
+        if (errors <= 10) console.error(`  Error updating ${id}:`, (err as Error).message);
       }
     }
 
     const processed = Math.min(i + chunkSize, batch.length);
-    console.log(
-      `  Progress: ${processed}/${batch.length} | images: ${imagesUpdated} | enrichment: ${enrichmentUpdated} | reindexed: ${reindexed} | not found: ${notFound} | errors: ${errors}`,
-    );
+    console.log(`  Progress: ${processed}/${batch.length} | images: ${imagesUpdated} | enrichment: ${enrichmentUpdated} | reindexed: ${reindexed} | not found: ${notFound} | errors: ${errors}`);
   }
 
   console.log(`\n=== Complete ===`);
@@ -404,7 +373,4 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((e) => { console.error(e); process.exit(1); });
