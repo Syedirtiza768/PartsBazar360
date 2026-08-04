@@ -16,7 +16,15 @@ import { SendGridService } from '../email/sendgrid.service';
 import { TwilioService } from '../sms/twilio.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
-export type AuthRole = 'BUYER' | 'SELLER' | 'ADMIN';
+/**
+ * SUPPORT_AGENT and FULFILLMENT_OPERATOR are scoped staff roles — narrower
+ * than ADMIN, for headcount growth beyond one admin account. Enforced via
+ * @Roles() on the relevant support/order endpoints; the admin-portal UI
+ * doesn't yet trim its nav per role (everyone who can log in sees the same
+ * pages, only the API rejects out-of-scope actions).
+ */
+export type AuthRole =
+  'BUYER' | 'SELLER' | 'ADMIN' | 'SUPPORT_AGENT' | 'FULFILLMENT_OPERATOR';
 export type SellerMemberRole = 'OWNER' | 'MANAGER' | 'STAFF';
 
 export interface AuthTokenPayload {
@@ -523,6 +531,41 @@ export class AuthService {
       },
     });
     created.push({ email: adminEmail, role: 'ADMIN' });
+
+    const supportEmail = (
+      process.env.SEED_SUPPORT_AGENT_EMAIL || 'support.agent@partsbazar360.com'
+    ).toLowerCase();
+    await this.prisma.user.upsert({
+      where: { email: supportEmail },
+      update: { role: 'SUPPORT_AGENT', passwordHash, name: 'Support Agent' },
+      create: {
+        email: supportEmail,
+        name: 'Support Agent',
+        role: 'SUPPORT_AGENT',
+        passwordHash,
+      },
+    });
+    created.push({ email: supportEmail, role: 'SUPPORT_AGENT' });
+
+    const fulfillmentEmail = (
+      process.env.SEED_FULFILLMENT_OPERATOR_EMAIL ||
+      'fulfillment.operator@partsbazar360.com'
+    ).toLowerCase();
+    await this.prisma.user.upsert({
+      where: { email: fulfillmentEmail },
+      update: {
+        role: 'FULFILLMENT_OPERATOR',
+        passwordHash,
+        name: 'Fulfillment Operator',
+      },
+      create: {
+        email: fulfillmentEmail,
+        name: 'Fulfillment Operator',
+        role: 'FULFILLMENT_OPERATOR',
+        passwordHash,
+      },
+    });
+    created.push({ email: fulfillmentEmail, role: 'FULFILLMENT_OPERATOR' });
 
     const buyerEmail = (
       process.env.SEED_BUYER_EMAIL || 'buyer@partsbazar360.com'

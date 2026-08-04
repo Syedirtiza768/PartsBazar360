@@ -13,6 +13,6 @@ import { AuthModule } from '../auth/auth.module';
   imports: [CartModule, InventoryModule, OrderModule, AuthModule],
   providers: [CheckoutService, ShippingService, StripeService, TamaraService],
   controllers: [CheckoutController],
-  exports: [TamaraService],
+  exports: [StripeService, TamaraService],
 })
 export class CheckoutModule {}

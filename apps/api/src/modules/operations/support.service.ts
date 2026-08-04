@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
+import { AuditService } from '../audit/audit.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
 
 @Injectable()
 export class SupportService {
@@ -14,6 +16,7 @@ export class SupportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly audit: AuditService,
   ) {}
 
   async createTicket(body: {
@@ -44,17 +47,7 @@ export class SupportService {
         ? 'HIGH'
         : 'NORMAL';
 
-    // Build structured message for freight quotes
-    let message = body.message;
-    if (body.category === 'FREIGHT_QUOTE') {
-      const parts = [body.message];
-      if (body.shippingCountry)
-        parts.push(`\nShipping to: ${body.shippingCountry}`);
-      if (body.estimatedWeightKg)
-        parts.push(`Estimated weight: ${body.estimatedWeightKg}kg`);
-      if (body.cartSummary) parts.push(`Cart: ${body.cartSummary}`);
-      message = parts.join('\n');
-    }
+    const isFreightQuote = body.category === 'FREIGHT_QUOTE';
 
     const ticket = await this.prisma.supportTicket.create({
       data: {
@@ -66,8 +59,13 @@ export class SupportService {
         customerEmail: body.customerEmail,
         category: body.category || 'GENERAL',
         subject: body.subject,
-        message,
+        message: body.message,
         priority,
+        shippingCountry: isFreightQuote ? body.shippingCountry || null : null,
+        estimatedWeightKg: isFreightQuote
+          ? (body.estimatedWeightKg ?? null)
+          : null,
+        cartSummary: isFreightQuote ? body.cartSummary || null : null,
       },
       include: {
         order: true,
@@ -86,6 +84,8 @@ export class SupportService {
       customerName: ticket.customerName ?? undefined,
       message: ticket.message,
       priority: ticket.priority,
+      shippingCountry: ticket.shippingCountry ?? undefined,
+      estimatedWeightKg: ticket.estimatedWeightKg ?? undefined,
     });
 
     return ticket;
@@ -112,25 +112,93 @@ export class SupportService {
     });
   }
 
+  async getTicket(id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      include: {
+        order: true,
+        sellerOrder: { include: { seller: true } },
+        canonicalPart: true,
+        sellerOffer: { include: { seller: true } },
+        messages: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!ticket) throw new NotFoundException('Support ticket not found');
+
+    const assignedTo = ticket.assignedToUserId
+      ? await this.prisma.user.findUnique({
+          where: { id: ticket.assignedToUserId },
+          select: { id: true, name: true, email: true },
+        })
+      : null;
+
+    return { ...ticket, assignedTo };
+  }
+
   async updateTicket(
     id: string,
-    body: { status?: string; priority?: string; internalNotes?: string },
+    body: {
+      status?: string;
+      priority?: string;
+      internalNotes?: string;
+      assignedToUserId?: string | null;
+      carrier?: string | null;
+      quotedRate?: number | null;
+      quotedCurrency?: string | null;
+    },
+    actor: AuthenticatedUser,
   ) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id },
     });
     if (!ticket) throw new NotFoundException('Support ticket not found');
-    return this.prisma.supportTicket.update({
+    const updated = await this.prisma.supportTicket.update({
       where: { id },
       data: {
         status: body.status ?? ticket.status,
         priority: body.priority ?? ticket.priority,
         internalNotes: body.internalNotes ?? ticket.internalNotes,
+        assignedToUserId:
+          body.assignedToUserId !== undefined
+            ? body.assignedToUserId
+            : ticket.assignedToUserId,
+        carrier: body.carrier !== undefined ? body.carrier : ticket.carrier,
+        quotedRate:
+          body.quotedRate !== undefined ? body.quotedRate : ticket.quotedRate,
+        quotedCurrency:
+          body.quotedCurrency !== undefined
+            ? body.quotedCurrency
+            : ticket.quotedCurrency,
       },
     });
+
+    await this.audit.record({
+      action: 'TICKET_UPDATED',
+      entityType: 'SupportTicket',
+      entityId: id,
+      actorType: actor.role,
+      actorId: actor.userId,
+      originalValue: {
+        status: ticket.status,
+        priority: ticket.priority,
+        assignedToUserId: ticket.assignedToUserId,
+      },
+      normalizedValue: {
+        status: updated.status,
+        priority: updated.priority,
+        assignedToUserId: updated.assignedToUserId,
+      },
+    });
+
+    return updated;
   }
 
-  async replyToTicket(id: string, message: string, replyBy?: string) {
+  async replyToTicket(
+    id: string,
+    message: string,
+    replyBy: string | undefined,
+    actor: AuthenticatedUser,
+  ) {
     if (!message?.trim()) {
       throw new BadRequestException('Reply message is required');
     }
@@ -140,23 +208,35 @@ export class SupportService {
     });
     if (!ticket) throw new NotFoundException('Support ticket not found');
 
-    // Append reply to internal notes (structured as a thread)
-    const timestamp = new Date().toISOString();
-    const replyBlock = `\n---\n[${timestamp}] Reply by ${replyBy || 'Operations'}:\n${message}`;
-    const existingNotes = ticket.internalNotes || '';
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.ticketMessage.create({
+        data: {
+          ticketId: id,
+          authorType: 'ADMIN',
+          authorName: replyBy || 'Operations',
+          message,
+        },
+      }),
+      this.prisma.supportTicket.update({
+        where: { id },
+        data: { status: 'IN_PROGRESS' },
+        include: {
+          order: true,
+          sellerOrder: { include: { seller: true } },
+          canonicalPart: true,
+          sellerOffer: { include: { seller: true } },
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      }),
+    ]);
 
-    const updated = await this.prisma.supportTicket.update({
-      where: { id },
-      data: {
-        internalNotes: `${existingNotes}${replyBlock}`,
-        status: 'IN_PROGRESS',
-      },
-      include: {
-        order: true,
-        sellerOrder: { include: { seller: true } },
-        canonicalPart: true,
-        sellerOffer: { include: { seller: true } },
-      },
+    await this.audit.record({
+      action: 'TICKET_REPLIED',
+      entityType: 'SupportTicket',
+      entityId: id,
+      actorType: actor.role,
+      actorId: actor.userId,
+      metadata: { messageLength: message.length },
     });
 
     // Send the reply to the customer by email

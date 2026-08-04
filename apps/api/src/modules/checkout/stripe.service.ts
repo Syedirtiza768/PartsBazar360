@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -87,6 +88,36 @@ export class StripeService {
       `Stripe Checkout Session ${session.id} for order ${input.orderId}`,
     );
     return session;
+  }
+
+  /**
+   * Refunds the payment behind a completed Checkout Session. The session id
+   * (what we store as PaymentIntent.externalId) isn't itself refundable —
+   * Stripe refunds the underlying PaymentIntent, so this resolves that first.
+   */
+  async refundPayment(
+    checkoutSessionId: string,
+    reasonNote: string,
+  ): Promise<Stripe.Refund> {
+    const stripe = this.getClient();
+    const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id;
+    if (!paymentIntentId) {
+      throw new BadRequestException(
+        `Stripe session ${checkoutSessionId} has no captured payment to refund`,
+      );
+    }
+    const refund = await stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      metadata: { note: reasonNote.slice(0, 500) },
+    });
+    this.logger.log(
+      `Stripe refund ${refund.id} issued for payment ${paymentIntentId} (session ${checkoutSessionId})`,
+    );
+    return refund;
   }
 
   constructWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event {

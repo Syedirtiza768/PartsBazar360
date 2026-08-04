@@ -201,7 +201,7 @@ model BrandAlias {
 }
 
 model CanonicalPart {
-  id                       String   @id @default(uuid())
+  id                       String    @id @default(uuid())
   title                    String
   brand                    String?
   manufacturer             String?
@@ -215,48 +215,48 @@ model CanonicalPart {
   billableWeightKg         Float? // max(actual, volumetric) — precomputed for quotes
   oeNumbers                String[]
   fitmentFlags             String[]
-  imageUrls                String[] @default([])
+  imageUrls                String[]  @default([])
   listingUrl               String?
   ebayItemId               String?
   compatibility            Json?
-  partSource               String   @default("OEM") // OEM, AFTERMARKET
-  qualityTier              String   @default("USED") // NEW, USED, REFURBISHED, REMANUFACTURED, FOR_PARTS
-  fitmentStatus            String   @default("NEEDS_REVIEW")
+  partSource               String    @default("OEM") // OEM, AFTERMARKET
+  qualityTier              String    @default("USED") // NEW, USED, REFURBISHED, REMANUFACTURED, FOR_PARTS
+  fitmentStatus            String    @default("NEEDS_REVIEW")
   fitmentConfidence        Float?
   normalizedTitle          String?
   description              String?
-  partType                 String   @default("UNCLASSIFIED")
+  partType                 String    @default("UNCLASSIFIED")
   primaryBrandId           String?
   manufacturerPartNumber   String?
   genuineOemPartNumber     String?
   dimensions               Json?
   position                 String?
   vehicleSystem            String?
-  classificationStatus     String   @default("REVIEW_REQUIRED")
+  classificationStatus     String    @default("REVIEW_REQUIRED")
   classificationConfidence Float?
   classificationReason     String?
   completenessScore        Float?
-  verificationStatus       String   @default("UNVERIFIED")
+  verificationStatus       String    @default("UNVERIFIED")
   itemSpecifics            Json?
   enrichedAt               DateTime? // when itemSpecifics were last enriched (tracking)
   enrichmentSource         String? // which enrichment campaign wrote itemSpecifics (e.g. llm:mimo, febest.de)
-  enrichmentStatus         String   @default("NONE") // NONE | QUEUED | RUNNING | DONE | FAILED | DEFERRED
-  enrichmentVersion        Int      @default(0) // bumped when prompts/pipeline change, to trigger re-runs
+  enrichmentStatus         String    @default("NONE") // NONE | QUEUED | RUNNING | DONE | FAILED | DEFERRED
+  enrichmentVersion        Int       @default(0) // bumped when prompts/pipeline change, to trigger re-runs
   // Infographic content only (headline/specs/highlights), not a rendered image.
   // The SVG is templated on demand, so redesigns never require a re-render or
   // a second LLM call. See enrichment/infographic-renderer.ts.
   infographicSpec          Json?
-  infographicVersion       Int      @default(0) // spec-shape generation, bumped to force regeneration
+  infographicVersion       Int       @default(0) // spec-shape generation, bumped to force regeneration
   infographicGeneratedAt   DateTime?
   material                 String?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   offers         SellerOffer[]
   fitments       Fitment[]
   supportTickets SupportTicket[]
   uploadRows     SellerUploadRow[]
-  primaryBrand   BrandMaster?        @relation(fields: [primaryBrandId], references: [id])
+  primaryBrand   BrandMaster?            @relation(fields: [primaryBrandId], references: [id])
   partNumbers    CatalogPartNumber[]
   media          ProductMedia[]
   sourceRecords  SourceRecord[]
@@ -489,34 +489,34 @@ model VehicleConfiguration {
 
 /// eBay Motors Vehicle List (MVL) — US / DE / UK / AU catalogs for verified fitment.
 model MvlVehicle {
-  id               String   @id @default(uuid())
+  id              String   @id @default(uuid())
   /// eBay ePID when present (US / AU). Nullable for DE/UK K-Type rows.
-  epid             String?
+  epid            String?
   /// TecDoc / eBay K-Type id when present (DE / UK / AU).
-  kType            String?
+  kType           String?
   /// Marketplace catalog: US | DE | UK | AU
-  market           String
+  market          String
   /// Stable upsert key, e.g. US:73920154 or DE:14419:1970:1600SPORT
-  sourceKey        String
-  year             Int
-  make             String
-  model            String
-  trim             String?
-  submodel         String?
-  engine           String?
-  driveType        String?
-  fuelType         String?
-  body             String?
-  aspiration       String?
-  displayName      String?
+  sourceKey       String
+  year            Int
+  make            String
+  model           String
+  trim            String?
+  submodel        String?
+  engine          String?
+  driveType       String?
+  fuelType        String?
+  body            String?
+  aspiration      String?
+  displayName     String?
   /// Original region/body/platform field from source file (not market code).
-  region           String?
-  partsModel       String?
-  numDoors         Int?
-  normalizedMake   String
-  normalizedModel  String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  region          String?
+  partsModel      String?
+  numDoors        Int?
+  normalizedMake  String
+  normalizedModel String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([market, sourceKey])
   @@index([epid])
@@ -550,11 +550,11 @@ model Fitment {
 }
 
 model FitmentEvidence {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   fitmentId       String
   evidenceType    String // MANUAL, EBAY_COMPATIBILITY, SELLER_DECLARED, OEM_CROSS_REFERENCE, VIN, TITLE_PARSE
   evidenceLevel   String // A-F
-  confidence      Float    @default(0)
+  confidence      Float     @default(0)
   source          String?
   sourceRecordId  String?
   originalValue   Json?
@@ -562,7 +562,7 @@ model FitmentEvidence {
   reason          String?
   verifiedBy      String?
   verifiedAt      DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   fitment Fitment @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
 
@@ -644,33 +644,39 @@ model SourceRecord {
 }
 
 model User {
-  id                   String             @id @default(uuid())
-  email                String?            @unique
-  phone                String?            @unique
-  phoneVerified        Boolean            @default(false)
-  name                 String?
-  /** BUYER | SELLER | ADMIN */
-  role                 String             @default("BUYER")
-  passwordHash         String?
-  emailVerified        Boolean            @default(false)
-  emailVerifyToken     String?
-  emailVerifyExpiry    DateTime?
-  passwordResetToken   String?
-  passwordResetExpiry  DateTime?
-  otpCode              String?
-  otpExpiry            DateTime?
-  vehicles             UserVehicle[]
-  memberships          SellerMembership[]
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  id                  String             @id @default(uuid())
+  email               String?            @unique
+  phone               String?            @unique
+  phoneVerified       Boolean            @default(false)
+  name                String?
+  /**
+   * BUYER | SELLER | ADMIN
+   */
+  role                String             @default("BUYER")
+  passwordHash        String?
+  emailVerified       Boolean            @default(false)
+  emailVerifyToken    String?
+  emailVerifyExpiry   DateTime?
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  otpCode             String?
+  otpExpiry           DateTime?
+  vehicles            UserVehicle[]
+  memberships         SellerMembership[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 }
 
-/** Links a user login to one seller store (3 staff accounts per seller). */
+/**
+ * Links a user login to one seller store (3 staff accounts per seller).
+ */
 model SellerMembership {
   id        String   @id @default(uuid())
   userId    String
   sellerId  String
-  /** OWNER | MANAGER | STAFF */
+  /**
+   * OWNER | MANAGER | STAFF
+   */
   role      String   @default("STAFF")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -725,15 +731,44 @@ model CartItem {
   @@index([sellerOfferId])
 }
 
+/**
+ * Payment-lifecycle status of the parent Order. Fulfillment status lives on SellerOrder instead.
+ */
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PAYMENT_FAILED
+  CANCELLED
+  REFUNDED
+}
+
+/**
+ * Fulfillment status of one seller's slice of a multi-seller Order.
+ */
+enum SellerOrderStatus {
+  AWAITING_PAYMENT
+  PROCESSING
+  SHIPPED
+  CANCELLED
+  DELIVERED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
 model Order {
-  id              String   @id @default(uuid())
+  id              String      @id @default(uuid())
   buyerId         String?
   totalAmount     Float
-  currency        String   @default("AED")
-  status          String   @default("PENDING_PAYMENT")
+  currency        String      @default("AED")
+  status          OrderStatus @default(PENDING_PAYMENT)
   shippingAddress Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   sellerOrders   SellerOrder[]
   paymentIntent  PaymentIntent?
@@ -741,18 +776,18 @@ model Order {
 }
 
 model SellerOrder {
-  id                  String   @id @default(uuid())
+  id                  String            @id @default(uuid())
   parentOrderId       String
   sellerId            String
   subTotal            Float
   shippingTotal       Float
-  marketplaceFeeTotal Float    @default(0)
-  sellerProceedsTotal Float    @default(0)
-  status              String   @default("AWAITING_PAYMENT")
+  marketplaceFeeTotal Float             @default(0)
+  sellerProceedsTotal Float             @default(0)
+  status              SellerOrderStatus @default(AWAITING_PAYMENT)
   trackingNumber      String?
   carrier             String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   parentOrder    Order           @relation(fields: [parentOrderId], references: [id])
   seller         Seller          @relation(fields: [sellerId], references: [id])
@@ -782,15 +817,15 @@ model OrderItem {
 }
 
 model PaymentIntent {
-  id         String   @id @default(uuid())
-  orderId    String   @unique
+  id         String        @id @default(uuid())
+  orderId    String        @unique
   provider   String // generic, stripe, checkout.com
   externalId String?
   amount     Float
   currency   String
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  status     PaymentStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id])
 }
@@ -878,12 +913,12 @@ model SellerUploadRow {
 }
 
 model CanonicalPartRedirect {
-  id              String   @id @default(uuid())
-  fromPartId      String
-  toPartId        String
-  reason          String?
-  mergedBy        String?
-  createdAt       DateTime @default(now())
+  id         String   @id @default(uuid())
+  fromPartId String
+  toPartId   String
+  reason     String?
+  mergedBy   String?
+  createdAt  DateTime @default(now())
 
   fromPart CanonicalPart @relation("RedirectFrom", fields: [fromPartId], references: [id])
   toPart   CanonicalPart @relation("RedirectTo", fields: [toPartId], references: [id])
@@ -965,26 +1000,62 @@ model SearchOutbox {
 }
 
 model SupportTicket {
-  id              String   @id @default(uuid())
-  orderId         String?
-  sellerOrderId   String?
-  canonicalPartId String?
-  sellerOfferId   String?
-  customerName    String?
-  customerEmail   String
-  category        String
-  subject         String
-  message         String
-  status          String   @default("OPEN")
-  priority        String   @default("NORMAL")
-  internalNotes   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(uuid())
+  orderId           String?
+  sellerOrderId     String?
+  canonicalPartId   String?
+  sellerOfferId     String?
+  customerName      String?
+  customerEmail     String
+  category          String
+  subject           String
+  message           String
+  status            String   @default("OPEN")
+  priority          String   @default("NORMAL")
+  internalNotes     String?
+  /**
+   * Loose FK to User (ADMIN role), same convention as Order.buyerId — no Prisma relation.
+   */
+  assignedToUserId  String?
+  /**
+   * Structured fields for category: 'FREIGHT_QUOTE' tickets — replaces stuffing these into `message`.
+   */
+  shippingCountry   String?
+  estimatedWeightKg Float?
+  cartSummary       String?
+  carrier           String?
+  quotedRate        Float?
+  quotedCurrency    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  order         Order?         @relation(fields: [orderId], references: [id])
-  sellerOrder   SellerOrder?   @relation(fields: [sellerOrderId], references: [id])
-  canonicalPart CanonicalPart? @relation(fields: [canonicalPartId], references: [id])
-  sellerOffer   SellerOffer?   @relation(fields: [sellerOfferId], references: [id])
+  order         Order?          @relation(fields: [orderId], references: [id])
+  sellerOrder   SellerOrder?    @relation(fields: [sellerOrderId], references: [id])
+  canonicalPart CanonicalPart?  @relation(fields: [canonicalPartId], references: [id])
+  sellerOffer   SellerOffer?    @relation(fields: [sellerOfferId], references: [id])
+  messages      TicketMessage[]
 
   @@index([canonicalPartId])
+  @@index([assignedToUserId])
+}
+
+enum TicketMessageAuthor {
+  ADMIN
+  CUSTOMER
+}
+
+/**
+ * One reply in a ticket's thread. Replaces string-concatenating replies into SupportTicket.internalNotes.
+ */
+model TicketMessage {
+  id         String              @id @default(uuid())
+  ticketId   String
+  authorType TicketMessageAuthor
+  authorName String?
+  message    String
+  createdAt  DateTime            @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId, createdAt])
 }

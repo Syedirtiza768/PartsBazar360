@@ -189,6 +189,28 @@ export class TamaraService {
     });
   }
 
+  /**
+   * NOTE: shaped from Tamara's documented `/payments/capture` contract (same
+   * order_id + Money pattern), since no sandbox credentials were reachable
+   * to verify the refund endpoint directly. Confirm against Tamara's API
+   * reference before relying on this in production.
+   */
+  refundOrder(input: {
+    orderId: string;
+    amount: number;
+    currency: TamaraCurrency;
+    comment?: string;
+  }): Promise<{ order_id: string; refund_id: string; status: string }> {
+    return this.request('/payments/refund', {
+      method: 'POST',
+      body: JSON.stringify({
+        order_id: input.orderId,
+        total_amount: { amount: input.amount, currency: input.currency },
+        ...(input.comment ? { comment: input.comment.slice(0, 200) } : {}),
+      }),
+    });
+  }
+
   verifyWebhookToken(token: string | undefined): void {
     const secret = process.env.TAMARA_NOTIFICATION_TOKEN?.trim();
     if (!secret) {

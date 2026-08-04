@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Param,
@@ -6,16 +7,29 @@ import {
   Logger,
   Get,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
+import {
+  OrderStatus,
+  PaymentStatus,
+  Prisma,
+  SellerOrderStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { EmailService } from '../email/email.service';
+import { OrderStatusService } from '../order/order-status.service';
+import { StripeService } from '../checkout/stripe.service';
+import { TamaraService, type TamaraCurrency } from '../checkout/tamara.service';
+import { AuditService } from '../audit/audit.service';
 import {
   REALTRACK_MARKETPLACE_SELLERS,
   resolveRealTrackSyncTarget,
@@ -32,6 +46,10 @@ export class OperationsController {
     @InjectQueue('ingestion') private readonly ingestionQueue: Queue,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly orderStatus: OrderStatusService,
+    private readonly stripeService: StripeService,
+    private readonly tamaraService: TamaraService,
+    private readonly audit: AuditService,
   ) {
     this.redis = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
@@ -41,6 +59,7 @@ export class OperationsController {
   }
 
   @Get('dashboard')
+  @Roles('ADMIN', 'FULFILLMENT_OPERATOR', 'SUPPORT_AGENT')
   async getDashboard() {
     const [
       openTickets,
@@ -57,7 +76,7 @@ export class OperationsController {
         where: { status: { in: ['PROCESSING', 'NEEDS_REVIEW'] } },
       }),
       this.prisma.sellerOrder.count({
-        where: { status: { in: ['PROCESSING', 'READY_TO_SHIP'] } },
+        where: { status: 'PROCESSING' },
       }),
       this.prisma.order.findMany({
         take: 8,
@@ -93,9 +112,74 @@ export class OperationsController {
   }
 
   @Get('orders')
-  async listMarketplaceOrders() {
-    return this.prisma.order.findMany({
-      orderBy: { createdAt: 'desc' },
+  @Roles('ADMIN', 'FULFILLMENT_OPERATOR')
+  async listMarketplaceOrders(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: OrderStatus,
+    @Query('buyerEmail') buyerEmail?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const pageNum = Math.max(1, page ? parseInt(page, 10) || 1 : 1);
+    const take = Math.min(
+      Math.max(1, limit ? parseInt(limit, 10) || 25 : 25),
+      100,
+    );
+    const skip = (pageNum - 1) * take;
+
+    const where: Prisma.OrderWhereInput = {};
+    if (status) {
+      if (!Object.values(OrderStatus).includes(status)) {
+        throw new BadRequestException(`Unknown status: ${status}`);
+      }
+      where.status = status;
+    }
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+    if (buyerEmail) {
+      const buyers = await this.prisma.user.findMany({
+        where: { email: { contains: buyerEmail, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      where.buyerId = { in: buyers.map((b) => b.id) };
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          sellerOrders: {
+            include: {
+              seller: true,
+              items: {
+                include: { sellerOffer: { include: { canonicalPart: true } } },
+              },
+              supportTickets: true,
+            },
+          },
+          paymentIntent: true,
+          supportTickets: true,
+        },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return { items, total, page: pageNum, limit: take };
+  }
+
+  @Get('orders/:orderId')
+  @Roles('ADMIN', 'FULFILLMENT_OPERATOR')
+  async getOrderDetail(@Param('orderId') orderId: string) {
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
       include: {
         sellerOrders: {
           include: {
@@ -110,14 +194,193 @@ export class OperationsController {
         supportTickets: true,
       },
     });
+
+    const buyer = order.buyerId
+      ? await this.prisma.user.findUnique({
+          where: { id: order.buyerId },
+          select: { id: true, name: true, email: true, phone: true },
+        })
+      : null;
+
+    return { ...order, buyer };
+  }
+
+  @Post('orders/:orderId/cancel')
+  async cancelOrder(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { sellerOrders: true, paymentIntent: true },
+    });
+
+    if (order.status === OrderStatus.CANCELLED) return order;
+    if (order.status === OrderStatus.REFUNDED) {
+      throw new BadRequestException('This order has already been refunded');
+    }
+
+    const shippedStatuses: SellerOrderStatus[] = [
+      SellerOrderStatus.SHIPPED,
+      SellerOrderStatus.DELIVERED,
+    ];
+    const alreadyShipped = order.sellerOrders.some((so) =>
+      shippedStatuses.includes(so.status),
+    );
+    if (alreadyShipped) {
+      throw new BadRequestException(
+        'Cannot cancel an order once any seller has shipped — use refund instead',
+      );
+    }
+
+    let refunded = false;
+    if (order.paymentIntent?.status === PaymentStatus.SUCCEEDED) {
+      await this.refundPayment(
+        order.paymentIntent,
+        `Order ${orderId} cancelled by admin`,
+      );
+      refunded = true;
+    }
+
+    const [updatedOrder] = await this.prisma.$transaction([
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELLED },
+      }),
+      this.prisma.sellerOrder.updateMany({
+        where: {
+          parentOrderId: orderId,
+          status: {
+            in: [
+              SellerOrderStatus.AWAITING_PAYMENT,
+              SellerOrderStatus.PROCESSING,
+            ],
+          },
+        },
+        data: { status: SellerOrderStatus.CANCELLED },
+      }),
+    ]);
+
+    await this.audit.record({
+      action: 'ORDER_CANCELLED',
+      entityType: 'Order',
+      entityId: orderId,
+      actorType: user.role,
+      actorId: user.userId,
+      originalValue: { status: order.status },
+      normalizedValue: { status: OrderStatus.CANCELLED },
+      metadata: { refunded },
+    });
+
+    return { ...updatedOrder, refunded };
+  }
+
+  @Post('orders/:orderId/refund')
+  async refundOrder(
+    @Param('orderId') orderId: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { paymentIntent: true },
+    });
+
+    if (!order.paymentIntent) {
+      throw new BadRequestException('This order has no payment to refund');
+    }
+    if (order.paymentIntent.status !== PaymentStatus.SUCCEEDED) {
+      throw new BadRequestException(
+        `Only a succeeded payment can be refunded (current: ${order.paymentIntent.status})`,
+      );
+    }
+
+    await this.refundPayment(
+      order.paymentIntent,
+      body.reason || `Order ${orderId} refunded by admin`,
+    );
+
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.REFUNDED },
+      include: { paymentIntent: true },
+    });
+
+    await this.audit.record({
+      action: 'ORDER_REFUNDED',
+      entityType: 'Order',
+      entityId: orderId,
+      actorType: user.role,
+      actorId: user.userId,
+      originalValue: { status: order.status },
+      normalizedValue: { status: OrderStatus.REFUNDED },
+      metadata: { reason: body.reason },
+    });
+
+    return updated;
+  }
+
+  /** Routes a refund to the right payment provider and marks the PaymentIntent REFUNDED once it succeeds. */
+  private async refundPayment(
+    payment: {
+      id: string;
+      provider: string;
+      externalId: string | null;
+      amount: number;
+      currency: string;
+    },
+    reasonNote: string,
+  ): Promise<void> {
+    if (!payment.externalId) {
+      throw new BadRequestException(
+        'Payment has no provider reference to refund',
+      );
+    }
+    if (payment.provider === 'stripe') {
+      await this.stripeService.refundPayment(payment.externalId, reasonNote);
+    } else if (payment.provider === 'tamara') {
+      await this.tamaraService.refundOrder({
+        orderId: payment.externalId,
+        amount: payment.amount,
+        currency: payment.currency as TamaraCurrency,
+        comment: reasonNote,
+      });
+    } else {
+      throw new BadRequestException(
+        `Unsupported payment provider for refund: ${payment.provider}`,
+      );
+    }
+    await this.prisma.paymentIntent.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.REFUNDED },
+    });
   }
 
   @Patch('seller-orders/:sellerOrderId/fulfillment')
+  @Roles('ADMIN', 'FULFILLMENT_OPERATOR')
   async updateSellerOrderFulfillment(
     @Param('sellerOrderId') sellerOrderId: string,
     @Body()
-    body: { status?: string; trackingNumber?: string; carrier?: string },
+    body: {
+      status?: SellerOrderStatus;
+      trackingNumber?: string;
+      carrier?: string;
+    },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    let previousStatus: SellerOrderStatus | undefined;
+    if (body.status) {
+      if (!Object.values(SellerOrderStatus).includes(body.status)) {
+        throw new BadRequestException(`Unknown status: ${body.status}`);
+      }
+      const current = await this.prisma.sellerOrder.findUniqueOrThrow({
+        where: { id: sellerOrderId },
+        select: { status: true },
+      });
+      this.orderStatus.assertSellerOrderTransition(current.status, body.status);
+      previousStatus = current.status;
+    }
+
     const sellerOrder = await this.prisma.sellerOrder.update({
       where: { id: sellerOrderId },
       data: {
@@ -133,6 +396,22 @@ export class OperationsController {
         },
       },
     });
+
+    if (body.status && previousStatus) {
+      await this.audit.record({
+        action: 'SELLER_ORDER_STATUS_CHANGED',
+        entityType: 'SellerOrder',
+        entityId: sellerOrderId,
+        actorType: user.role,
+        actorId: user.userId,
+        originalValue: { status: previousStatus },
+        normalizedValue: { status: body.status },
+        metadata: {
+          trackingNumber: body.trackingNumber,
+          carrier: body.carrier,
+        },
+      });
+    }
 
     // Send shipment notification to buyer when tracking number is provided
     if (body.trackingNumber && sellerOrder.parentOrder?.buyerId) {
