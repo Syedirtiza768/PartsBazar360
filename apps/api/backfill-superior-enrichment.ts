@@ -264,14 +264,43 @@ async function main() {
   const searchService = new OpenSearchService();
   searchService.onModuleInit();
 
+  // Step 1: Resolve listing_id (SellerOffer.id) → canonicalPartId
+  console.log('Resolving SellerOffer → CanonicalPart mapping...');
+  const listingIds = [...allIds];
+  const offerToPartMap = new Map<string, string>(); // offerId → canonicalPartId
+
+  for (let i = 0; i < listingIds.length; i += 500) {
+    const chunk = listingIds.slice(i, i + 500);
+    const offers = await prisma.sellerOffer.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, canonicalPartId: true },
+    });
+    for (const offer of offers) {
+      offerToPartMap.set(offer.id, offer.canonicalPartId);
+    }
+    if ((i + 500) % 5000 === 0 || i + 500 >= listingIds.length) {
+      console.log(`  Resolved ${Math.min(i + 500, listingIds.length)}/${listingIds.length} offers → ${offerToPartMap.size} parts`);
+    }
+  }
+
+  // Deduplicate: multiple offers can map to the same CanonicalPart
+  const uniquePartIds = [...new Set(offerToPartMap.values())];
+  console.log(`Unique CanonicalPart IDs to update: ${uniquePartIds.length}`);
+
+  // Build reverse map: canonicalPartId → all listing_ids (offer IDs) that reference it
+  const partToListingIds = new Map<string, string[]>();
+  for (const [offerId, partId] of offerToPartMap) {
+    if (!partToListingIds.has(partId)) partToListingIds.set(partId, []);
+    partToListingIds.get(partId)!.push(offerId);
+  }
+
   let imagesUpdated = 0;
   let enrichmentUpdated = 0;
   let reindexed = 0;
   let notFound = 0;
   let errors = 0;
 
-  const ids = [...allIds];
-  const batch = limit ? ids.slice(0, limit) : ids;
+  const batch = limit ? uniquePartIds.slice(0, Math.ceil(limit * uniquePartIds.length / listingIds.length)) : uniquePartIds;
   console.log(`Processing ${batch.length} parts in chunks of ${chunkSize}...\n`);
 
   for (let i = 0; i < batch.length; i += chunkSize) {
@@ -282,12 +311,18 @@ async function main() {
     });
     const foundIds = new Set(parts.map((p) => p.id));
 
-    for (const id of chunk) {
-      if (!foundIds.has(id)) { notFound++; continue; }
+    for (const partId of chunk) {
+      if (!foundIds.has(partId)) { notFound++; continue; }
 
-      const part = parts.find((p) => p.id === id)!;
-      const img = imageData.get(id);
-      const enr = enrichmentData.get(id);
+      const part = parts.find((p) => p.id === partId)!;
+      // Get all listing_ids (offer IDs) that map to this part, and look up data from CSVs
+      const offerIds = partToListingIds.get(partId) || [];
+      let img: ImageRecord | undefined;
+      let enr: EnrichmentRecord | undefined;
+      for (const oid of offerIds) {
+        if (!img) img = imageData.get(oid);
+        if (!enr) enr = enrichmentData.get(oid);
+      }
       const updateData: Record<string, unknown> = {};
       let needsUpdate = false;
 
@@ -326,9 +361,9 @@ async function main() {
       if (!needsUpdate) continue;
 
       try {
-        await prisma.canonicalPart.update({ where: { id }, data: updateData as any });
+        await prisma.canonicalPart.update({ where: { id: partId }, data: updateData as any });
         const updatedPart = await prisma.canonicalPart.findUnique({
-          where: { id },
+          where: { id: partId },
           include: { fitments: true, offers: { include: { seller: true } } },
         });
         if (updatedPart) {
@@ -355,7 +390,7 @@ async function main() {
         }
       } catch (err) {
         errors++;
-        if (errors <= 10) console.error(`  Error updating ${id}:`, (err as Error).message);
+        if (errors <= 10) console.error(`  Error updating ${partId}:`, (err as Error).message);
       }
     }
 
