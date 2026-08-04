@@ -10,8 +10,8 @@ import { EmptyState } from '@repo/ui/empty-state';
 import { PageHeader } from '@repo/ui/page-header';
 import { SkeletonText } from '@repo/ui/skeleton';
 import { CheckCircleIcon } from '@repo/ui/icons';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+import { useAdminAuth } from '@/lib/auth-context';
+import { API_BASE_URL, apiFetch } from '@/lib/api';
 
 interface QueueCount {
   queueType: string;
@@ -38,6 +38,7 @@ interface ReviewTask {
 }
 
 export default function CatalogGovernancePage() {
+  const { token } = useAdminAuth();
   const [queues, setQueues] = useState<QueueCount[]>([]);
   const [openTotal, setOpenTotal] = useState(0);
   const [activeQueue, setActiveQueue] = useState<string>(REVIEW_QUEUE_TYPES[0]);
@@ -51,8 +52,8 @@ export default function CatalogGovernancePage() {
     setError(null);
     try {
       const [queueRes, reviewRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/catalog/queues`),
-        fetch(`${API_BASE_URL}/admin/catalog/reviews?queueType=${encodeURIComponent(queueType)}&status=OPEN`),
+        apiFetch(token, `${API_BASE_URL}/admin/catalog/queues`),
+        apiFetch(token, `${API_BASE_URL}/admin/catalog/reviews?queueType=${encodeURIComponent(queueType)}&status=OPEN`),
       ]);
       if (!queueRes.ok || !reviewRes.ok) throw new Error('Failed to load catalog queues');
       const queueData = await queueRes.json();
@@ -75,7 +76,7 @@ export default function CatalogGovernancePage() {
   const resolve = async (taskId: string, status: string) => {
     setResolving(taskId);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/catalog/reviews/${taskId}`, {
+      const res = await apiFetch(token, `${API_BASE_URL}/admin/catalog/reviews/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, resolution: status === 'RESOLVED' ? 'Reviewed in admin console' : 'Dismissed', resolvedBy: 'admin' }),

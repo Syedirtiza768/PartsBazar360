@@ -5,14 +5,23 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { AppShell, type NavItem } from "@repo/ui/app-shell";
 import { Spinner } from "@repo/ui/spinner";
-import { GaugeIcon, ClipboardIcon, ShieldIcon, GridIcon } from "@repo/ui/icons";
+import {
+  GaugeIcon,
+  ClipboardIcon,
+  GridIcon,
+  StoreIcon,
+  TruckIcon,
+  MessageIcon,
+} from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/", icon: GaugeIcon },
+  { label: "Orders", href: "/orders", icon: TruckIcon, matchPrefix: true },
+  { label: "Support", href: "/support", icon: MessageIcon, matchPrefix: true },
   { label: "Catalog queues", href: "/catalog", icon: ClipboardIcon, matchPrefix: true },
-  { label: "Marketplace health", href: "/", icon: GridIcon },
-  { label: "Operations", href: "/operations", icon: GridIcon },
+  { label: "Operations", href: "/operations", icon: GridIcon, matchPrefix: true },
+  { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
 ];
 
 /** Centred, responsive status screen for the pre-authenticated states. */

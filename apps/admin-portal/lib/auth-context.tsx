@@ -12,6 +12,12 @@ import {
 
 const TOKEN_KEY = "pb360_admin_access_token";
 
+// Staff roles allowed into this console. Every role sees the same nav today —
+// the API is what actually restricts what each role can do (e.g. a
+// SUPPORT_AGENT's PATCH to /operations/orders is rejected server-side even
+// though the Orders link is visible). Trimming the nav per role is follow-up work.
+const STAFF_ROLES = ["ADMIN", "SUPPORT_AGENT", "FULFILLMENT_OPERATOR"];
+
 export type AdminUser = {
   id: string;
   email: string;
@@ -71,7 +77,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         });
         const data = await res.json();
         if (cancelled) return;
-        if (res.ok && data.user?.role === "ADMIN") {
+        if (res.ok && data.user && STAFF_ROLES.includes(data.user.role)) {
           persist(existing, data.user as AdminUser);
         } else {
           persist(null, null);
@@ -97,8 +103,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) throw new Error(await parseError(res));
       const data = (await res.json()) as { user: AdminUser; accessToken: string };
-      if (data.user.role !== "ADMIN") {
-        throw new Error("This portal is for marketplace admins only.");
+      if (!STAFF_ROLES.includes(data.user.role)) {
+        throw new Error("This portal is for marketplace staff only.");
       }
       persist(data.accessToken, data.user);
       return data.user;
@@ -113,7 +119,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       ready,
-      isAdmin: Boolean(user && token && user.role === "ADMIN"),
+      isAdmin: Boolean(user && token && STAFF_ROLES.includes(user.role)),
       login,
       logout,
     }),

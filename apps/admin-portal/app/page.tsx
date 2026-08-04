@@ -7,8 +7,7 @@ import { Badge } from "@repo/ui/badge";
 import { PageBody } from "@repo/ui/container";
 import { PageHeader } from "@repo/ui/page-header";
 import { useAdminAuth } from "@/lib/auth-context";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
 
 const PORTALS = [
   {
@@ -70,9 +69,7 @@ export default function Home() {
     if (!token) return;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/operations/dashboard`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch(token, `${API_BASE_URL}/operations/dashboard`);
         if (res.ok) setDashboard(await res.json());
       } catch {
         /* silent fail */
