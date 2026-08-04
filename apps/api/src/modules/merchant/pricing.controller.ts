@@ -1,29 +1,26 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { PricingService } from '../pricing/pricing.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SellerId } from '../auth/seller-id.decorator';
 
 @Controller('merchant/pricing')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SELLER')
 export class MerchantPricingController {
   constructor(private readonly pricing: PricingService) {}
 
   @Get()
-  getPricing(@Query('sellerId') sellerId: string) {
-    if (!sellerId) throw new BadRequestException('sellerId is required');
+  getPricing(@SellerId() sellerId: string) {
     return this.pricing.getSellerPricing(sellerId);
   }
 
   @Post('quote')
   quote(
-    @Query('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Body() body: { category?: string; sellerBasePrice: number },
   ) {
-    if (!sellerId) throw new BadRequestException('sellerId is required');
     return this.pricing.quote(
       sellerId,
       body.category,

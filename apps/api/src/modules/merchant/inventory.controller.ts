@@ -6,13 +6,20 @@ import {
   Param,
   Query,
   NotFoundException,
+  UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { BuyerCacheService } from '../search/buyer-cache.service';
 import { OpenSearchService } from '../search/opensearch.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SellerId } from '../auth/seller-id.decorator';
 
 @Controller('merchant/inventory')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SELLER')
 export class InventoryController {
   constructor(
     private readonly prisma: PrismaService,
@@ -23,13 +30,10 @@ export class InventoryController {
 
   @Get()
   async getInventory(
-    @Query('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    if (!sellerId)
-      throw new NotFoundException('sellerId query parameter is required');
-
     const pageNum = Math.max(1, page ? parseInt(page, 10) || 1 : 1);
     const take = Math.min(
       Math.max(1, limit ? parseInt(limit, 10) || 50 : 50),
@@ -68,7 +72,7 @@ export class InventoryController {
   @Patch(':offerId')
   async updateOffer(
     @Param('offerId') offerId: string,
-    @Query('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Body() body: { price?: number; status?: string },
   ) {
     const offer = await this.prisma.sellerOffer.findFirst({

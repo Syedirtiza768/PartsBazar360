@@ -4,14 +4,21 @@ import {
   Post,
   Body,
   BadRequestException,
+  NotFoundException,
   Param,
   Query,
-  NotFoundException,
+  UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { TamaraService, type TamaraCurrency } from '../checkout/tamara.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SellerId } from '../auth/seller-id.decorator';
 
 @Controller('merchant/orders')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SELLER')
 export class OrdersController {
   constructor(
     private readonly prisma: PrismaService,
@@ -20,13 +27,10 @@ export class OrdersController {
 
   @Get()
   async getOrders(
-    @Query('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    if (!sellerId)
-      throw new NotFoundException('sellerId query parameter is required');
-
     const pageNum = Math.max(1, page ? parseInt(page, 10) || 1 : 1);
     const take = Math.min(
       Math.max(1, limit ? parseInt(limit, 10) || 50 : 50),
@@ -67,7 +71,7 @@ export class OrdersController {
   @Post(':sellerOrderId/fulfill')
   async fulfillOrder(
     @Param('sellerOrderId') sellerOrderId: string,
-    @Query('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Body() body: { trackingNumber: string; carrier: string },
   ) {
     const order = await this.prisma.sellerOrder.findFirst({
@@ -103,8 +107,7 @@ export class OrdersController {
 
       await this.tamaraService.captureOrder({
         orderId: payment.externalId,
-        amount:
-          Math.round((order.subTotal + order.shippingTotal) * 100) / 100,
+        amount: Math.round((order.subTotal + order.shippingTotal) * 100) / 100,
         shippingAmount: order.shippingTotal,
         currency: payment.currency as TamaraCurrency,
         shippedAt: new Date(),
@@ -122,8 +125,7 @@ export class OrdersController {
             item.sellerOfferId,
           quantity: item.quantity,
           unitAmount: item.unitPrice,
-          totalAmount:
-            Math.round(item.unitPrice * item.quantity * 100) / 100,
+          totalAmount: Math.round(item.unitPrice * item.quantity * 100) / 100,
         })),
       });
     }

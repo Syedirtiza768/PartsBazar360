@@ -7,19 +7,25 @@ import {
   Patch,
   Post,
   Put,
-  Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MerchantUploadsService } from './uploads.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SellerId } from '../auth/seller-id.decorator';
 
 @Controller('merchant/uploads')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SELLER')
 export class UploadsController {
   constructor(private readonly uploads: MerchantUploadsService) {}
 
   @Get()
-  async listUploads(@Query('sellerId') sellerId: string) {
+  async listUploads(@SellerId() sellerId: string) {
     return this.uploads.listJobs(sellerId);
   }
 
@@ -32,7 +38,7 @@ export class UploadsController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: any,
-    @Body('sellerId') sellerId: string,
+    @SellerId() sellerId: string,
     @Body('defaultPartSource') defaultPartSource?: string,
     @Body('defaultQualityTier') defaultQualityTier?: string,
     @Body('defaultBrand') defaultBrand?: string,
@@ -130,8 +136,7 @@ export class UploadsController {
   }
 
   @Post('reprice')
-  async repriceFromFilePrices(@Query('sellerId') sellerId: string) {
-    if (!sellerId) throw new BadRequestException('sellerId is required');
+  async repriceFromFilePrices(@SellerId() sellerId: string) {
     return this.uploads.repriceFromFilePrices(sellerId);
   }
 }

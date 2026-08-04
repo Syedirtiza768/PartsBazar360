@@ -1,15 +1,18 @@
-import { Controller, Get, Query, NotFoundException } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SellerId } from '../auth/seller-id.decorator';
 
 @Controller('merchant/analytics')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SELLER')
 export class AnalyticsController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('summary')
-  async getSummary(@Query('sellerId') sellerId: string) {
-    if (!sellerId)
-      throw new NotFoundException('sellerId query parameter is required');
-
+  async getSummary(@SellerId() sellerId: string) {
     const [activeOffers, pendingOrders, aggregates] = await Promise.all([
       this.prisma.sellerOffer.count({
         where: { sellerId, status: 'ACTIVE' },
