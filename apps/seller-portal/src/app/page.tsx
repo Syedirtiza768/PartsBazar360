@@ -6,8 +6,8 @@ import { buttonClasses } from "@repo/ui/button";
 import { PageBody } from "@repo/ui/container";
 import { Badge } from "@repo/ui/badge";
 import { ChevronRightIcon, TruckIcon, UploadIcon, BoxIcon, CheckCircleIcon } from "@repo/ui/icons";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 
 interface Stats {
@@ -17,19 +17,21 @@ interface Stats {
 }
 
 export default function DashboardPage() {
+  const { token, sellerId } = useSellerAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState(false);
   const loading = stats === null && !error;
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/merchant/analytics/summary?sellerId=${DEMO_SELLER_ID}`)
+    if (!sellerId) return;
+    apiFetch(token, `${API_BASE_URL}/merchant/analytics/summary?sellerId=${sellerId}`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
       })
       .then(setStats)
       .catch(() => setError(true));
-  }, []);
+  }, [token, sellerId]);
 
   const priorities = [
     {

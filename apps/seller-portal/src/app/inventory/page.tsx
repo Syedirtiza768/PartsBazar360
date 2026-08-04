@@ -8,8 +8,8 @@ import { DataTable, type Column } from "@repo/ui/data-table";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
 import { BoxIcon, CheckIcon } from "@repo/ui/icons";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PartThumbnail } from "@/components/PartThumbnail";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -35,6 +35,7 @@ function PriceEditor({
   item: InventoryItem;
   onSaved: (updated: InventoryItem) => void;
 }) {
+  const { token, sellerId } = useSellerAuth();
   const initial = item.sellerBasePrice ?? item.price;
   const [value, setValue] = useState(String(initial));
   const [saving, setSaving] = useState(false);
@@ -52,7 +53,7 @@ function PriceEditor({
     setSaving(true);
     setError(false);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/inventory/${item.id}?sellerId=${DEMO_SELLER_ID}`, {
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/inventory/${item.id}?sellerId=${sellerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ price }),
@@ -118,12 +119,14 @@ function PriceEditor({
 }
 
 export default function InventoryPage() {
+  const { token, sellerId } = useSellerAuth();
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [error, setError] = useState(false);
   const loading = inventory === null && !error;
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/merchant/inventory?sellerId=${DEMO_SELLER_ID}&page=1&limit=50`)
+    if (!sellerId) return;
+    apiFetch(token, `${API_BASE_URL}/merchant/inventory?sellerId=${sellerId}&page=1&limit=50`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
@@ -134,7 +137,7 @@ export default function InventoryPage() {
         else setInventory([]);
       })
       .catch(() => setError(true));
-  }, []);
+  }, [token, sellerId]);
 
   const replaceItem = (updated: InventoryItem) => {
     setInventory((prev) => (prev ? prev.map((i) => (i.id === updated.id ? updated : i)) : prev));

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { SellerAuthProvider } from "@/lib/auth-context";
 import { Shell } from "@/components/Shell";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
@@ -28,7 +29,9 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>
-        <Shell>{children}</Shell>
+        <SellerAuthProvider>
+          <Shell>{children}</Shell>
+        </SellerAuthProvider>
       </body>
     </html>
   );

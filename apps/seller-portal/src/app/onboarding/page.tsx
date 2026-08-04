@@ -7,8 +7,8 @@ import { Input, Select, Checkbox } from "@repo/ui/field";
 import { Skeleton } from "@repo/ui/skeleton";
 import { CheckCircleIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -59,6 +59,7 @@ function StepPill({ label, done, index }: { label: string; done: boolean; index:
 }
 
 export default function OnboardingPage() {
+  const { token, sellerId } = useSellerAuth();
   // The onboarding endpoint returns a wide, evolving seller record; keep it
   // permissive rather than duplicating the API schema in the client.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,9 +73,10 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    if (!sellerId) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/merchant/onboarding?sellerId=${DEMO_SELLER_ID}`);
+      const response = await apiFetch(token, `${API_BASE_URL}/merchant/onboarding?sellerId=${sellerId}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Could not load onboarding.");
       setSeller(data);
@@ -97,7 +99,8 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, sellerId]);
 
   const completed = useMemo(
     () => [profile.legalName, profile.country, profile.phone, profile.supportEmail].filter(Boolean).length,
@@ -125,7 +128,7 @@ export default function OnboardingPage() {
         supportedConditions: split(profile.supportedConditions),
         shippingRegions: split(profile.shippingRegions),
       };
-      const response = await fetch(`${API_BASE_URL}/merchant/onboarding/profile?sellerId=${DEMO_SELLER_ID}`, {
+      const response = await apiFetch(token, `${API_BASE_URL}/merchant/onboarding/profile?sellerId=${sellerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -152,7 +155,7 @@ export default function OnboardingPage() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/merchant/onboarding/submit?sellerId=${DEMO_SELLER_ID}`, {
+      const response = await apiFetch(token, `${API_BASE_URL}/merchant/onboarding/submit?sellerId=${sellerId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acceptedByEmail, agreementVersion: "2026-07" }),

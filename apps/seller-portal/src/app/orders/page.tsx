@@ -8,8 +8,8 @@ import { EmptyState } from "@repo/ui/empty-state";
 import { Sheet } from "@repo/ui/sheet";
 import { Skeleton } from "@repo/ui/skeleton";
 import { TruckIcon, RefreshIcon, CheckCircleIcon, ClockIcon } from "@repo/ui/icons";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PartThumbnail } from "@/components/PartThumbnail";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -49,6 +49,7 @@ function ShipDialog({
   onClose: () => void;
   onShipped: () => void;
 }) {
+  const { token, sellerId } = useSellerAuth();
   const [tracking, setTracking] = useState("");
   const [carrier, setCarrier] = useState("DHL");
   const [submitting, setSubmitting] = useState(false);
@@ -63,8 +64,9 @@ function ShipDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/merchant/orders/${order.id}/fulfill?sellerId=${DEMO_SELLER_ID}`,
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/merchant/orders/${order.id}/fulfill?sellerId=${sellerId}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -134,6 +136,7 @@ function ShipDialog({
 }
 
 export default function OrdersPage() {
+  const { token, sellerId } = useSellerAuth();
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [error, setError] = useState(false);
   const [shipping, setShipping] = useState<SellerOrder | null>(null);
@@ -141,9 +144,10 @@ export default function OrdersPage() {
   const loading = orders === null && !error;
 
   const fetchOrders = async () => {
+    if (!sellerId) return;
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/orders?sellerId=${DEMO_SELLER_ID}&page=1&limit=50`);
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/orders?sellerId=${sellerId}&page=1&limit=50`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (Array.isArray(data)) setOrders(data);
@@ -159,7 +163,8 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, sellerId]);
 
   return (
     <PageBody size="wide" className="space-y-6 sm:space-y-8">

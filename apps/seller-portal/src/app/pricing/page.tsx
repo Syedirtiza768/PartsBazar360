@@ -7,8 +7,8 @@ import { Input } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
 import { Skeleton } from "@repo/ui/skeleton";
 import { TagIcon } from "@repo/ui/icons";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PageHeader } from "@/components/PageHeader";
 
 interface Assignment {
@@ -33,6 +33,7 @@ interface Quote {
 }
 
 export default function PricingPage() {
+  const { token, sellerId } = useSellerAuth();
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [basePrice, setBasePrice] = useState("100");
   const [category, setCategory] = useState("");
@@ -41,11 +42,12 @@ export default function PricingPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/merchant/pricing?sellerId=${DEMO_SELLER_ID}`)
+    if (!sellerId) return;
+    apiFetch(token, `${API_BASE_URL}/merchant/pricing?sellerId=${sellerId}`)
       .then((response) => response.json())
       .then((data) => setAssignments(Array.isArray(data) ? data : []))
       .catch(() => setError("Could not load commercial terms."));
-  }, []);
+  }, [token, sellerId]);
 
   const preview = async () => {
     setError(null);
@@ -56,7 +58,7 @@ export default function PricingPage() {
     }
     setQuoting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/merchant/pricing/quote?sellerId=${DEMO_SELLER_ID}`, {
+      const response = await apiFetch(token, `${API_BASE_URL}/merchant/pricing/quote?sellerId=${sellerId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sellerBasePrice: price, category: category || undefined }),

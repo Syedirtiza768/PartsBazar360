@@ -10,8 +10,8 @@ import { Skeleton } from "@repo/ui/skeleton";
 import { Spinner } from "@repo/ui/spinner";
 import { UploadIcon, RefreshIcon, FileTextIcon, CheckIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
-import { API_BASE_URL } from "@/lib/api";
-import { DEMO_SELLER_ID } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { useSellerAuth } from "@/lib/auth-context";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -47,6 +47,7 @@ interface UploadJob {
 }
 
 export default function UploadsPage() {
+  const { token, sellerId } = useSellerAuth();
   const [jobs, setJobs] = useState<UploadJob[] | null>(null);
   const [selectedJob, setSelectedJob] = useState<UploadJob | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -72,8 +73,9 @@ export default function UploadsPage() {
   );
 
   const loadJobs = async () => {
+    if (!sellerId) return [];
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/uploads?sellerId=${DEMO_SELLER_ID}`);
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/uploads?sellerId=${sellerId}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       const nextJobs: UploadJob[] = Array.isArray(data) ? data : [];
@@ -93,7 +95,7 @@ export default function UploadsPage() {
     if (job.rows && job.rows.length > 0) return;
     setLoadingRows(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/uploads/${job.id}`);
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/uploads/${job.id}`);
       if (res.ok) {
         const detail = await res.json();
         setSelectedJob(detail);
@@ -104,12 +106,14 @@ export default function UploadsPage() {
   };
 
   useEffect(() => {
+    if (!sellerId) return;
     loadJobs().then((initial) => {
       if (initial[0]) openJob(initial[0]);
     });
-    // Mount-only: loadJobs/openJob are recreated every render, so listing them
-    // would re-fetch the whole pipeline on each keystroke in the upload form.
-  }, []);
+    // loadJobs/openJob are recreated every render, so listing them here would
+    // re-fetch the whole pipeline on each keystroke in the upload form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, sellerId]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setFile(event.target.files?.[0] || null);
@@ -123,8 +127,9 @@ export default function UploadsPage() {
       return;
     }
 
+    if (!sellerId) return;
     const body = new FormData();
-    body.append("sellerId", DEMO_SELLER_ID);
+    body.append("sellerId", sellerId);
     body.append("defaultPartSource", defaultPartSource);
     body.append("defaultQualityTier", defaultQualityTier);
     body.append("commitMode", commitMode);
@@ -134,7 +139,7 @@ export default function UploadsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/uploads`, { method: "POST", body });
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/uploads`, { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Upload failed.");
       setSelectedJob(data);
@@ -150,7 +155,7 @@ export default function UploadsPage() {
   const handleApprove = async (row: UploadRow) => {
     setApprovingRow(row.id);
     try {
-      await fetch(`${API_BASE_URL}/merchant/uploads/rows/${row.id}/review`, {
+      await apiFetch(token, `${API_BASE_URL}/merchant/uploads/rows/${row.id}/review`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +165,7 @@ export default function UploadsPage() {
         }),
       });
       if (selectedJob) {
-        const res = await fetch(`${API_BASE_URL}/merchant/uploads/${selectedJob.id}`);
+        const res = await apiFetch(token, `${API_BASE_URL}/merchant/uploads/${selectedJob.id}`);
         if (res.ok) setSelectedJob(await res.json());
       }
       await loadJobs();
@@ -174,7 +179,7 @@ export default function UploadsPage() {
     setCommitting(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/merchant/uploads/${selectedJob.id}/commit`, { method: "POST" });
+      const res = await apiFetch(token, `${API_BASE_URL}/merchant/uploads/${selectedJob.id}/commit`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Commit failed.");
       setSelectedJob(data);
