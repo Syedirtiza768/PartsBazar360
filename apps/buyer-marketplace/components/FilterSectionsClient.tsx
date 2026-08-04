@@ -420,7 +420,6 @@ export function FilterSectionsClient({
   const brands = facets.brands ?? [];
   const makes = facets.makes ?? [];
   const partTypes = facets.partTypes ?? [];
-  const conditions = facets.conditions ?? [];
   const sourceTags = facets.sourceTags ?? [];
 
   return (
@@ -502,14 +501,6 @@ export function FilterSectionsClient({
         selected={new Set(pending.partType)}
         onToggle={(v) => toggle("partType", v)}
         onClear={() => clearField("partType")}
-      />
-      <FacetGroup
-        field="condition"
-        title="Condition"
-        facets={conditions}
-        selected={new Set(pending.condition)}
-        onToggle={(v) => toggle("condition", v)}
-        onClear={() => clearField("condition")}
       />
       <FacetGroup
         field="brand"
