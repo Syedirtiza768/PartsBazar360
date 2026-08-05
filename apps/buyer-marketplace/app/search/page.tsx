@@ -255,41 +255,46 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
-      <div className="sticky top-[5.25rem] z-30 -mx-2 flex flex-col gap-3 border-b border-slate-200 bg-white/95 px-2 pb-4 pt-1 backdrop-blur supports-[backdrop-filter]:bg-white/85 sm:top-[6.5rem]">
+      <div className="space-y-3">
         {isFitmentMode && <VehicleModeBanner configId={params.vehicleConfigId!} compact />}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              {heading}
-            </h1>
-            <p className="mt-1 text-sm text-graphite-600">
-              {results === null ? (
-                "Results unavailable"
-              ) : results.total === 0 ? (
-                isFitmentMode ? (
-                  "No verified-fit parts for this vehicle yet"
-                ) : (
-                  "No matching parts"
-                )
+        <div className="min-w-0">
+          <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            {heading}
+          </h1>
+          <p className="mt-1 text-sm text-graphite-600">
+            {results === null ? (
+              "Results unavailable"
+            ) : results.total === 0 ? (
+              isFitmentMode ? (
+                "No verified-fit parts for this vehicle yet"
               ) : (
-                <>
-                  Showing{" "}
-                  <span className="font-semibold text-slate-900">
-                    {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-semibold text-slate-900">
-                    {results.total.toLocaleString()}
-                    {isAtLeast ? "+" : ""}
-                  </span>{" "}
-                  {isFitmentMode ? "verified-fit " : ""}
-                  {results.total === 1 ? "part" : "parts"}
-                </>
-              )}
-            </p>
-          </div>
+                "No matching parts"
+              )
+            ) : (
+              <>
+                Showing{" "}
+                <span className="font-semibold text-slate-900">
+                  {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-slate-900">
+                  {results.total.toLocaleString()}
+                  {isAtLeast ? "+" : ""}
+                </span>{" "}
+                {isFitmentMode ? "verified-fit " : ""}
+                {results.total === 1 ? "part" : "parts"}
+              </>
+            )}
+          </p>
+        </div>
 
-          <div className="flex w-full items-center gap-2.5 sm:w-auto">
+        <div className="sticky top-[7.75rem] z-30 -mx-2 flex min-h-14 items-center justify-between gap-3 border-y border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/85 md:top-[6.5rem]">
+          <p className="min-w-0 truncate text-sm font-semibold text-slate-900" aria-live="polite">
+            {results === null
+              ? "Results unavailable"
+              : `${results.total.toLocaleString()}${isAtLeast ? "+" : ""} ${isFitmentMode ? "verified-fit " : ""}${results.total === 1 ? "part" : "parts"}`}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
             {showFilters && (
               <FilterDrawer
                 activeCount={activeFilterCount}
@@ -314,7 +319,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
 
         <ActiveFilterChips params={paramsShape} />
-        {showFilters && <QuickFilterRow facets={facets} params={paramsShape} resultCount={resultCount} />}
+        {showFilters && (
+          <div className="hidden lg:block">
+            <QuickFilterRow facets={facets} params={paramsShape} resultCount={resultCount} />
+          </div>
+        )}
         {isRelaxed && (
           <p
             role="status"

@@ -3,6 +3,11 @@
  * OpenSearch may still carry legacy inactive-seller duplicates until reindex.
  */
 
+import {
+  canonicalizeCatalogBrand,
+  canonicalizeVehicleMake,
+} from '../catalog-import/catalog-identity.util';
+
 const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
 
 const HIDDEN_SELLER_NAME_RE = /febest\s+inventory\s+supplier/i;
@@ -76,6 +81,8 @@ export type IndexedOfferLike = {
 
 export type SearchItemLike = {
   id?: string;
+  brand?: string | null;
+  makes?: string[] | null;
   offers?: IndexedOfferLike[] | null;
   minPrice?: number | null;
   [key: string]: unknown;
@@ -151,6 +158,14 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
   }
   return {
     ...item,
+    brand: canonicalizeCatalogBrand(item.brand),
+    makes: [
+      ...new Set(
+        (item.makes || [])
+          .map(canonicalizeVehicleMake)
+          .filter((make): make is string => Boolean(make)),
+      ),
+    ],
     offers,
     minPrice: Number.isFinite(minPrice) ? minPrice : (item.minPrice ?? null),
     imageUrls,

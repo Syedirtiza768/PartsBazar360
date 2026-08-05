@@ -7,6 +7,8 @@ coverage
 certbot
 docx-temp
 tmp
+exports
+outputs
 screenshot-*.png
 test-images*.ps1
 *.log

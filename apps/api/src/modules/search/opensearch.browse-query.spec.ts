@@ -13,7 +13,7 @@ import { OpenSearchService } from './opensearch.service';
 type Captured = { body: any };
 
 /** Stub client that records every search body and returns a fixed hit count. */
-function stubService(totalPerCall: number[]) {
+function stubService(totalPerCall: number[], aggregations: any = {}) {
   const calls: Captured[] = [];
   let call = 0;
   const service = new OpenSearchService();
@@ -25,7 +25,7 @@ function stubService(totalPerCall: number[]) {
       return {
         body: {
           hits: { total: { value: total, relation: 'eq' }, hits: [] },
-          aggregations: {},
+          aggregations,
         },
       };
     },
@@ -113,5 +113,75 @@ describe('browseParts query construction', () => {
 
     expect(calls[0].body.query.bool.must[0]).toEqual({ match_all: {} });
     expect(calls).toHaveLength(1);
+  });
+
+  it('omits facet aggregations for count-only previews', async () => {
+    const { service, calls } = stubService([36790]);
+    const result = await service.browseParts({
+      partType: 'AFTERMARKET',
+      limit: 1,
+      includeFacets: false,
+    });
+
+    expect(calls[0].body.aggs).toBeUndefined();
+    expect(result.total).toBe(36790);
+    expect(result.facets).toEqual({
+      brands: [],
+      categories: [],
+      categoryGroups: [],
+      makes: [],
+      partTypes: [],
+      conditions: [],
+      sourceTags: [],
+    });
+  });
+
+  it('clubs spelling and case variants into canonical facet buckets', async () => {
+    const { service } = stubService([100], {
+      brands: {
+        names: {
+          buckets: [
+            { key: 'Mercedes', doc_count: 10 },
+            { key: 'MERCEDES BENZ', doc_count: 20 },
+            { key: 'Mercedes-Benz', doc_count: 30 },
+          ],
+        },
+      },
+      makes: {
+        names: {
+          buckets: [
+            { key: 'Toyota', doc_count: 40 },
+            { key: 'TOYOTA', doc_count: 5 },
+          ],
+        },
+      },
+    });
+
+    const result = await service.browseParts({});
+
+    expect(result.facets.brands).toContainEqual({
+      name: 'Mercedes-Benz',
+      count: 60,
+    });
+    expect(result.facets.makes).toContainEqual({ name: 'Toyota', count: 45 });
+  });
+
+  it('expands canonical selections to legacy indexed aliases', async () => {
+    const { service, calls } = stubService([100]);
+    await service.browseParts({
+      brand: 'Volkswagen',
+      make: 'Mercedes-Benz',
+    });
+
+    const filters = calls[0].body.query.bool.filter;
+    const brandTerms = filters.find((value: any) => value.terms?.['brand.keyword'])
+      .terms['brand.keyword'];
+    const makeTerms = filters.find((value: any) => value.terms?.['makes.keyword'])
+      .terms['makes.keyword'];
+
+    expect(brandTerms).toEqual(expect.arrayContaining(['Volkswagen', 'VW', 'volkwagen']));
+    expect(makeTerms).toEqual(
+      expect.arrayContaining(['Mercedes-Benz', 'Mercedes', 'mercedes benz']),
+    );
   });
 });

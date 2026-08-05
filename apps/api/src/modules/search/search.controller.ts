@@ -37,6 +37,7 @@ import {
   normalizeMvlToken,
   modelLookupVariants,
 } from '../ingestion/mvl-match.util';
+import { canonicalizeCatalogBrand } from '../catalog-import/catalog-identity.util';
 
 type CompatRow = {
   year: number | string;
@@ -822,6 +823,7 @@ export class SearchController implements OnModuleDestroy {
 
     return {
       ...partWithOffers,
+      brand: canonicalizeCatalogBrand(partWithOffers.brand),
       itemSpecifics: normalizedItemSpecifics,
       position: normalizedPosition,
       vehicleSystem: normalizedVehicleSystem,

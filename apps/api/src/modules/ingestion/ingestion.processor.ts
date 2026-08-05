@@ -13,6 +13,7 @@ import {
   ParsedVehicle,
 } from './listing-parser.util';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
+import { canonicalizeCatalogBrand } from '../catalog-import/catalog-identity.util';
 import {
   buildCompatibility,
   extractListingBrand,
@@ -533,7 +534,8 @@ export class IngestionProcessor extends WorkerHost {
     const category = extractCategory(title);
     const oeNumbers = extractListingOeNumbers(listing, extractOeNumbers(title));
     const description = extractListingDescription(listing);
-    const brand = extractListingBrand(listing);
+    const brand =
+      canonicalizeCatalogBrand(extractListingBrand(listing)) ?? undefined;
 
     // Skip FEBEST and other exempt brands — they have their own supplier pipeline.
     // Check both the extracted brand and the raw title (brand field is often empty).

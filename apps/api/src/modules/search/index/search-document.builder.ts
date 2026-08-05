@@ -16,6 +16,10 @@
 import { normalizePartNumber } from '../query/part-number.util';
 import { applySuperiorPriority } from '../buyer-visible-offers.util';
 import {
+  canonicalizeCatalogBrand,
+  canonicalizeVehicleMake,
+} from '../../catalog-import/catalog-identity.util';
+import {
   classifyPartType,
   classifyPositions,
   classifySide,
@@ -168,7 +172,7 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
   const makes = uniqueStrings([
     ...compatibility.map((row: any) => row?.make),
     ...(Array.isArray(part?.makes) ? part.makes : []),
-  ]);
+  ].map(canonicalizeVehicleMake));
   const models = uniqueStrings(compatibility.map((row: any) => row?.model));
 
   const years: number[] = [
@@ -203,8 +207,8 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
     partType: classifyPartType(title),
     partSource: part?.partSource ?? null,
     qualityTier: part?.qualityTier ?? null,
-    brand: part?.brand ?? null,
-    brandDisplay: part?.brand ?? null,
+    brand: canonicalizeCatalogBrand(part?.brand),
+    brandDisplay: canonicalizeCatalogBrand(part?.brand),
     category: part?.category ?? null,
     sourceTags: uniqueStrings(offers.map((offer: any) => offer?.sourceTag)),
 

@@ -71,6 +71,7 @@ export function FilterDrawer({
   const [activeGroup, setActiveGroup] = useState<FilterGroupId | null>(null);
   const controller = useStagedFilters({
     params,
+    resultCount,
     onApply: () => {
       setOpen(false);
       setActiveGroup(null);

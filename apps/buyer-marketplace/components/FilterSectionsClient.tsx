@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SlidersIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import { Sheet } from "@repo/ui/sheet";
+import { API_BASE_URL } from "@/lib/api";
 import type { FacetsResponse, CategoryGroupFacet, Facet } from "@/lib/types";
 import {
   FILTER_GROUPS,
@@ -28,6 +29,8 @@ type StagedFilterController = {
   pendingKey: string;
   isDirty: boolean;
   pendingCount: number;
+  previewResultCount?: number;
+  isPreviewLoading: boolean;
   toggle: (field: FacetField, value: string) => void;
   clearField: (field: FacetField) => void;
   clearGroup: (groupId: FilterGroupId) => void;
@@ -44,21 +47,75 @@ function formatResultLabel(resultCount?: number) {
 
 export function useStagedFilters({
   params,
+  resultCount,
   onApply,
 }: {
   params: SearchParamsShape;
+  resultCount?: number;
   onApply?: () => void;
 }): StagedFilterController {
   const router = useRouter();
   const applied = useMemo(() => paramsToFilterState(params), [params]);
   const appliedKey = filterStateKey(applied);
   const [pending, setPending] = useState<FilterState>(applied);
+  const [previewResultCount, setPreviewResultCount] = useState<number | undefined>(resultCount);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   useEffect(() => {
     setPending(paramsToFilterState(params));
   }, [appliedKey, params]);
 
   const pendingKey = filterStateKey(pending);
+  const isDirty = pendingKey !== appliedKey;
+
+  useEffect(() => {
+    if (!isDirty) {
+      setPreviewResultCount(resultCount);
+      setIsPreviewLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsPreviewLoading(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const href = filterStateToHref(params, pending);
+        const query = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
+        const search = new URLSearchParams(query);
+
+        // The preview only needs the authoritative total. Removing display-only
+        // parameters keeps the request small and ensures page size cannot win
+        // over the one-result limit in the API controller.
+        search.delete("page");
+        search.delete("pageSize");
+        search.delete("sort");
+        search.set("limit", "1");
+        search.set("countOnly", "true");
+
+        const response = await fetch(`${API_BASE_URL}/search/parts?${search.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Count preview failed (${response.status})`);
+
+        const data = (await response.json()) as { total?: unknown };
+        const total = typeof data.total === "number" && Number.isFinite(data.total) ? data.total : undefined;
+        setPreviewResultCount(total);
+      } catch (error) {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          setPreviewResultCount(undefined);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsPreviewLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [appliedKey, isDirty, params, pending, pendingKey, resultCount]);
 
   const toggle = (field: FacetField, value: string) => {
     setPending((prev) => {
@@ -99,8 +156,10 @@ export function useStagedFilters({
     appliedKey,
     pending,
     pendingKey,
-    isDirty: pendingKey !== appliedKey,
+    isDirty,
     pendingCount: countFilterState(pending),
+    previewResultCount,
+    isPreviewLoading,
     toggle,
     clearField,
     clearGroup,
@@ -563,9 +622,13 @@ export function FilterApplyFooter({
         <button
           type="button"
           onClick={controller.apply}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-700"
+          disabled={controller.isDirty && controller.isPreviewLoading}
+          aria-live="polite"
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
         >
-          {formatResultLabel(resultCount)}
+          {controller.isDirty && controller.isPreviewLoading
+            ? "Checking…"
+            : formatResultLabel(controller.isDirty ? controller.previewResultCount : resultCount)}
         </button>
       </div>
     </div>
@@ -585,7 +648,7 @@ export function FilterSectionsClient({
   onApply?: () => void;
   variant?: "sidebar" | "advanced";
 }) {
-  const controller = useStagedFilters({ params, onApply });
+  const controller = useStagedFilters({ params, resultCount, onApply });
   const groups = FILTER_GROUPS.filter((group) => groupAvailable(group.id, facets, params));
   const selectedGroup = groups.find((group) => groupSelectedCount(group.id, controller.pending) > 0)?.id;
   const [openGroup, setOpenGroup] = useState<FilterGroupId>(selectedGroup ?? groups[0]?.id ?? "price");
@@ -645,7 +708,7 @@ export function QuickFilterRow({
   params: SearchParamsShape;
   resultCount?: number;
 }) {
-  const controller = useStagedFilters({ params });
+  const controller = useStagedFilters({ params, resultCount });
   const [openGroup, setOpenGroup] = useState<FilterGroupId | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const groups = FILTER_GROUPS.filter((group) => group.quick && groupAvailable(group.id, facets, params)).slice(0, 6);
@@ -711,9 +774,13 @@ export function QuickFilterRow({
                         controller.apply();
                         setOpenGroup(null);
                       }}
-                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700"
+                      disabled={controller.isDirty && controller.isPreviewLoading}
+                      aria-live="polite"
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
                     >
-                      {formatResultLabel(resultCount)}
+                      {controller.isDirty && controller.isPreviewLoading
+                        ? "Checking…"
+                        : formatResultLabel(controller.isDirty ? controller.previewResultCount : resultCount)}
                     </button>
                   </div>
                 </div>

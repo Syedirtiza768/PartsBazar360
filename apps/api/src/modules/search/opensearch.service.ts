@@ -9,7 +9,12 @@ import {
   sanitizeIdentifier,
   sanitizeIdentifierList,
 } from './identifier-sanitize.util';
-import { MAKE_LOOKUP } from './query/automotive-vocabulary';
+import {
+  canonicalizeCatalogBrand,
+  canonicalizeVehicleMake,
+  expandCatalogBrandFilterValues,
+  expandVehicleMakeFilterValues,
+} from '../catalog-import/catalog-identity.util';
 
 export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
 
@@ -276,7 +281,7 @@ export class OpenSearchService implements OnModuleInit {
           id: part.id,
           title: part.title,
           partType: part.partType || null,
-          brand: part.brand,
+          brand: canonicalizeCatalogBrand(part.brand),
           // Guarded: these are the highest-boosted fields in browseParts, and
           // the feeds write part-name words ("BUMPER", "AUDI") into them. See
           // identifier-sanitize.util.ts.
@@ -304,7 +309,7 @@ export class OpenSearchService implements OnModuleInit {
               .map((c: any) => c.make)
               .filter(Boolean),
             ...(part.makes || []).filter(Boolean),
-          ])],
+          ].map(canonicalizeVehicleMake).filter(Boolean))],
           oeNumbers: sanitizeIdentifierList(part.oeNumbers),
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
@@ -465,6 +470,8 @@ export class OpenSearchService implements OnModuleInit {
      * it off restricts matching to the part's own primary identity numbers.
      */
     includeInterchange?: boolean;
+    /** Count previews do not need the comparatively expensive facet aggregations. */
+    includeFacets?: boolean;
   }): Promise<BrowseResult> {
     const {
       q,
@@ -472,6 +479,7 @@ export class OpenSearchService implements OnModuleInit {
       page = 1,
       limit = 24,
       includeInterchange = true,
+      includeFacets = true,
     } = opts;
 
     const pageNum = Math.max(1, Math.floor(page || 1));
@@ -481,8 +489,8 @@ export class OpenSearchService implements OnModuleInit {
 
     const cats = asArray(opts.category);
     const groups = asArray(opts.categoryGroup);
-    const brands = asArray(opts.brand);
-    const makes = asArray(opts.make);
+    const brands = expandCatalogBrandFilterValues(asArray(opts.brand));
+    const makes = expandVehicleMakeFilterValues(asArray(opts.make));
     const partTypes = asArray(opts.partType);
     const conditions = asArray(opts.condition);
     const sourceTags = asArray(opts.sourceTag);
@@ -700,7 +708,7 @@ export class OpenSearchService implements OnModuleInit {
             track_total_hits: true,
             query: { bool: { must, filter: baseFilters } },
             sort: sortClause,
-            aggs: buildAggs(),
+            ...(includeFacets ? { aggs: buildAggs() } : {}),
           } as any,
         });
 
@@ -743,15 +751,17 @@ export class OpenSearchService implements OnModuleInit {
         string,
         FacetAgg | GroupFacetAgg
       >;
-      const facets: BrowseFacets = {
-        categories: bucketsOf(aggsBody.categories as FacetAgg, 'category'),
-        categoryGroups: bucketsOfGroups(aggsBody.categoryGroups as GroupFacetAgg),
-        brands: bucketsOf(aggsBody.brands as FacetAgg, 'brand'),
-        makes: bucketsOf(aggsBody.makes as FacetAgg, 'make'),
-        partTypes: bucketsOf(aggsBody.partTypes as FacetAgg, 'partType'),
-        conditions: bucketsOf(aggsBody.conditions as FacetAgg, 'condition'),
-        sourceTags: bucketsOf(aggsBody.sourceTags as FacetAgg, 'sourceTag'),
-      };
+      const facets: BrowseFacets = includeFacets
+        ? {
+            categories: bucketsOf(aggsBody.categories as FacetAgg, 'category'),
+            categoryGroups: bucketsOfGroups(aggsBody.categoryGroups as GroupFacetAgg),
+            brands: bucketsOf(aggsBody.brands as FacetAgg, 'brand'),
+            makes: bucketsOf(aggsBody.makes as FacetAgg, 'make'),
+            partTypes: bucketsOf(aggsBody.partTypes as FacetAgg, 'partType'),
+            conditions: bucketsOf(aggsBody.conditions as FacetAgg, 'condition'),
+            sourceTags: bucketsOf(aggsBody.sourceTags as FacetAgg, 'sourceTag'),
+          }
+        : emptyFacets();
 
       return {
         items: response.body.hits.hits.map((hit: any) => {
@@ -1104,16 +1114,9 @@ type FacetFieldName =
 function cleanFacetName(name: string, field: FacetFieldName): string | null {
   const cleaned = name.trim().replace(/\s+/g, ' ');
   if (!cleaned) return null;
-  if (field === 'make' && cleaned === '-') return null;
-  if (field === 'brand' && looksLikeVehicleModelLabel(cleaned)) return null;
+  if (field === 'make') return canonicalizeVehicleMake(cleaned);
+  if (field === 'brand') return canonicalizeCatalogBrand(cleaned);
   return cleaned;
-}
-
-function looksLikeVehicleModelLabel(value: string): boolean {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const [first, ...rest] = normalized.split(/\s+/);
-  if (!first || rest.length === 0 || !MAKE_LOOKUP.has(first)) return false;
-  return rest.some((token) => /\d/.test(token));
 }
 
 function preferDisplayName(current: string, next: string): string {

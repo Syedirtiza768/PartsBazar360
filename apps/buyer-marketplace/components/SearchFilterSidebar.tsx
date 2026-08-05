@@ -27,7 +27,7 @@ export function SearchFilterSidebar({
   return (
     <aside
       className={cn(
-        "hidden shrink-0 self-start border-r border-slate-200 pr-4 transition-[width] duration-200 lg:sticky lg:top-56 lg:block lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto",
+        "hidden shrink-0 self-start border-r border-slate-200 pr-4 transition-[width] duration-200 lg:sticky lg:top-44 lg:block lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto",
         collapsed ? "w-14" : "w-72",
       )}
       aria-label="Filters"

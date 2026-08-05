@@ -34,6 +34,84 @@ function normalizePartNumber(value) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+// Mirror of catalog-identity.util.ts. The reindexer is plain ESM inside the
+// API image, so it cannot import the compiled Nest module directly.
+function identityKey(value) {
+  return String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/&/g, 'AND')
+    .replace(/[^A-Z0-9]+/g, '');
+}
+
+const CANONICAL_MAKES = [
+  'Acura', 'Alfa Romeo', 'Aston Martin', 'Audi', 'Bentley', 'BMW', 'Buick',
+  'BYD', 'Cadillac', 'Chery', 'Chevrolet', 'Chrysler', 'Citroen', 'Dacia',
+  'Dodge', 'Ferrari', 'Fiat', 'Ford', 'Geely', 'Genesis', 'GMC', 'Holden',
+  'Honda', 'Hummer', 'Hyundai', 'Infiniti', 'Isuzu', 'Jaguar', 'Jeep',
+  'Jetour', 'Kia', 'Lamborghini', 'Land Rover', 'Lexus', 'Lincoln', 'Maserati',
+  'Mazda', 'Mercedes-Benz', 'Mini', 'Mitsubishi', 'Nissan', 'OMODA', 'Opel',
+  'Peugeot', 'Porsche', 'Ram', 'Renault', 'Rolls-Royce', 'Saab', 'Scion',
+  'Seat', 'Skoda', 'Smart', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'Vauxhall',
+  'Volkswagen', 'Volvo', 'Zinoro',
+];
+const MAKE_BY_KEY = new Map(CANONICAL_MAKES.map((name) => [identityKey(name), name]));
+for (const [alias, make] of Object.entries({
+  BENZ: 'Mercedes-Benz', MERCEDES: 'Mercedes-Benz', MERCEDE: 'Mercedes-Benz',
+  MERCEDESBENZ: 'Mercedes-Benz', VW: 'Volkswagen', VOLKSWAGEN: 'Volkswagen',
+  VOLKSWAGON: 'Volkswagen', VOLKWAGEN: 'Volkswagen', 'RANGE ROVER': 'Land Rover',
+  RANGEROVER: 'Land Rover', LANDROVER: 'Land Rover', 'MINI COOPER': 'Mini',
+  MINICOOPER: 'Mini', CADILAC: 'Cadillac', CADLILLAC: 'Cadillac',
+  CHEVORLET: 'Chevrolet', CHERVOLET: 'Chevrolet', CHERLOVET: 'Chevrolet',
+  CHEORLET: 'Chevrolet', INFITY: 'Infiniti', INFITITY: 'Infiniti',
+  INFINITY: 'Infiniti', JAGAUR: 'Jaguar', JAGUARS: 'Jaguar',
+  PORCSHE: 'Porsche', POESCHE: 'Porsche', PEGUOT: 'Peugeot', PEGOUT: 'Peugeot',
+  TOYATA: 'Toyota', ACCENT: 'Hyundai', DMAX: 'Isuzu', PARTNER: 'Peugeot',
+  SILVERADO: 'Chevrolet', TROOPER: 'Isuzu',
+})) MAKE_BY_KEY.set(identityKey(alias), make);
+
+const PRODUCT_BRAND_BY_KEY = new Map();
+for (const [canonical, aliases] of Object.entries({
+  BOSCH: ['BOSH', 'BOSH-0242240566', 'BOSH-0242240628', 'BOSH-0242245581'],
+  FEBI: ['FEBI BILSTEIN'],
+  'General Motors': ['GENERAL MOTORS', 'GM'],
+  'MANN-FILTER': ['MANN', 'MANN FILTER'],
+  SCHNIEDER: ['SCHEINDER'], TOPDRIVE: ['TOP DRIVE'], TRUCKTEC: ['TRUCK TEC'],
+  'Volkswagen Group': ['VAG'],
+})) {
+  for (const value of [canonical, ...aliases]) PRODUCT_BRAND_BY_KEY.set(identityKey(value), canonical);
+}
+
+const NON_BRANDS = new Set(['GENUINEOEM', 'OE', 'OEM', 'ORIGINAL', 'SHEET1', 'MODULE', 'TRUNK', 'UNKNOWN']);
+
+function canonicalizeMake(value) {
+  const raw = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const key = identityKey(raw);
+  if (!key) return null;
+  const exact = MAKE_BY_KEY.get(key);
+  if (exact) return exact;
+  if (/[\s\d]/.test(raw)) {
+    for (const [makeKey, make] of MAKE_BY_KEY) {
+      if (makeKey.length >= 4 && key.startsWith(makeKey) && key !== makeKey) return make;
+    }
+  }
+  return raw;
+}
+
+function canonicalizeBrand(value) {
+  const raw = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const key = identityKey(raw);
+  if (!key || NON_BRANDS.has(key) || raw.length > 80) return null;
+  const exact = PRODUCT_BRAND_BY_KEY.get(key) || MAKE_BY_KEY.get(key);
+  if (exact) return exact;
+  if (/[\s\d]/.test(raw)) {
+    const make = canonicalizeMake(raw);
+    if (make !== raw) return make;
+  }
+  return raw.toUpperCase();
+}
+
 /**
  * Mirror of apps/api/src/modules/search/identifier-sanitize.util.ts — kept in
  * sync by hand because this script runs as plain ESM inside the API container
@@ -137,7 +215,7 @@ function toDoc(part) {
     id: part.id,
     title: part.title,
     partType: part.partType || null,
-    brand: part.brand,
+    brand: canonicalizeBrand(part.brand),
     manufacturerPartNumber: sanitizeIdentifier(part.manufacturerPartNumber),
     partNumbers,
     normalizedPartNumbers: partNumbers
@@ -152,7 +230,7 @@ function toDoc(part) {
         ...(part.fitments || [])
           .map((f) => f.vehicleConfig?.generation?.model?.make?.name)
           .filter(Boolean),
-      ],
+      ].map(canonicalizeMake).filter(Boolean),
     )],
     oeNumbers: sanitizeIdentifierList(part.oeNumbers),
     interchangePartNumbers: partNumbers

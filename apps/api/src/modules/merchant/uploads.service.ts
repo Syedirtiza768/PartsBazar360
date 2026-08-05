@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { SpreadsheetParserService, type ImportTemplate } from '../catalog-import/spreadsheet-parser.service';
 import { classifyPart } from '../catalog-import/classification.util';
 import { parseCompoundOemReferences } from '../catalog-import/oem-reference.parser';
+import { canonicalizeCatalogBrand } from '../catalog-import/catalog-identity.util';
 import {
   deterministicSourceKey,
   normalizeMasterName,
@@ -667,10 +668,9 @@ export class MerchantUploadsService {
   ) {
     const raw = row.raw;
     const brand =
-      raw.brand?.trim() ||
-      defaults.defaultBrand ||
-      raw.__suggestedBrand ||
-      undefined;
+      canonicalizeCatalogBrand(
+        raw.brand?.trim() || defaults.defaultBrand || raw.__suggestedBrand,
+      ) ?? undefined;
     const manufacturerPartNumber =
       raw.manufacturerPartNumber?.trim() ||
       raw.mpn?.trim() ||
@@ -794,7 +794,12 @@ export class MerchantUploadsService {
     });
     const existingBrandClassification = brand
       ? await this.prisma.brandMaster.findFirst({
-          where: { canonicalName: { equals: brand, mode: 'insensitive' } },
+          where: {
+            canonicalName: {
+              equals: normalizeMasterName(brand),
+              mode: 'insensitive',
+            },
+          },
           select: {
             isVehicleManufacturer: true,
             isAftermarketBrand: true,
