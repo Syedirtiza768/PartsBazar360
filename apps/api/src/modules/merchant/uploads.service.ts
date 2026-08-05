@@ -1072,7 +1072,7 @@ export class MerchantUploadsService {
           fitmentFlags: reviewReasons,
           imageUrls,
           weight: resolved.actualKg,
-          weightSource: resolved.actualKg ? 'SPREADSHEET' : undefined,
+          weightSource: resolved.source,
           weightConfidence: shippingMetrics.weightConfidence ?? undefined,
           dimensions: (shippingMetrics.dimensionsCm as any) ?? undefined,
           partClassKey,
