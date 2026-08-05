@@ -144,6 +144,10 @@ describe('browseParts query construction', () => {
             { key: 'Mercedes', doc_count: 10 },
             { key: 'MERCEDES BENZ', doc_count: 20 },
             { key: 'Mercedes-Benz', doc_count: 30 },
+            { key: 'MEYLE-1006100011', doc_count: 1 },
+            { key: 'MEYLE', doc_count: 1291 },
+            { key: 'REMSA-1379.00', doc_count: 1 },
+            { key: 'REMSA', doc_count: 48 },
           ],
         },
       },
@@ -152,6 +156,7 @@ describe('browseParts query construction', () => {
           buckets: [
             { key: 'Toyota', doc_count: 40 },
             { key: 'TOYOTA', doc_count: 5 },
+            { key: 'PEUGEOT/CITROEN', doc_count: 12 },
           ],
         },
       },
@@ -164,6 +169,10 @@ describe('browseParts query construction', () => {
       count: 60,
     });
     expect(result.facets.makes).toContainEqual({ name: 'Toyota', count: 45 });
+    expect(result.facets.brands).toContainEqual({ name: 'MEYLE', count: 1292 });
+    expect(result.facets.brands).toContainEqual({ name: 'REMSA', count: 49 });
+    expect(result.facets.makes).toContainEqual({ name: 'Peugeot', count: 12 });
+    expect(result.facets.makes).toContainEqual({ name: 'Citroen', count: 12 });
   });
 
   it('expands canonical selections to legacy indexed aliases', async () => {

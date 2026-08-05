@@ -48,6 +48,8 @@ const PRODUCT_BRAND_ALIASES: AliasMap = {
   FEBI: ['febi bilstein'],
   'General Motors': ['general motors', 'gm'],
   'MANN-FILTER': ['mann', 'mann filter', 'mann-filter'],
+  MEYLE: ['meyle'],
+  REMSA: ['remsa'],
   SCHNIEDER: ['scheinder'],
   TOPDRIVE: ['top drive'],
   TRUCKTEC: ['truck tec'],
@@ -76,6 +78,10 @@ export function catalogIdentityKey(value: unknown): string {
 
 function cleaned(value: unknown): string {
   return String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function addAliases(
@@ -125,6 +131,10 @@ const productBrandTerms = new Map<string, Set<string>>();
 addAliases(productBrandLookup, productBrandTerms, PRODUCT_BRAND_ALIASES);
 
 export function canonicalizeVehicleMake(value: unknown): string | null {
+  return canonicalizeVehicleMakes(value)[0] ?? null;
+}
+
+function canonicalizeSingleVehicleMake(value: unknown): string | null {
   const name = cleaned(value);
   const key = catalogIdentityKey(name);
   if (!key || key === '-') return null;
@@ -132,11 +142,49 @@ export function canonicalizeVehicleMake(value: unknown): string | null {
   return makeLookup.get(key) ?? name;
 }
 
-export function canonicalizeCatalogBrand(value: unknown): string | null {
+export function canonicalizeVehicleMakes(value: unknown): string[] {
   const name = cleaned(value);
+  if (!name) return [];
+
+  const pieces = name
+    .split(/\s*(?:\/|\\|\+|,|&|\band\b)\s*/i)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+  if (pieces.length > 1) {
+    const makes = pieces
+      .map(canonicalizeSingleVehicleMake)
+      .filter((make): make is string => Boolean(make));
+    if (makes.length === pieces.length) return unique(makes);
+  }
+
+  const single = canonicalizeSingleVehicleMake(name);
+  return single ? [single] : [];
+}
+
+function maybeBrandCodePrefix(name: string): string | null {
+  const match = name.match(
+    /^([A-Za-z0-9][A-Za-z0-9 .&+/]*?[A-Za-z0-9])\s*[-_:]\s*(?=[A-Za-z0-9 ._/-]*\d)[A-Za-z0-9 ._/-]+$/,
+  );
+  if (!match) return null;
+
+  const prefix = cleaned(match[1]);
+  const key = catalogIdentityKey(prefix);
+  const letterCount = (prefix.match(/[A-Za-z]/g) ?? []).length;
+  if (letterCount < 2 || !key || NON_BRANDS.has(key)) return null;
+  if (prefix.length > 40 || prefix.split(/\s+/).length > 4) return null;
+  return prefix;
+}
+
+function canonicalizeCatalogBrandName(name: string, allowCodeStrip: boolean): string | null {
   const key = catalogIdentityKey(name);
   if (!key || NON_BRANDS.has(key)) return null;
   if (name.length > 80 || name.split(/\s+/).length > 9) return null;
+
+  if (allowCodeStrip) {
+    const prefix = maybeBrandCodePrefix(name);
+    if (prefix) return canonicalizeCatalogBrandName(prefix, false);
+  }
 
   const productBrand = productBrandLookup.get(key);
   if (productBrand) return productBrand;
@@ -144,9 +192,16 @@ export function canonicalizeCatalogBrand(value: unknown): string | null {
   const make = makeLookup.get(key) ?? MODEL_ONLY_MAKES[key];
   if (make) return make;
 
-  // Unknown product brands use a stable casing so case-only variants still
-  // collapse into one bucket. Vehicle makes are already covered above.
+  const combinedMakes = canonicalizeVehicleMakes(name);
+  if (combinedMakes.length > 1) return combinedMakes[0];
+
   return name.toUpperCase();
+}
+
+export function canonicalizeCatalogBrand(value: unknown): string | null {
+  const name = cleaned(value);
+  if (!name) return null;
+  return canonicalizeCatalogBrandName(name, true);
 }
 
 function expandFilterValues(

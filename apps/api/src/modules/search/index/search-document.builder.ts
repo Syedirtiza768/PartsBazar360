@@ -17,7 +17,7 @@ import { normalizePartNumber } from '../query/part-number.util';
 import { applySuperiorPriority } from '../buyer-visible-offers.util';
 import {
   canonicalizeCatalogBrand,
-  canonicalizeVehicleMake,
+  canonicalizeVehicleMakes,
 } from '../../catalog-import/catalog-identity.util';
 import {
   classifyPartType,
@@ -172,7 +172,7 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
   const makes = uniqueStrings([
     ...compatibility.map((row: any) => row?.make),
     ...(Array.isArray(part?.makes) ? part.makes : []),
-  ].map(canonicalizeVehicleMake));
+  ].flatMap(canonicalizeVehicleMakes));
   const models = uniqueStrings(compatibility.map((row: any) => row?.model));
 
   const years: number[] = [

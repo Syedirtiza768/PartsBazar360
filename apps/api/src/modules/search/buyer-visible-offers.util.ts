@@ -5,7 +5,7 @@
 
 import {
   canonicalizeCatalogBrand,
-  canonicalizeVehicleMake,
+  canonicalizeVehicleMakes,
 } from '../catalog-import/catalog-identity.util';
 
 const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
@@ -162,7 +162,7 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
     makes: [
       ...new Set(
         (item.makes || [])
-          .map(canonicalizeVehicleMake)
+          .flatMap(canonicalizeVehicleMakes)
           .filter((make): make is string => Boolean(make)),
       ),
     ],

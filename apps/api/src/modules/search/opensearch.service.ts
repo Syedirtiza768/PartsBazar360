@@ -11,7 +11,7 @@ import {
 } from './identifier-sanitize.util';
 import {
   canonicalizeCatalogBrand,
-  canonicalizeVehicleMake,
+  canonicalizeVehicleMakes,
   expandCatalogBrandFilterValues,
   expandVehicleMakeFilterValues,
 } from '../catalog-import/catalog-identity.util';
@@ -309,7 +309,7 @@ export class OpenSearchService implements OnModuleInit {
               .map((c: any) => c.make)
               .filter(Boolean),
             ...(part.makes || []).filter(Boolean),
-          ].map(canonicalizeVehicleMake).filter(Boolean))],
+          ].flatMap(canonicalizeVehicleMakes).filter(Boolean))],
           oeNumbers: sanitizeIdentifierList(part.oeNumbers),
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
@@ -1111,12 +1111,15 @@ type FacetFieldName =
   | 'partType'
   | 'sourceTag';
 
-function cleanFacetName(name: string, field: FacetFieldName): string | null {
+function cleanFacetNames(name: string, field: FacetFieldName): string[] {
   const cleaned = name.trim().replace(/\s+/g, ' ');
-  if (!cleaned) return null;
-  if (field === 'make') return canonicalizeVehicleMake(cleaned);
-  if (field === 'brand') return canonicalizeCatalogBrand(cleaned);
-  return cleaned;
+  if (!cleaned) return [];
+  if (field === 'make') return canonicalizeVehicleMakes(cleaned);
+  if (field === 'brand') {
+    const brand = canonicalizeCatalogBrand(cleaned);
+    return brand ? [brand] : [];
+  }
+  return [cleaned];
 }
 
 function preferDisplayName(current: string, next: string): string {
@@ -1139,15 +1142,15 @@ function mergeFacetBuckets(
 ): Array<{ name: string; count: number }> {
   const merged = new Map<string, { name: string; count: number }>();
   for (const bucket of buckets) {
-    const name = cleanFacetName(String(bucket.key ?? ''), field);
-    if (!name) continue;
-    const key = facetKey(name);
-    const existing = merged.get(key);
-    if (existing) {
-      existing.name = preferDisplayName(existing.name, name);
-      existing.count += bucket.doc_count;
-    } else {
-      merged.set(key, { name, count: bucket.doc_count });
+    for (const name of cleanFacetNames(String(bucket.key ?? ''), field)) {
+      const key = facetKey(name);
+      const existing = merged.get(key);
+      if (existing) {
+        existing.name = preferDisplayName(existing.name, name);
+        existing.count += bucket.doc_count;
+      } else {
+        merged.set(key, { name, count: bucket.doc_count });
+      }
     }
   }
   return [...merged.values()].sort((a, b) =>

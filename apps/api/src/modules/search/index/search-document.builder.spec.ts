@@ -188,6 +188,24 @@ describe('facet fields that did not previously exist', () => {
     expect(doc.years).toEqual([2017, 2018, 2019, 2020]);
   });
 
+  it('splits combined make values into separate facet buckets', () => {
+    const doc = buildSearchDocument({
+      ...salvagePart,
+      compatibility: [{ make: 'PEUGEOT/CITROEN', model: 'Partner' }],
+      makes: ['Toyota'],
+    })!;
+    expect(doc.makes).toEqual(expect.arrayContaining(['Peugeot', 'Citroen', 'Toyota']));
+    expect(doc.makes).not.toContain('PEUGEOT/CITROEN');
+  });
+
+  it('normalizes brand values that include article numbers', () => {
+    const doc = buildSearchDocument({
+      ...salvagePart,
+      brand: 'REMSA-1379.00',
+    })!;
+    expect(doc.brand).toBe('REMSA');
+  });
+
   it('rejects absurd year ranges from seller data', () => {
     const doc = buildSearchDocument({
       ...salvagePart,
