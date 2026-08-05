@@ -154,7 +154,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
         sku: part.manufacturerPartNumber || part.id,
         mpn: mpn || undefined,
         productID: part.id,
-        material: part.partSource === "OEM" ? "Genuine OEM" : part.partSource || undefined,
+        material: part.partSource === "OEM" ? "OEM" : part.partSource || undefined,
         offers:
           offers.length > 0
             ? {
@@ -360,7 +360,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
               {(part.partSource || part.offers?.[0]?.partSource) && (
                 <SpecRow label="Part source">
                   {(part.partSource || part.offers?.[0]?.partSource) === "OEM"
-                    ? "Genuine OEM"
+                    ? "OEM"
                     : humanize(part.partSource || part.offers?.[0]?.partSource)}
                 </SpecRow>
               )}

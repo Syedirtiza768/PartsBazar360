@@ -227,7 +227,7 @@ export default function UploadsPage() {
       priority: "secondary",
       cell: (row) => (
         <span className="text-xs text-graphite-600">
-          {(row.partSource || "OEM") === "OEM" ? "Genuine OEM" : "Aftermarket"} ·{" "}
+          {(row.partSource || "OEM") === "OEM" ? "OEM" : "Aftermarket"} ·{" "}
           <span className="capitalize">
             {(row.qualityTier || "USED").replace(/_/g, " ").toLowerCase()}
           </span>
@@ -311,7 +311,7 @@ export default function UploadsPage() {
           </div>
 
           <Select label="Default source" value={defaultPartSource} onChange={(e) => setDefaultPartSource(e.target.value)}>
-            <option value="OEM">Genuine OEM</option>
+            <option value="OEM">OEM</option>
             <option value="AFTERMARKET">Aftermarket</option>
             <option value="MIXED">Mixed catalog</option>
           </Select>

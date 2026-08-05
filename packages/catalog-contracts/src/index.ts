@@ -15,7 +15,7 @@ export const PART_TYPES = [
 export type PartType = (typeof PART_TYPES)[number];
 
 export const PART_TYPE_LABELS: Record<PartType, string> = {
-  GENUINE_OEM: 'Genuine OEM',
+  GENUINE_OEM: 'OEM',
   OEM_EQUIVALENT: 'OEM-equivalent',
   AFTERMARKET: 'New Aftermarket',
   SALVAGE_OEM: 'Salvage OEM',

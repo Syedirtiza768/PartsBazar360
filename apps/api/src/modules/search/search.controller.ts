@@ -176,6 +176,8 @@ export class SearchController implements OnModuleDestroy {
     @Query('limit') limit?: string,
     // Page-size selector (24/48/72). Alias of `limit`; the buyer UI sends this.
     @Query('pageSize') pageSize?: string,
+    // Lightweight response used by staged filter UIs before the buyer applies.
+    @Query('countOnly') countOnly?: string,
     // Interchange search is on unless explicitly disabled (?includeInterchange=false),
     // so a superseded part number resolves by default.
     @Query('includeInterchange') includeInterchange?: string,
@@ -196,6 +198,9 @@ export class SearchController implements OnModuleDestroy {
           limit: limitNum,
         },
       );
+      if (countOnly === 'true') {
+        return { total: result.total, totalRelation: 'eq' as const };
+      }
       const visible = sanitizeSearchItems(result.items);
       // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
       void this.febestWebsite
@@ -226,9 +231,12 @@ export class SearchController implements OnModuleDestroy {
     const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
     const priceMin = parsePriceParam(minPrice);
     const priceMax = parsePriceParam(maxPrice);
+    const isCountOnly = countOnly === 'true';
     const cacheK = this.cacheKey('browse', { q, category, categoryGroup, brand, make, partType, condition, sourceTag, minPrice: priceMin, maxPrice: priceMax, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
-    const cached = await this.cacheGet<any>(cacheK);
-    if (cached) return cached;
+    if (!isCountOnly) {
+      const cached = await this.cacheGet<any>(cacheK);
+      if (cached) return cached;
+    }
 
     const t0 = Date.now();
     const result = await this.searchService.browseParts({
@@ -246,7 +254,11 @@ export class SearchController implements OnModuleDestroy {
       page: pageNum,
       limit: resolvedLimit,
       includeInterchange: includeInterchange !== 'false',
+      includeFacets: !isCountOnly,
     });
+    if (isCountOnly) {
+      return { total: result.total, totalRelation: result.totalRelation };
+    }
     const visible = sanitizeSearchItems(result.items || [], {
       sourceTags: sourceTag ? String(sourceTag).split(',').map((v) => v.trim()).filter(Boolean) : [],
       minPrice: priceMin,
@@ -995,7 +1007,7 @@ export class SearchController implements OnModuleDestroy {
         if (row) row.value = part.brand;
       }
       spec.badge = isGenuineOem
-        ? 'Genuine OEM'
+        ? 'OEM'
         : part.partType === 'AFTERMARKET'
           ? 'Aftermarket'
           : part.partType === 'SALVAGE_OEM'
