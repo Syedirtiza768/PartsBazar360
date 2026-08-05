@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { XIcon } from "./icons";
 import { useBodyScrollLock } from "./use-body-scroll-lock";
@@ -95,13 +96,13 @@ export function Sheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const isCenter = side === "center";
   const isBottom = side === "bottom";
   const isSide = side === "left" || side === "right";
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-modal" role="presentation">
       {/*
         A plain <div> rather than a <button>: the scrim must not appear in the
@@ -206,7 +207,8 @@ export function Sheet({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
