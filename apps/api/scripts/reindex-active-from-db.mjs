@@ -77,6 +77,8 @@ for (const [canonical, aliases] of Object.entries({
   FEBI: ['FEBI BILSTEIN'],
   'General Motors': ['GENERAL MOTORS', 'GM'],
   'MANN-FILTER': ['MANN', 'MANN FILTER'],
+  MEYLE: ['MEYLE'],
+  REMSA: ['REMSA'],
   SCHNIEDER: ['SCHEINDER'], TOPDRIVE: ['TOP DRIVE'], TRUCKTEC: ['TRUCK TEC'],
   'Volkswagen Group': ['VAG'],
 })) {
@@ -86,6 +88,10 @@ for (const [canonical, aliases] of Object.entries({
 const NON_BRANDS = new Set(['GENUINEOEM', 'OE', 'OEM', 'ORIGINAL', 'SHEET1', 'MODULE', 'TRUNK', 'UNKNOWN']);
 
 function canonicalizeMake(value) {
+  return canonicalizeMakes(value)[0] ?? null;
+}
+
+function canonicalizeSingleMake(value) {
   const raw = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
   const key = identityKey(raw);
   if (!key) return null;
@@ -99,17 +105,56 @@ function canonicalizeMake(value) {
   return raw;
 }
 
-function canonicalizeBrand(value) {
+function canonicalizeMakes(value) {
   const raw = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!raw) return [];
+
+  const pieces = raw
+    .split(/\s*(?:\/|\\|\+|,|&|\band\b)\s*/i)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+  if (pieces.length > 1) {
+    const makes = pieces.map(canonicalizeSingleMake).filter(Boolean);
+    if (makes.length === pieces.length) return [...new Set(makes)];
+  }
+
+  const single = canonicalizeSingleMake(raw);
+  return single ? [single] : [];
+}
+
+function maybeBrandCodePrefix(raw) {
+  const match = raw.match(
+    /^([A-Za-z0-9][A-Za-z0-9 .&+/]*?[A-Za-z0-9])\s*[-_:]\s*(?=[A-Za-z0-9 ._/-]*\d)[A-Za-z0-9 ._/-]+$/,
+  );
+  if (!match) return null;
+  const prefix = String(match[1] ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const key = identityKey(prefix);
+  const letterCount = (prefix.match(/[A-Za-z]/g) ?? []).length;
+  if (letterCount < 2 || !key || NON_BRANDS.has(key)) return null;
+  if (prefix.length > 40 || prefix.split(/\s+/).length > 4) return null;
+  return prefix;
+}
+
+function canonicalizeBrandValue(raw, allowCodeStrip = true) {
   const key = identityKey(raw);
   if (!key || NON_BRANDS.has(key) || raw.length > 80) return null;
+  if (allowCodeStrip) {
+    const prefix = maybeBrandCodePrefix(raw);
+    if (prefix) return canonicalizeBrandValue(prefix, false);
+  }
   const exact = PRODUCT_BRAND_BY_KEY.get(key) || MAKE_BY_KEY.get(key);
   if (exact) return exact;
-  if (/[\s\d]/.test(raw)) {
-    const make = canonicalizeMake(raw);
-    if (make !== raw) return make;
-  }
+  const makes = canonicalizeMakes(raw);
+  if (makes.length > 1) return makes[0];
+  if (/[\s\d]/.test(raw) && makes[0] && makes[0] !== raw) return makes[0];
   return raw.toUpperCase();
+}
+
+function canonicalizeBrand(value) {
+  const raw = String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!raw) return null;
+  return canonicalizeBrandValue(raw);
 }
 
 /**
@@ -230,7 +275,7 @@ function toDoc(part) {
         ...(part.fitments || [])
           .map((f) => f.vehicleConfig?.generation?.model?.make?.name)
           .filter(Boolean),
-      ].map(canonicalizeMake).filter(Boolean),
+      ].flatMap(canonicalizeMakes).filter(Boolean),
     )],
     oeNumbers: sanitizeIdentifierList(part.oeNumbers),
     interchangePartNumbers: partNumbers
