@@ -985,6 +985,23 @@ export class SearchController implements OnModuleDestroy {
     const spec: InfographicSpec | null = normalizeSpec(part.infographicSpec);
 
     if (spec) {
+      // Override every field the LLM could have baked in at enrichment time
+      // with the live DB value, so a later brand/classification correction
+      // (e.g. a mislabeled brand or partType fix) shows up immediately
+      // instead of requiring every spec to be regenerated.
+      if (part.title) spec.headline = part.title;
+      if (part.brand) {
+        const row = spec.specs.find((s) => s.label === 'Brand');
+        if (row) row.value = part.brand;
+      }
+      spec.badge = isGenuineOem
+        ? 'Genuine OEM'
+        : part.partType === 'AFTERMARKET'
+          ? 'Aftermarket'
+          : part.partType === 'SALVAGE_OEM'
+            ? 'Salvage OEM'
+            : spec.badge;
+
       if (isGenuineOem) {
         // Strip any Condition row for Genuine OEM parts
         spec.specs = spec.specs.filter((s) => s.label !== 'Condition');
