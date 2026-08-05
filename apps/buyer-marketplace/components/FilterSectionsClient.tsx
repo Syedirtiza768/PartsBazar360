@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SlidersIcon } from "@repo/ui/icons";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SlidersIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import { Sheet } from "@repo/ui/sheet";
 import { API_BASE_URL } from "@/lib/api";
@@ -711,36 +711,62 @@ export function QuickFilterRow({
   const controller = useStagedFilters({ params, resultCount });
   const [openGroup, setOpenGroup] = useState<FilterGroupId | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
   const groups = FILTER_GROUPS.filter((group) => group.quick && groupAvailable(group.id, facets, params)).slice(0, 6);
+
+  const handleClickOutside = useCallback(
+    (event: MouseEvent) => {
+      if (openGroup && barRef.current && !barRef.current.contains(event.target as Node)) {
+        setOpenGroup(null);
+      }
+    },
+    [openGroup],
+  );
+
+  useEffect(() => {
+    if (openGroup) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [openGroup, handleClickOutside]);
 
   return (
     <>
-      <div className="scrollbar-thin -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
+      <nav
+        ref={barRef}
+        className="relative flex flex-wrap items-center gap-1.5"
+        aria-label="Quick filters"
+      >
         {groups.map((group) => {
           const selectedCount = groupSelectedCount(group.id, controller.pending);
           const isOpen = openGroup === group.id;
           return (
-            <div key={group.id} className="relative shrink-0">
+            <div key={group.id} className="relative">
               <button
                 type="button"
                 onClick={() => setOpenGroup(isOpen ? null : group.id)}
                 aria-expanded={isOpen}
+                aria-haspopup="true"
                 className={cn(
-                  "inline-flex h-10 items-center gap-2 rounded-full border bg-white px-3 text-sm font-semibold shadow-sm transition-colors",
+                  "inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors",
                   selectedCount > 0
                     ? "border-brand-200 bg-brand-50 text-brand-800"
-                    : "border-slate-300 text-graphite-700 hover:border-slate-400 hover:bg-slate-50",
+                    : "border-slate-200 bg-white text-graphite-700 hover:border-slate-300 hover:bg-slate-50",
+                  isOpen && "border-brand-300 bg-brand-50 shadow-sm",
                 )}
               >
                 {group.title}
                 {selectedCount > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1 text-[11px] text-white">
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1 text-[11px] font-bold text-white">
                     {selectedCount}
                   </span>
                 )}
+                <ChevronDownIcon
+                  className={cn("h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform", isOpen && "rotate-180")}
+                />
               </button>
               {isOpen && (
-                <div className="absolute left-0 top-12 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-overlay">
+                <div className="absolute left-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-overlay">
                   <div className="mb-2 flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-950">{group.title}</p>
@@ -791,12 +817,12 @@ export function QuickFilterRow({
         <button
           type="button"
           onClick={() => setAdvancedOpen(true)}
-          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-sm font-semibold text-graphite-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-graphite-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
         >
-          <SlidersIcon className="h-4 w-4" />
+          <SlidersIcon className="h-3.5 w-3.5" />
           All filters
         </button>
-      </div>
+      </nav>
       <Sheet
         open={advancedOpen}
         onClose={() => setAdvancedOpen(false)}
