@@ -364,13 +364,7 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
                     : humanize(part.partSource || part.offers?.[0]?.partSource)}
                 </SpecRow>
               )}
-              {part.weight ? <SpecRow label="Weight">{part.weight} kg</SpecRow> : null}
-              {part.shipping && (
-                <SpecRow label="Billable weight">
-                  {part.shipping.billableWeightKg} kg
-                  {part.shipping.state !== "exact" ? " (estimate)" : ""}
-                </SpecRow>
-              )}
+
               {part.oeNumbers && part.oeNumbers.length > 0 && (
                 <SpecRow label="OE numbers">
                   <span className="part-number break-all">{part.oeNumbers.join(", ")}</span>
