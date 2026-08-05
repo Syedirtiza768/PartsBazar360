@@ -9,6 +9,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { INTERNAL_API_URL } from "@/lib/api";
 import { absoluteUrl, getSiteUrl, INDEX_ROBOTS } from "@/lib/seo";
 import type { FacetsResponse } from "@/lib/types";
@@ -180,6 +181,7 @@ export default async function RootLayout({
                       {children}
                     </main>
                     <Footer />
+                    <WhatsAppButton />
                   </CartProvider>
                 </WatchlistProvider>
               </GarageProvider>
