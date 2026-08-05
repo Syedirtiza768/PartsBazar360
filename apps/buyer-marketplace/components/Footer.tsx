@@ -22,6 +22,13 @@ const GROUPS: Array<{ title: string; links: Array<[string, string]> }> = [
     ],
   },
   {
+    title: "Company",
+    links: [
+      ["/contact", "Contact us"],
+      ["/privacy-policy", "Privacy policy"],
+    ],
+  },
+  {
     title: "Help",
     links: [
       ["/support", "Customer support"],
@@ -50,12 +57,12 @@ export function Footer() {
           <p className="mt-3 max-w-sm text-pretty text-sm leading-relaxed text-slate-400">A motor-parts marketplace built around compatibility evidence, honest condition, and clear seller responsibility.</p>
           <Link href="/support" className="mt-4 inline-flex min-h-touch items-center gap-2 text-sm font-bold text-brand-200 hover:text-white"><MessageIcon className="h-4 w-4" />Get help from a human</Link>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-4">
           {GROUPS.map((group) => <nav key={group.title} aria-label={group.title}><p className="text-[11px] font-black uppercase tracking-[0.18em] text-white">{group.title}</p><ul className="mt-3 space-y-2.5">{group.links.map(([href, label]) => <li key={href}><Link href={href} className="flex min-h-9 items-center text-sm text-slate-400 hover:text-white">{label}</Link></li>)}</ul></nav>)}
         </div>
       </div>
       <div className="border-t border-white/15">
-        <div className="mx-auto flex max-w-wide flex-col gap-3 gutter py-4 pb-safe-b-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between"><p>© {new Date().getFullYear()} PartsBazar360</p><p className="flex items-start gap-2"><ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-300" />Compatibility uncertainty is labeled, never hidden.</p></div>
+        <div className="mx-auto flex max-w-wide flex-col gap-3 gutter py-4 pb-safe-b-4 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between"><p>© {new Date().getFullYear()} PartsBazar360. All rights reserved. PartsBazar360 is owned and operated by Superior New &amp; Used Auto Spare Parts LLC (Trade License No. 2115291).</p><p className="flex items-start gap-2"><ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-300" />Compatibility uncertainty is labeled, never hidden.</p></div>
       </div>
     </footer>
   );
