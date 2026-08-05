@@ -60,6 +60,13 @@ const REQUIRED: Array<keyof FormState> = ["name", "phone", "line1", "city", "cou
 /** Sending a new code invalidates the previous one, so throttle resends. */
 const RESEND_COOLDOWN_SECONDS = 45;
 
+/**
+ * Twilio's account is stuck on a trial-only SMS restriction (pending their
+ * support). Flip back to true once that's resolved — everything else in the
+ * SMS path is already built and working, this just changes the default.
+ */
+const SMS_CHANNEL_ENABLED = false;
+
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
   phone: "Mobile number",
@@ -445,7 +452,6 @@ function CheckoutContent() {
       return;
     }
     setShowOtpPanel(true);
-    setOtpChannel("sms");
     setOtpEmail("");
     setOtpEmailSent(false);
     setOtpExists(null);
@@ -453,7 +459,12 @@ function CheckoutContent() {
     setOtpCreateAccount(false);
     setOtpPassword("");
     setOtpError(null);
-    void startPhoneVerification();
+    if (SMS_CHANNEL_ENABLED) {
+      setOtpChannel("sms");
+      void startPhoneVerification();
+    } else {
+      setOtpChannel("email");
+    }
   };
 
   // "Trouble receiving a text?" — switches the panel to collect an email
@@ -839,7 +850,7 @@ function CheckoutContent() {
               <section className="rounded-xl border-2 border-graphite-950 bg-white p-4 shadow-card sm:p-6" aria-label="Confirm your identity">
                 {otpChannel === "email" && !otpEmailSent ? (
                   <>
-                    <h2 className="text-base font-semibold text-slate-900">Send the code by email instead</h2>
+                    <h2 className="text-base font-semibold text-slate-900">Confirm by email</h2>
                     <p className="mt-1 text-sm text-graphite-600">
                       We&apos;ll email a one-time code to confirm your order.
                     </p>
@@ -862,16 +873,18 @@ function CheckoutContent() {
                       <Button type="submit" size="lg" fullWidth loading={otpSending}>
                         Send code
                       </Button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpChannel("sms");
-                          setOtpError(null);
-                        }}
-                        className="text-xs font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
-                      >
-                        Back to text message
-                      </button>
+                      {SMS_CHANNEL_ENABLED && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOtpChannel("sms");
+                            setOtpError(null);
+                          }}
+                          className="text-xs font-medium text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
+                        >
+                          Back to text message
+                        </button>
+                      )}
                     </form>
                   </>
                 ) : (
