@@ -237,9 +237,20 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
 
           {/* Detail bullets from enrichment */}
           {part.itemSpecifics?.detailBullets && (() => {
-            const rawBullets = String(part.itemSpecifics.detailBullets).split(' | ').filter(Boolean);
-            // Strip hardcoded condition bullet (e.g. "Condition/source: Used / OEM")
-            const filtered = rawBullets.filter((b) => !/^condition\s*\/\s*source\s*:/i.test(b.trim()));
+            // Enrichment sources disagree on delimiter: some join bullets with
+            // ' | ', others with a literal newline. Split on either.
+            const rawBullets = String(part.itemSpecifics.detailBullets)
+              .split(/\s*\|\s*|\n+/)
+              .map((b) => b.trim())
+              .filter(Boolean);
+            // Strip any stored Condition/Quality Tier bullet — the page
+            // computes its own authoritative condition bullet below (or
+            // suppresses it for Genuine OEM), so a raw stored one is always
+            // redundant and can contradict it (e.g. "Genuine OEM" badge next
+            // to a stored "Quality Tier: USED" bullet).
+            const filtered = rawBullets.filter(
+              (b) => !/^condition\b|^quality\s*tier\s*:/i.test(b),
+            );
             // Suppress condition bullet entirely for Genuine OEM
             const resolvedPartType = partTypeFromLegacy(part.partSource || part.offers?.[0]?.partSource, part.partType || part.offers?.[0]?.partType);
             const isGenuineOem = resolvedPartType === 'GENUINE_OEM';

@@ -24,6 +24,14 @@ export function classifyPart(input: {
   condition?: string;
   donorEvidence?: boolean;
   sourceContext?: 'AFTERMARKET_CATALOG' | 'MIXED_CATALOG' | 'EBAY';
+  // BrandMaster flags for input.brand, when a matching row exists. Takes
+  // priority over the CLEAR_AFTERMARKET/MULTI_ROLE fallback sets below,
+  // since it's maintained data instead of a hardcoded brand list.
+  brandClassification?: {
+    isVehicleManufacturer: boolean;
+    isAftermarketBrand: boolean;
+    suppliesGenuineOem: boolean;
+  } | null;
 }): ClassificationResult {
   const declared = normalizeMasterName(input.declaredType);
   const brand = normalizeMasterName(input.brand);
@@ -69,6 +77,30 @@ export function classifyPart(input: {
       reasons,
     };
   }
+  const bc = input.brandClassification;
+  if (bc?.isAftermarketBrand && !bc.suppliesGenuineOem && !bc.isVehicleManufacturer)
+    return {
+      partType: 'AFTERMARKET',
+      confidence: 0.92,
+      status: 'READY',
+      reasons: ['BrandMaster classifies this brand as aftermarket-only'],
+    };
+  if (bc && !bc.isAftermarketBrand && bc.isVehicleManufacturer)
+    return {
+      partType: 'GENUINE_OEM',
+      confidence: 0.9,
+      status: 'READY',
+      reasons: ['BrandMaster classifies this brand as a vehicle manufacturer'],
+    };
+  if (bc?.isAftermarketBrand && (bc.suppliesGenuineOem || bc.isVehicleManufacturer))
+    return {
+      partType: 'UNCLASSIFIED',
+      confidence: 0.5,
+      status: 'REVIEW_RECOMMENDED',
+      reasons: [
+        'BrandMaster shows this brand supplies both OEM and aftermarket parts; product evidence is required',
+      ],
+    };
   if (CLEAR_AFTERMARKET.has(brand))
     return {
       partType: 'AFTERMARKET',

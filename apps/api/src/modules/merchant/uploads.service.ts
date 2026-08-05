@@ -792,6 +792,16 @@ export class MerchantUploadsService {
       actualKg: resolved.actualKg,
       dimensionsCm: shippingMetrics.dimensionsCm,
     });
+    const brandMaster = brand
+      ? await this.prisma.brandMaster.findFirst({
+          where: { canonicalName: { equals: brand, mode: 'insensitive' } },
+          select: {
+            isVehicleManufacturer: true,
+            isAftermarketBrand: true,
+            suppliesGenuineOem: true,
+          },
+        })
+      : null;
     const classification = classifyPart({
       declaredType:
         raw.partType || raw.__suggestedPartType || defaults.defaultPartSource,
@@ -804,7 +814,11 @@ export class MerchantUploadsService {
           : raw.__template === 'DXB_EXW'
             ? 'MIXED_CATALOG'
             : undefined,
+      brandClassification: brandMaster,
     });
+    // partSource only distinguishes OEM vs AFTERMARKET provenance —
+    // SALVAGE_OEM/REMANUFACTURED/REFURBISHED are still OEM-sourced parts,
+    // just via a donor vehicle or a rebuild, so they stay 'OEM' here.
     const partSource =
       classification.partType === 'AFTERMARKET' ? 'AFTERMARKET' : 'OEM';
     const qualityTier = normalizeQualityTier(
