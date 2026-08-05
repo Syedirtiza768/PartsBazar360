@@ -17,7 +17,10 @@ export interface SuggestPart {
 export interface SuggestResponse {
   parts: SuggestPart[];
   categories: string[];
+  categoryGroups: string[];
   brands: string[];
+  makes: string[];
+  sourceTags: string[];
 }
 
 interface CacheEntry {
@@ -120,7 +123,10 @@ export function useSearchSuggestions() {
   const totalItems =
     (results?.parts.length ?? 0) +
     (results?.categories.length ?? 0) +
-    (results?.brands.length ?? 0);
+    (results?.categoryGroups.length ?? 0) +
+    (results?.brands.length ?? 0) +
+    (results?.makes.length ?? 0) +
+    (results?.sourceTags.length ?? 0);
 
   const moveUp = useCallback(() => {
     setActiveIndex((prev) => (prev <= 0 ? totalItems - 1 : prev - 1));

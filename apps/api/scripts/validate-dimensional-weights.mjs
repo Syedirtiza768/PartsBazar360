@@ -64,9 +64,12 @@ const OUTLIER_FACTOR = 3;
 
 /**
  * Factor below the class min that counts as an outlier.
- * A 0.001kg engine is a unit error, not a genuine ultralight engine.
+ * Mirrors PLAU_OUTLIER_FACTOR (=3, i.e. min/3) in billable-weight.util.ts —
+ * the authoritative threshold actually used to flag outliers at checkout.
+ * Kept as a literal here (not imported) since this script runs as plain ESM
+ * outside the compiled dist; update both places together if it ever changes.
  */
-const OUTLIER_BELOW_FACTOR = 0.05;
+const OUTLIER_BELOW_FACTOR = 1 / 3;
 
 // ── Issue Categories ──────────────────────────────────────────────────────────
 
@@ -278,9 +281,9 @@ async function main() {
           });
         }
       } else if (part.weight !== null && part.weight > 0) {
-        // Has weight but no dimensions — shipping might be misquoting
-        stats.bySource[part.weightSource || 'UNKNOWN'] =
-          (stats.bySource[part.weightSource || 'UNKNOWN'] || 0) + 1;
+        // Has weight but no dimensions — shipping might be misquoting.
+        // (bySource is tallied once per issue in the loop below — don't
+        // double-count here.)
         if (!outliersOnly) {
           partIssues.push({
             type: IssueType.DIMS_MISSING_BUT_WEIGHT_EXISTS,

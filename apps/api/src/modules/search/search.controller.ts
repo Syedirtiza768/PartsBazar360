@@ -51,6 +51,12 @@ type CompatRow = {
 
 const MVL_MARKETS = ['US', 'DE', 'UK', 'AU'] as const;
 
+function parsePriceParam(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 /** Maps human-readable listing-pipeline field names → camelCase keys. */
 const FIELD_TO_KEY: Record<string, string> = {
   'Brand': 'brandType',
@@ -163,6 +169,8 @@ export class SearchController implements OnModuleDestroy {
     @Query('partType') partType?: string,
     @Query('condition') condition?: string,
     @Query('sourceTag') sourceTag?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
     @Query('sort') sort?: BrowseSort,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -216,7 +224,9 @@ export class SearchController implements OnModuleDestroy {
 
     const pageNum = page ? parseInt(page, 10) : 1;
     const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
-    const cacheK = this.cacheKey('browse', { q, category, categoryGroup, brand, make, partType, condition, sourceTag, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const priceMin = parsePriceParam(minPrice);
+    const priceMax = parsePriceParam(maxPrice);
+    const cacheK = this.cacheKey('browse', { q, category, categoryGroup, brand, make, partType, condition, sourceTag, minPrice: priceMin, maxPrice: priceMax, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
     const cached = await this.cacheGet<any>(cacheK);
     if (cached) return cached;
 
@@ -230,12 +240,18 @@ export class SearchController implements OnModuleDestroy {
       partType,
       condition,
       sourceTag,
+      minPrice: priceMin,
+      maxPrice: priceMax,
       sort,
       page: pageNum,
       limit: resolvedLimit,
       includeInterchange: includeInterchange !== 'false',
     });
-    const visible = sanitizeSearchItems(result.items || []);
+    const visible = sanitizeSearchItems(result.items || [], {
+      sourceTags: sourceTag ? String(sourceTag).split(',').map((v) => v.trim()).filter(Boolean) : [],
+      minPrice: priceMin,
+      maxPrice: priceMax,
+    });
     result.items = visible;
     // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
     void this.febestWebsite
@@ -263,7 +279,16 @@ export class SearchController implements OnModuleDestroy {
   @Get('suggest')
   async suggest(@Query('q') q?: string) {
     const query = (q ?? '').trim();
-    if (query.length < 2) return { parts: [], categories: [], brands: [] };
+    if (query.length < 2) {
+      return {
+        parts: [],
+        categories: [],
+        categoryGroups: [],
+        brands: [],
+        makes: [],
+        sourceTags: [],
+      };
+    }
     return this.searchService.suggest(query);
   }
 

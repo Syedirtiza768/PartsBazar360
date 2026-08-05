@@ -11,7 +11,8 @@ import { PageSizeSelect } from "@/components/PageSizeSelect";
 import { Pagination } from "@/components/Pagination";
 import { VehicleModeBanner } from "@/components/VehicleModeBanner";
 import { FilterDrawer } from "@/components/FilterDrawer";
-import { FilterSectionsClient } from "@/components/FilterSectionsClient";
+import { QuickFilterRow } from "@/components/FilterSectionsClient";
+import { SearchFilterSidebar } from "@/components/SearchFilterSidebar";
 import {
   ActiveFilterChips,
   countActiveFilters,
@@ -40,8 +41,9 @@ interface SearchPageProps {
     brand?: string;
     make?: string;
     partType?: string;
-    condition?: string;
     sourceTag?: string;
+    minPrice?: string;
+    maxPrice?: string;
     sort?: "relevance" | "newest" | "price_asc" | "price_desc";
     page?: string;
     pageSize?: string;
@@ -61,8 +63,9 @@ async function getResults(
   if (params.brand) qs.set("brand", params.brand);
   if (params.make) qs.set("make", params.make);
   if (params.partType) qs.set("partType", params.partType);
-  if (params.condition) qs.set("condition", params.condition);
   if (params.sourceTag) qs.set("sourceTag", params.sourceTag);
+  if (params.minPrice) qs.set("minPrice", params.minPrice);
+  if (params.maxPrice) qs.set("maxPrice", params.maxPrice);
   if (params.sort) qs.set("sort", params.sort);
   if (params.page) qs.set("page", params.page);
   // Only send when the buyer opted out — the API defaults interchange on.
@@ -119,8 +122,8 @@ export async function generateMetadata({
     Boolean(params.q) ||
     isPriceSort ||
     Boolean(params.partType) ||
-    Boolean(params.condition) ||
     Boolean(params.sourceTag) ||
+    Boolean(params.minPrice || params.maxPrice) ||
     Boolean(params.includeInterchange === "false") ||
     Boolean(isPageSizeVariant) ||
     (Boolean(params.category) && Boolean(params.brand)) ||
@@ -207,8 +210,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     brand: params.brand,
     make: params.make,
     partType: params.partType,
-    condition: params.condition,
     sourceTag: params.sourceTag,
+    minPrice: params.minPrice,
+    maxPrice: params.maxPrice,
     sort: params.sort,
     includeInterchange: params.includeInterchange,
     pageSize: params.pageSize,
@@ -216,16 +220,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const activeFilterCount = countActiveFilters(paramsShape);
   const showFilters =
-    !isFitmentMode &&
-    (Boolean(params.q) ||
+    results !== null &&
+    (isFitmentMode ||
+      Boolean(params.q) ||
       activeFilterCount > 0 ||
       facets.categories.length > 0 ||
       facets.categoryGroups.length > 0 ||
       facets.brands.length > 0 ||
       facets.makes.length > 0 ||
       facets.partTypes.length > 0 ||
-      facets.conditions.length > 0 ||
       facets.sourceTags.length > 0);
+  const resultCount = results?.total;
   const clearHref = clearFiltersHref(paramsShape);
   const interchangeOff = params.includeInterchange === "false";
   const isAtLeast = results?.totalRelation === "gte";
@@ -250,8 +255,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
-      {/* Toolbar */}
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5">
+      <div className="sticky top-[5.25rem] z-30 -mx-2 flex flex-col gap-3 border-b border-slate-200 bg-white/95 px-2 pb-4 pt-1 backdrop-blur supports-[backdrop-filter]:bg-white/85 sm:top-[6.5rem]">
+        {isFitmentMode && <VehicleModeBanner configId={params.vehicleConfigId!} compact />}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -286,10 +291,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
           <div className="flex w-full items-center gap-2.5 sm:w-auto">
             {showFilters && (
-              <FilterDrawer activeCount={activeFilterCount} facets={facets} params={paramsShape} />
+              <FilterDrawer
+                activeCount={activeFilterCount}
+                facets={facets}
+                params={paramsShape}
+                resultCount={resultCount}
+              />
             )}
             {isFitmentMode ? (
-              <p className="text-sm text-graphite-600">
+              <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-graphite-600">
                 Sorted by lowest price
               </p>
             ) : (
@@ -304,6 +314,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
 
         <ActiveFilterChips params={paramsShape} />
+        {showFilters && <QuickFilterRow facets={facets} params={paramsShape} resultCount={resultCount} />}
         {isRelaxed && (
           <p
             role="status"
@@ -314,32 +325,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             related parts.
           </p>
         )}
-        {isFitmentMode && (
-          <VehicleModeBanner configId={params.vehicleConfigId!} />
-        )}
       </div>
 
       <div className="flex flex-col gap-8 pt-6 lg:flex-row">
         {/* Filters sidebar — check multiple options, then Apply commits them in one navigation */}
         {showFilters && (
-          <aside
-            className="hidden w-64 shrink-0 self-start border-r border-slate-200 pr-5 lg:sticky lg:top-28 lg:block lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
-            aria-label="Filters"
-          >
-            <div className="mb-2 flex min-h-10 items-center justify-between gap-3 border-b-2 border-slate-950 pb-2">
-              <h2 className="text-base font-bold text-slate-950">Filters</h2>
-              {activeFilterCount > 0 && (
-                <Link
-                  href={clearHref}
-                  rel="nofollow"
-                  className="text-xs font-semibold text-brand-700 underline-offset-2 hover:text-brand-800 hover:underline"
-                >
-                  Clear filters
-                </Link>
-              )}
-            </div>
-            <FilterSectionsClient facets={facets} params={paramsShape} />
-          </aside>
+          <SearchFilterSidebar
+            activeFilterCount={activeFilterCount}
+            clearHref={clearHref}
+            facets={facets}
+            params={paramsShape}
+            resultCount={resultCount}
+          />
         )}
 
         <div className="min-w-0 flex-1">

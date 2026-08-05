@@ -27,6 +27,7 @@ const SELLER_ID = process.env.FEBEST_SELLER_ID || 'seller-superior-auto-parts';
 const DELAY_MS = Number(process.env.FEBEST_DELAY_MS || 400);
 const LIMIT = process.env.FEBEST_LIMIT ? Number(process.env.FEBEST_LIMIT) : null;
 const FORCE = process.env.FEBEST_FORCE === '1';
+const FAST = process.env.FEBEST_FAST === '1';
 const CONCURRENCY = Math.max(1, Number(process.env.FEBEST_CONCURRENCY || 2));
 const STATE_PATH =
   process.env.FEBEST_STATE_PATH || '/tmp/febest-enrich-progress.json';
@@ -451,7 +452,7 @@ async function enrichOne(prisma, os, part, state) {
 
   const catalogUrl = `${BASE}/en/catalog?code=${encodeURIComponent(code)}`;
   const catalog = await fetchText(catalogUrl);
-  await sleep(DELAY_MS);
+  if (!FAST) await sleep(DELAY_MS);
   if (!catalog.ok) {
     throw new Error(`catalog HTTP ${catalog.status} for ${code}`);
   }
@@ -466,7 +467,7 @@ async function enrichOne(prisma, os, part, state) {
 
   const detailsUrl = `${BASE}${detailsPath}`;
   const details = await fetchText(detailsUrl);
-  await sleep(DELAY_MS);
+  if (!FAST) await sleep(DELAY_MS);
   if (!details.ok) {
     throw new Error(`details HTTP ${details.status} for ${code}`);
   }
@@ -486,7 +487,7 @@ async function enrichOne(prisma, os, part, state) {
     ...new Set([...(part.oeNumbers || []), ...parsed.oems].map((x) => String(x).trim()).filter(Boolean)),
   ];
 
-  const mvl = await verifyCompatAgainstMvl(prisma, parsed.compatibility);
+  const mvl = FAST ? { verifiedRows: [], configIds: [] } : await verifyCompatAgainstMvl(prisma, parsed.compatibility);
   // Prefer MVL-verified rows; keep unmatched website rows for PDP visibility.
   const unmatched = (parsed.compatibility || []).filter((row) => {
     const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
@@ -520,6 +521,21 @@ async function enrichOne(prisma, os, part, state) {
       updatedAt: new Date(),
     },
   });
+
+  if (FAST) {
+    // Fast mode: skip fitment upserts, ProductMedia, CatalogPartNumber, OpenSearch.
+    // Run a bulk reindex at the end instead.
+    state.ok += 1;
+    state.done.add(part.id);
+    return {
+      status: 'ok',
+      code,
+      images: parsed.images.length,
+      models: parsed.models.length,
+      oems: parsed.oems.length,
+      url: detailsUrl,
+    };
+  }
 
   for (const vehicleConfigId of mvl.configIds) {
     const fitment = await prisma.fitment.upsert({
@@ -676,10 +692,11 @@ async function main() {
     JSON.stringify({
       event: 'start',
       sellerId: SELLER_ID,
-      delayMs: DELAY_MS,
+      delayMs: FAST ? 0 : DELAY_MS,
       concurrency: CONCURRENCY,
       limit: LIMIT,
       force: FORCE,
+      fast: FAST,
       alreadyDone: state.done.size,
       statePath: STATE_PATH,
     }),

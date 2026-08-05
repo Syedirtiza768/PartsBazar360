@@ -9,6 +9,7 @@ import {
   sanitizeIdentifier,
   sanitizeIdentifierList,
 } from './identifier-sanitize.util';
+import { MAKE_LOOKUP } from './query/automotive-vocabulary';
 
 export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
 
@@ -452,6 +453,8 @@ export class OpenSearchService implements OnModuleInit {
     partType?: string | string[];
     condition?: string | string[];
     sourceTag?: string | string[];
+    minPrice?: number;
+    maxPrice?: number;
     sort?: BrowseSort;
     page?: number;
     limit?: number;
@@ -483,6 +486,14 @@ export class OpenSearchService implements OnModuleInit {
     const partTypes = asArray(opts.partType);
     const conditions = asArray(opts.condition);
     const sourceTags = asArray(opts.sourceTag);
+    const minPrice =
+      typeof opts.minPrice === 'number' && Number.isFinite(opts.minPrice)
+        ? opts.minPrice
+        : undefined;
+    const maxPrice =
+      typeof opts.maxPrice === 'number' && Number.isFinite(opts.maxPrice)
+        ? opts.maxPrice
+        : undefined;
 
     // --- relevance clauses (weighted should). Exact normalized part-number
     //     dominates (boost 60); interchange cross-reference is a strong but
@@ -563,6 +574,12 @@ export class OpenSearchService implements OnModuleInit {
       baseFilters.push({ terms: { 'conditions.keyword': conditions } });
     if (sourceTags.length)
       baseFilters.push({ terms: { 'sourceTags.keyword': sourceTags } });
+    if (minPrice != null || maxPrice != null) {
+      const priceRange: Record<string, number> = {};
+      if (minPrice != null) priceRange.gte = minPrice;
+      if (maxPrice != null) priceRange.lte = maxPrice;
+      baseFilters.push({ range: { minPrice: priceRange } });
+    }
 
     // --- sort. Relevance only means something for a keyword; a no-query
     //     browse falls back to newest so the feed is stable, not arbitrary. ---
@@ -601,6 +618,12 @@ export class OpenSearchService implements OnModuleInit {
         f.push({ terms: { 'conditions.keyword': conditions } });
       if (!skip('sourceTag') && sourceTags.length)
         f.push({ terms: { 'sourceTags.keyword': sourceTags } });
+      if (!skip('price') && (minPrice != null || maxPrice != null)) {
+        const priceRange: Record<string, number> = {};
+        if (minPrice != null) priceRange.gte = minPrice;
+        if (maxPrice != null) priceRange.lte = maxPrice;
+        f.push({ range: { minPrice: priceRange } });
+      }
       if (qClause) f.push(qClause);
       return f;
     };
@@ -610,7 +633,7 @@ export class OpenSearchService implements OnModuleInit {
     const buildAggs = () => ({
       categories: {
         filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
-        aggs: { names: { terms: { field: 'category.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } } },
       },
       // Nested: each group bucket carries its own category sub-buckets, so
       // the sidebar can render group -> category hierarchy from one response
@@ -621,32 +644,32 @@ export class OpenSearchService implements OnModuleInit {
         filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
         aggs: {
           names: {
-            terms: { field: 'categoryGroup.keyword', size: 50, missing: 'Other' },
+            terms: { field: 'categoryGroup.keyword', size: 200, missing: 'Other', order: { _key: 'asc' } },
             aggs: {
-              categories: { terms: { field: 'category.keyword', size: 50 } },
+              categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
             },
           },
         },
       },
       brands: {
         filter: { bool: { filter: facetFilter('brand') } },
-        aggs: { names: { terms: { field: 'brand.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'brand.keyword', size: 200, order: { _key: 'asc' } } } },
       },
       makes: {
         filter: { bool: { filter: facetFilter('make') } },
-        aggs: { names: { terms: { field: 'makes.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'makes.keyword', size: 200, order: { _key: 'asc' } } } },
       },
       partTypes: {
         filter: { bool: { filter: facetFilter('partType') } },
-        aggs: { names: { terms: { field: 'partType.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'partType.keyword', size: 50, order: { _key: 'asc' } } } },
       },
       conditions: {
         filter: { bool: { filter: facetFilter('condition') } },
-        aggs: { names: { terms: { field: 'conditions.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'conditions.keyword', size: 50, order: { _key: 'asc' } } } },
       },
       sourceTags: {
         filter: { bool: { filter: facetFilter('sourceTag') } },
-        aggs: { names: { terms: { field: 'sourceTags.keyword', size: 50 } } },
+        aggs: { names: { terms: { field: 'sourceTags.keyword', size: 50, order: { _key: 'asc' } } } },
       },
     });
 
@@ -721,13 +744,13 @@ export class OpenSearchService implements OnModuleInit {
         FacetAgg | GroupFacetAgg
       >;
       const facets: BrowseFacets = {
-        categories: bucketsOf(aggsBody.categories as FacetAgg),
+        categories: bucketsOf(aggsBody.categories as FacetAgg, 'category'),
         categoryGroups: bucketsOfGroups(aggsBody.categoryGroups as GroupFacetAgg),
-        brands: bucketsOf(aggsBody.brands as FacetAgg),
-        makes: bucketsOf(aggsBody.makes as FacetAgg),
-        partTypes: bucketsOf(aggsBody.partTypes as FacetAgg),
-        conditions: bucketsOf(aggsBody.conditions as FacetAgg),
-        sourceTags: bucketsOf(aggsBody.sourceTags as FacetAgg),
+        brands: bucketsOf(aggsBody.brands as FacetAgg, 'brand'),
+        makes: bucketsOf(aggsBody.makes as FacetAgg, 'make'),
+        partTypes: bucketsOf(aggsBody.partTypes as FacetAgg, 'partType'),
+        conditions: bucketsOf(aggsBody.conditions as FacetAgg, 'condition'),
+        sourceTags: bucketsOf(aggsBody.sourceTags as FacetAgg, 'sourceTag'),
       };
 
       return {
@@ -789,10 +812,41 @@ export class OpenSearchService implements OnModuleInit {
       manufacturerPartNumber: string | null;
     }>;
     categories: string[];
+    categoryGroups: string[];
     brands: string[];
+    makes: string[];
+    sourceTags: string[];
   }> {
     try {
       const normalized = normalizePartNumber(q);
+      const numberish = /\d/.test(normalized) && normalized.length >= 4;
+      const textClauses: any[] = [
+        {
+          multi_match: {
+            query: q,
+            fields: [
+              'title^3',
+              'brand^2',
+              'category',
+              'manufacturerPartNumber^4',
+              'oeNumbers^2',
+            ],
+            type: 'best_fields',
+            minimum_should_match: numberish ? '100%' : '2<75%',
+          },
+        },
+      ];
+      if (!numberish && q.trim().length >= 4) {
+        textClauses.push({
+          match_phrase_prefix: {
+            title: {
+              query: q,
+              boost: 2,
+              max_expansions: 20,
+            },
+          },
+        });
+      }
       // Fetch more than we need so sanitization (which drops parts with no
       // buyer-visible offers) still leaves enough to fill the dropdown.
       const response = await this.client.search({
@@ -820,25 +874,28 @@ export class OpenSearchService implements OnModuleInit {
                 {
                   bool: {
                     should: [
-                      {
-                        multi_match: {
-                          query: q,
-                          fields: [
-                            'title^3',
-                            'brand^2',
-                            'category',
-                            'manufacturerPartNumber^4',
-                            'oeNumbers^2',
-                          ],
-                          type: 'best_fields',
-                          fuzziness: 'AUTO',
-                        },
-                      },
+                      ...textClauses,
                       {
                         term: {
                           'normalizedPartNumbers.keyword': {
                             value: normalized,
-                            boost: 10,
+                            boost: 80,
+                          },
+                        },
+                      },
+                      {
+                        term: {
+                          'interchangePartNumbers.keyword': {
+                            value: normalized,
+                            boost: 45,
+                          },
+                        },
+                      },
+                      {
+                        term: {
+                          'oeNumbers.keyword': {
+                            value: normalized,
+                            boost: 60,
                           },
                         },
                       },
@@ -852,10 +909,19 @@ export class OpenSearchService implements OnModuleInit {
           },
           aggs: {
             categories: {
-              terms: { field: 'category.keyword', size: 4 },
+              terms: { field: 'category.keyword', size: 6, order: { _key: 'asc' } },
+            },
+            categoryGroups: {
+              terms: { field: 'categoryGroup.keyword', size: 6, order: { _key: 'asc' } },
             },
             brands: {
-              terms: { field: 'brand.keyword', size: 4 },
+              terms: { field: 'brand.keyword', size: 6, order: { _key: 'asc' } },
+            },
+            makes: {
+              terms: { field: 'makes.keyword', size: 6, order: { _key: 'asc' } },
+            },
+            sourceTags: {
+              terms: { field: 'sourceTags.keyword', size: 6, order: { _key: 'asc' } },
             },
           },
         } as any,
@@ -886,28 +952,24 @@ export class OpenSearchService implements OnModuleInit {
         };
       });
 
-      // Only surface categories/brands that have at least one buyer-visible
-      // part in the results, so clicking a suggestion never leads to an empty
-      // results page.
-      const visibleCats = new Set(
-        parts.map((p) => p.category).filter(Boolean),
-      );
-      const visibleBrands = new Set(
-        parts.map((p) => p.brand).filter(Boolean),
-      );
-
       return {
         parts,
-        categories: (aggs?.categories?.buckets || [])
-          .map((b: any) => b.key as string)
-          .filter((c: string) => visibleCats.has(c)),
-        brands: (aggs?.brands?.buckets || [])
-          .map((b: any) => b.key as string)
-          .filter((b: string) => visibleBrands.has(b)),
+        categories: bucketsOf(aggs?.categories, 'category').map((b) => b.name).slice(0, 6),
+        categoryGroups: bucketsOf(aggs?.categoryGroups, 'categoryGroup').map((b) => b.name).slice(0, 6),
+        brands: bucketsOf(aggs?.brands, 'brand').map((b) => b.name).slice(0, 6),
+        makes: bucketsOf(aggs?.makes, 'make').map((b) => b.name).slice(0, 6),
+        sourceTags: bucketsOf(aggs?.sourceTags, 'sourceTag').map((b) => b.name).slice(0, 6),
       };
     } catch (error) {
       this.logger.error(`suggest failed for "${q}"`, error.stack);
-      return { parts: [], categories: [], brands: [] };
+      return {
+        parts: [],
+        categories: [],
+        categoryGroups: [],
+        brands: [],
+        makes: [],
+        sourceTags: [],
+      };
     }
   }
 
@@ -919,18 +981,18 @@ export class OpenSearchService implements OnModuleInit {
         body: {
           size: 0,
           aggs: {
-            brands: { terms: { field: 'brand.keyword', size: 50 } },
-            categories: { terms: { field: 'category.keyword', size: 50 } },
+            brands: { terms: { field: 'brand.keyword', size: 200, order: { _key: 'asc' } } },
+            categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
             categoryGroups: {
-              terms: { field: 'categoryGroup.keyword', size: 50, missing: 'Other' },
+              terms: { field: 'categoryGroup.keyword', size: 200, missing: 'Other', order: { _key: 'asc' } },
               aggs: {
-                categories: { terms: { field: 'category.keyword', size: 50 } },
+                categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
               },
             },
-            makes: { terms: { field: 'makes.keyword', size: 50 } },
-            partTypes: { terms: { field: 'partType.keyword', size: 50 } },
-            conditions: { terms: { field: 'conditions.keyword', size: 50 } },
-            sourceTags: { terms: { field: 'sourceTags.keyword', size: 50 } },
+            makes: { terms: { field: 'makes.keyword', size: 200, order: { _key: 'asc' } } },
+            partTypes: { terms: { field: 'partType.keyword', size: 50, order: { _key: 'asc' } } },
+            conditions: { terms: { field: 'conditions.keyword', size: 50, order: { _key: 'asc' } } },
+            sourceTags: { terms: { field: 'sourceTags.keyword', size: 50, order: { _key: 'asc' } } },
           },
         },
       });
@@ -945,17 +1007,25 @@ export class OpenSearchService implements OnModuleInit {
         sourceTags: FacetAgg;
       };
       return {
-        brands: bucketsOf(aggs.brands),
-        categories: bucketsOf(aggs.categories),
+        brands: bucketsOf(aggs.brands, 'brand'),
+        categories: bucketsOf(aggs.categories, 'category'),
         categoryGroups: bucketsOfGroups({ names: aggs.categoryGroups }),
-        makes: bucketsOf(aggs.makes),
-        partTypes: bucketsOf(aggs.partTypes),
-        conditions: bucketsOf(aggs.conditions),
-        sourceTags: bucketsOf(aggs.sourceTags),
+        makes: bucketsOf(aggs.makes, 'make'),
+        partTypes: bucketsOf(aggs.partTypes, 'partType'),
+        conditions: bucketsOf(aggs.conditions, 'condition'),
+        sourceTags: bucketsOf(aggs.sourceTags, 'sourceTag'),
       };
     } catch (error) {
       this.logger.error('getFacets failed', error.stack);
-      return { brands: [], categories: [], categoryGroups: [], makes: [], partTypes: [], conditions: [] };
+      return {
+        brands: [],
+        categories: [],
+        categoryGroups: [],
+        makes: [],
+        partTypes: [],
+        conditions: [],
+        sourceTags: [],
+      };
     }
   }
 }
@@ -975,15 +1045,14 @@ function emptyFacets(): BrowseFacets {
 /** Shape of a scoped `filter + terms` aggregation bucket list. */
 type FacetAgg = {
   names?: { buckets?: Array<{ key: string; doc_count: number }> };
+  buckets?: Array<{ key: string; doc_count: number }>;
 };
 
 function bucketsOf(
   agg: FacetAgg | undefined,
+  field: FacetFieldName = 'generic',
 ): Array<{ name: string; count: number }> {
-  return (agg?.names?.buckets ?? []).map((b) => ({
-    name: b.key,
-    count: b.doc_count,
-  }));
+  return mergeFacetBuckets(agg?.names?.buckets ?? agg?.buckets ?? [], field);
 }
 
 /** Shape of a scoped `filter + terms` agg whose buckets nest a sub-terms agg. */
@@ -995,6 +1064,11 @@ type GroupFacetAgg = {
       categories?: { buckets?: Array<{ key: string; doc_count: number }> };
     }>;
   };
+  buckets?: Array<{
+    key: string;
+    doc_count: number;
+    categories?: { buckets?: Array<{ key: string; doc_count: number }> };
+  }>;
 };
 
 function bucketsOfGroups(
@@ -1004,12 +1078,76 @@ function bucketsOfGroups(
   count: number;
   categories: Array<{ name: string; count: number }>;
 }> {
-  return (agg?.names?.buckets ?? []).map((b) => ({
-    name: b.key,
-    count: b.doc_count,
-    categories: (b.categories?.buckets ?? []).map((c) => ({
-      name: c.key,
-      count: c.doc_count,
-    })),
-  }));
+  return (agg?.names?.buckets ?? agg?.buckets ?? [])
+    .map((b) => ({
+      name: String(b.key),
+      count: b.doc_count,
+      categories: mergeFacetBuckets(b.categories?.buckets ?? [], 'category'),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function facetKey(value: unknown): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+type FacetFieldName =
+  | 'brand'
+  | 'category'
+  | 'categoryGroup'
+  | 'condition'
+  | 'generic'
+  | 'make'
+  | 'partType'
+  | 'sourceTag';
+
+function cleanFacetName(name: string, field: FacetFieldName): string | null {
+  const cleaned = name.trim().replace(/\s+/g, ' ');
+  if (!cleaned) return null;
+  if (field === 'make' && cleaned === '-') return null;
+  if (field === 'brand' && looksLikeVehicleModelLabel(cleaned)) return null;
+  return cleaned;
+}
+
+function looksLikeVehicleModelLabel(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const [first, ...rest] = normalized.split(/\s+/);
+  if (!first || rest.length === 0 || !MAKE_LOOKUP.has(first)) return false;
+  return rest.some((token) => /\d/.test(token));
+}
+
+function preferDisplayName(current: string, next: string): string {
+  if (!current) return next;
+  const currentHasLower = /[a-z]/.test(current);
+  const nextHasLower = /[a-z]/.test(next);
+  if (nextHasLower && !currentHasLower) return next;
+  if (current === current.toLocaleLowerCase() && next !== next.toLocaleLowerCase()) {
+    return next;
+  }
+  if (next.length < current.length && next.toLocaleUpperCase() === current.toLocaleUpperCase()) {
+    return next;
+  }
+  return current;
+}
+
+function mergeFacetBuckets(
+  buckets: Array<{ key: string; doc_count: number }>,
+  field: FacetFieldName = 'generic',
+): Array<{ name: string; count: number }> {
+  const merged = new Map<string, { name: string; count: number }>();
+  for (const bucket of buckets) {
+    const name = cleanFacetName(String(bucket.key ?? ''), field);
+    if (!name) continue;
+    const key = facetKey(name);
+    const existing = merged.get(key);
+    if (existing) {
+      existing.name = preferDisplayName(existing.name, name);
+      existing.count += bucket.doc_count;
+    } else {
+      merged.set(key, { name, count: bucket.doc_count });
+    }
+  }
+  return [...merged.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  );
 }

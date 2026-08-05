@@ -10,21 +10,21 @@ import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
  * The label comes from the device garage; unknown config ids (e.g. shared
  * links) still get an honest generic banner.
  */
-export function VehicleModeBanner({ configId }: { configId: string }) {
+export function VehicleModeBanner({ configId, compact = false }: { configId: string; compact?: boolean }) {
   const { vehicles, ready } = useGarage();
   const vehicle = ready ? vehicles.find((v) => v.configId === configId) : null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-          <CarIcon className="h-5 w-5" />
+          <CarIcon className={compact ? "h-4 w-4" : "h-5 w-5"} />
         </span>
         <div>
           <p className="text-sm font-semibold text-slate-900">
             {vehicle ? vehicleFullLabel(vehicle) : "Parts for your selected vehicle"}
           </p>
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-800">
+          <p className={compact ? "sr-only" : "mt-0.5 flex items-center gap-1 text-xs text-amber-800"}>
             <ShieldCheckIcon className="h-3.5 w-3.5" />
             Showing only parts with verified compatibility evidence for this configuration.
           </p>

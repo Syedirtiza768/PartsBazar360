@@ -69,6 +69,7 @@ export type IndexedOfferLike = {
   sellerName?: string | null;
   status?: string | null;
   price?: number | null;
+  sourceTag?: string | null;
   seller?: { name?: string | null; onboardingStatus?: string | null } | null;
   [key: string]: unknown;
 };
@@ -78,6 +79,12 @@ export type SearchItemLike = {
   offers?: IndexedOfferLike[] | null;
   minPrice?: number | null;
   [key: string]: unknown;
+};
+
+export type OfferFilterConstraints = {
+  sourceTags?: string[];
+  minPrice?: number;
+  maxPrice?: number;
 };
 
 export function isBuyerVisibleIndexedOffer(
@@ -109,11 +116,28 @@ export function isBuyerVisibleIndexedOffer(
 
 export function sanitizeSearchItem<T extends SearchItemLike>(
   item: T,
+  constraints: OfferFilterConstraints = {},
 ): T | null {
   if (!item) return null;
-  const filtered = (item.offers || [])
-    .filter(isBuyerVisibleIndexedOffer);
+  const selectedTags = new Set(
+    (constraints.sourceTags || []).map((tag) => tag.toUpperCase()),
+  );
+  const filtered = (item.offers || []).filter(isBuyerVisibleIndexedOffer);
   const offers = applySuperiorPriority(filtered)
+    .filter((offer) => {
+      const price = Number(offer.price);
+      if (selectedTags.size > 0) {
+        const tag = String(offer.sourceTag || '').toUpperCase();
+        if (!selectedTags.has(tag)) return false;
+      }
+      if (constraints.minPrice != null && price < constraints.minPrice) {
+        return false;
+      }
+      if (constraints.maxPrice != null && price > constraints.maxPrice) {
+        return false;
+      }
+      return true;
+    })
     .slice()
     .sort(
       (a, b) => (Number(a.price) || Infinity) - (Number(b.price) || Infinity),
@@ -135,8 +159,9 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
 
 export function sanitizeSearchItems<T extends SearchItemLike>(
   items: T[] = [],
+  constraints: OfferFilterConstraints = {},
 ): T[] {
   return (items || [])
-    .map((item) => sanitizeSearchItem(item))
+    .map((item) => sanitizeSearchItem(item, constraints))
     .filter((item): item is T => Boolean(item));
 }

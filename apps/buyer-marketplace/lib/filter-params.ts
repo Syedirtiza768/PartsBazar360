@@ -15,8 +15,16 @@ export type FacetField =
   | "brand"
   | "make"
   | "partType"
-  | "condition"
   | "sourceTag";
+
+export type FilterGroupId =
+  | "category"
+  | "partType"
+  | "brand"
+  | "make"
+  | "sourceTag"
+  | "price"
+  | "interchange";
 
 export const MULTI_SELECT_FIELDS: FacetField[] = [
   "category",
@@ -24,9 +32,28 @@ export const MULTI_SELECT_FIELDS: FacetField[] = [
   "brand",
   "make",
   "partType",
-  "condition",
   "sourceTag",
 ];
+
+export const FILTER_GROUPS: Array<{
+  id: FilterGroupId;
+  title: string;
+  quick: boolean;
+}> = [
+  { id: "category", title: "Category", quick: true },
+  { id: "partType", title: "Part Type", quick: true },
+  { id: "brand", title: "Brand", quick: true },
+  { id: "make", title: "Vehicle Make", quick: true },
+  { id: "sourceTag", title: "Inventory", quick: true },
+  { id: "price", title: "Price", quick: true },
+  { id: "interchange", title: "Part Number Matching", quick: false },
+];
+
+export type FilterState = Record<FacetField, string[]> & {
+  includeInterchange: boolean;
+  minPrice: string;
+  maxPrice: string;
+};
 
 export function buildHref(
   base: SearchParamsShape,
@@ -78,18 +105,121 @@ export function displayLabelFor(field: FacetField, name: string): string {
   return field === "partType" ? partTypeLabel(name) : name;
 }
 
+export function paramsToFilterState(params: SearchParamsShape): FilterState {
+  const out = {} as FilterState;
+  for (const field of MULTI_SELECT_FIELDS) out[field] = csvList(params[field]);
+  out.includeInterchange = params.includeInterchange !== "false";
+  out.minPrice = params.minPrice ?? "";
+  out.maxPrice = params.maxPrice ?? "";
+  return out;
+}
+
+export function filterStateKey(state: FilterState): string {
+  return (
+    MULTI_SELECT_FIELDS.map((field) => `${field}:${[...state[field]].sort().join("|")}`).join(";") +
+    `;interchange:${state.includeInterchange};min:${state.minPrice};max:${state.maxPrice}`
+  );
+}
+
+export function filterStateToHref(base: SearchParamsShape, state: FilterState): string {
+  const overrides: Record<string, string | undefined> = {
+    includeInterchange: state.includeInterchange ? undefined : "false",
+    minPrice: state.minPrice.trim() || undefined,
+    maxPrice: state.maxPrice.trim() || undefined,
+  };
+  for (const field of MULTI_SELECT_FIELDS) {
+    overrides[field] = state[field].length ? state[field].join(",") : undefined;
+  }
+  return buildHref(base, overrides);
+}
+
+export function hasPriceFilter(params: SearchParamsShape): boolean {
+  return Boolean(params.minPrice || params.maxPrice);
+}
+
+export function priceFilterLabel(params: SearchParamsShape): string | null {
+  const min = params.minPrice?.trim();
+  const max = params.maxPrice?.trim();
+  if (min && max) return `Price ${min}-${max}`;
+  if (min) return `Price from ${min}`;
+  if (max) return `Price up to ${max}`;
+  return null;
+}
+
+export function priceStateLabel(state: Pick<FilterState, "minPrice" | "maxPrice">): string | null {
+  const min = state.minPrice.trim();
+  const max = state.maxPrice.trim();
+  if (min && max) return `$${min}-$${max}`;
+  if (min) return `From $${min}`;
+  if (max) return `Up to $${max}`;
+  return null;
+}
+
+export function countFilterState(state: FilterState): number {
+  return (
+    MULTI_SELECT_FIELDS.reduce((sum, field) => sum + state[field].length, 0) +
+    (state.includeInterchange ? 0 : 1) +
+    (state.minPrice || state.maxPrice ? 1 : 0)
+  );
+}
+
+export function groupSelectedCount(groupId: FilterGroupId, state: FilterState): number {
+  switch (groupId) {
+    case "category":
+      return state.categoryGroup.length + state.category.length;
+    case "price":
+      return state.minPrice || state.maxPrice ? 1 : 0;
+    case "interchange":
+      return state.includeInterchange ? 0 : 1;
+    default:
+      return state[groupId].length;
+  }
+}
+
+export function groupSelectionSummary(
+  groupId: FilterGroupId,
+  state: FilterState,
+  empty = "Any",
+): string {
+  const summarize = (values: string[], field: FacetField) => {
+    if (values.length === 0) return empty;
+    const labels = values.map((value) => displayLabelFor(field, value));
+    if (labels.length <= 2) return labels.join(", ");
+    return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
+  };
+
+  switch (groupId) {
+    case "category": {
+      const values = [...state.categoryGroup, ...state.category];
+      return values.length ? summarize(values, "category") : empty;
+    }
+    case "price":
+      return priceStateLabel(state) ?? empty;
+    case "interchange":
+      return state.includeInterchange ? "Interchange included" : "Exact only";
+    case "partType":
+      return summarize(state.partType, "partType");
+    case "brand":
+      return summarize(state.brand, "brand");
+    case "make":
+      return summarize(state.make, "make");
+    case "sourceTag":
+      return summarize(state.sourceTag, "sourceTag");
+  }
+}
+
 /** Total selected values across all multi-select facets (for the drawer badge). */
 export function countActiveFilters(params: SearchParamsShape): number {
-  return (
-    MULTI_SELECT_FIELDS.reduce((sum, field) => sum + csvList(params[field]).length, 0) +
-    (params.includeInterchange === "false" ? 1 : 0)
-  );
+  return countFilterState(paramsToFilterState(params));
 }
 
 /** Remove refinements without throwing away the buyer's search or display choices. */
 export function clearFiltersHref(params: SearchParamsShape): string {
   const overrides: Record<string, string | undefined> = {
+    condition: undefined,
     includeInterchange: undefined,
+    minPrice: undefined,
+    maxPrice: undefined,
   };
   for (const field of MULTI_SELECT_FIELDS) overrides[field] = undefined;
   return buildHref(params, overrides);

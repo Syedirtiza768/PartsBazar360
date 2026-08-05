@@ -113,6 +113,197 @@ function parseVehicleFromTitle(title) {
   return null;
 }
 
+const BATCH_SIZE = Number(process.env.BACKFILL_BATCH_SIZE || 500);
+
+const PART_SELECT = {
+  id: true,
+  title: true,
+  brand: true,
+  compatibility: true,
+  fitmentFlags: true,
+  fitmentStatus: true,
+  oeNumbers: true,
+  imageUrls: true,
+  listingUrl: true,
+  ebayItemId: true,
+  createdAt: true,
+  _count: { select: { fitments: true } },
+  offers: {
+    where: { status: 'ACTIVE' },
+    select: { id: true, price: true, condition: true, sellerId: true, seller: { select: { name: true } } },
+    take: 5,
+  },
+};
+
+function isMissing(p) {
+  const compat = Array.isArray(p.compatibility) ? p.compatibility : [];
+  const hasVerifiedFlag = (p.fitmentFlags || []).includes('MVL_VERIFIED');
+  const hasCompat = compat.length > 0;
+  return !hasVerifiedFlag || !hasCompat || p._count.fitments === 0 || p.fitmentStatus !== 'CONFIRMED';
+}
+
+async function processPart(prisma, os, INDEX_NAME, part) {
+  const candidates = [];
+  const compat = Array.isArray(part.compatibility) ? part.compatibility : [];
+  for (const row of compat) {
+    const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
+    if (!Number.isFinite(year) || !row.make || !row.model || row.make === '-' || row.model === '-') continue;
+    candidates.push({ year, make: String(row.make), model: String(row.model), trim: row.trim, engine: row.engine, source: row.source || 'existing' });
+  }
+  if (candidates.length === 0) {
+    const parsed = parseVehicleFromTitle(part.title || '');
+    if (parsed) {
+      for (let y = parsed.startYear; y <= Math.min(parsed.endYear, parsed.startYear + 40); y++) {
+        candidates.push({ year: y, make: parsed.make, model: parsed.model, source: 'title' });
+      }
+    }
+  }
+  if (candidates.length === 0) return 'skipped';
+
+  const verifiedRows = [];
+  const configIds = [];
+  const seen = new Set();
+
+  for (const c of candidates) {
+    const key = `${c.year}|${normalizeToken(c.make)}|${normalizeToken(c.model)}`;
+    if (seen.has(key)) continue;
+    let hit = null;
+    const nMake = normalizeToken(c.make);
+    for (const variant of modelVariants(c.model)) {
+      const nModel = normalizeToken(variant);
+      if (!nMake || !nModel) continue;
+      for (const market of ['DE', 'UK', 'AU', 'US']) {
+        const rows = await prisma.$queryRaw`
+          SELECT make, model, epid, "kType", trim, engine, market
+          FROM "MvlVehicle"
+          WHERE year = ${c.year}
+            AND "normalizedMake" = ${nMake}
+            AND "normalizedModel" = ${nModel}
+            AND market = ${market}
+          LIMIT 1
+        `;
+        if (rows?.[0]) {
+          hit = rows[0];
+          break;
+        }
+      }
+      if (hit) break;
+    }
+    if (!hit) continue;
+    seen.add(key);
+    verifiedRows.push({
+      year: c.year,
+      make: hit.make,
+      model: hit.model,
+      trim: c.trim && c.trim !== '-' ? c.trim : hit.trim || '-',
+      engine: c.engine && c.engine !== '-' ? c.engine : hit.engine || '-',
+      source: c.source || 'mvl',
+      epid: hit.epid,
+      verified: true,
+    });
+
+    const make = await prisma.vehicleMake.upsert({
+      where: { name: hit.make },
+      update: {},
+      create: { name: hit.make, canonicalName: hit.make, displayName: hit.make },
+    });
+    let model = await prisma.vehicleModel.findFirst({ where: { makeId: make.id, name: hit.model } });
+    if (!model) model = await prisma.vehicleModel.create({ data: { makeId: make.id, name: hit.model } });
+    let generation = await prisma.vehicleGeneration.findFirst({
+      where: { modelId: model.id, startYear: c.year, endYear: c.year },
+    });
+    if (!generation) {
+      generation = await prisma.vehicleGeneration.create({
+        data: { modelId: model.id, name: String(c.year), startYear: c.year, endYear: c.year },
+      });
+    }
+    let config = await prisma.vehicleConfiguration.findFirst({
+      where: { generationId: generation.id, market: hit.market || 'US' },
+    });
+    if (!config) {
+      config = await prisma.vehicleConfiguration.create({
+        data: {
+          generationId: generation.id,
+          market: hit.market || 'US',
+          trim: hit.trim,
+          engine: hit.engine,
+        },
+      });
+    }
+    configIds.push(config.id);
+  }
+
+  if (verifiedRows.length === 0) return 'skipped';
+
+  const fitments = [];
+  for (const vehicleConfigId of [...new Set(configIds)]) {
+    const fitment = await prisma.fitment.upsert({
+      where: {
+        canonicalPartId_vehicleConfigId: { canonicalPartId: part.id, vehicleConfigId },
+      },
+      update: {
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        reviewer: 'Auto (US MVL verified)',
+        source: 'MVL_BACKFILL',
+        verificationStatus: 'VERIFIED',
+        reason: 'Matched US MVL Year/Make/Model',
+      },
+      create: {
+        canonicalPartId: part.id,
+        vehicleConfigId,
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        reviewer: 'Auto (US MVL verified)',
+        source: 'MVL_BACKFILL',
+        verificationStatus: 'VERIFIED',
+        reason: 'Matched US MVL Year/Make/Model',
+      },
+    });
+    fitments.push({ vehicleConfigId, evidenceLevel: 'B', confidence: 0.9 });
+    await prisma.fitmentEvidence.create({
+      data: {
+        id: randomUUID(),
+        fitmentId: fitment.id,
+        evidenceType: 'MVL_MATCH',
+        evidenceLevel: 'B',
+        confidence: 0.9,
+        source: 'MVL_BACKFILL',
+        verifiedBy: 'Auto (US MVL verified)',
+        verifiedAt: new Date(),
+      },
+    }).catch(() => undefined);
+  }
+
+  await prisma.canonicalPart.update({
+    where: { id: part.id },
+    data: {
+      compatibility: verifiedRows,
+      fitmentStatus: 'CONFIRMED',
+      fitmentConfidence: 0.9,
+      fitmentFlags: [...new Set([...(part.fitmentFlags || []), 'MVL_VERIFIED'])],
+    },
+  });
+
+  try {
+    await os.update({
+      index: INDEX_NAME,
+      id: part.id,
+      body: {
+        doc: {
+          compatibility: verifiedRows,
+          fitments,
+        },
+        doc_as_upsert: true,
+      },
+    });
+  } catch {
+    /* index may lag */
+  }
+
+  return 'verified';
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL required');
@@ -126,227 +317,77 @@ async function main() {
   const mvlCount = mvlCountRows?.[0]?.n || 0;
   if (mvlCount === 0) throw new Error('MvlVehicle is empty — import MVL first');
 
-  const where = {
-    offers: { some: { status: 'ACTIVE' } },
-  };
-
-  let parts = await prisma.canonicalPart.findMany({
-    where,
-    select: {
-      id: true,
-      title: true,
-      brand: true,
-      compatibility: true,
-      fitmentFlags: true,
-      fitmentStatus: true,
-      oeNumbers: true,
-      imageUrls: true,
-      listingUrl: true,
-      ebayItemId: true,
-      createdAt: true,
-      _count: { select: { fitments: true } },
-      offers: {
-        where: { status: 'ACTIVE' },
-        select: { id: true, price: true, condition: true, sellerId: true, seller: { select: { name: true } } },
-        take: 5,
-      },
-    },
-    take: LIMIT || undefined,
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  if (ONLY_MISSING) {
-    parts = parts.filter((p) => {
-      const compat = Array.isArray(p.compatibility) ? p.compatibility : [];
-      const hasVerifiedFlag = (p.fitmentFlags || []).includes('MVL_VERIFIED');
-      const hasCompat = compat.length > 0;
-      return !hasVerifiedFlag || !hasCompat || p._count.fitments === 0 || p.fitmentStatus !== 'CONFIRMED';
-    });
-  }
-
-  console.log(JSON.stringify({ event: 'backfill_start', parts: parts.length, mvlCount }));
-
   let verified = 0;
   let skipped = 0;
   let failed = 0;
+  let processed = 0;
+  let totalFound = 0;
+  let lastId = '';
 
-  for (const part of parts) {
-    try {
-      const candidates = [];
-      const compat = Array.isArray(part.compatibility) ? part.compatibility : [];
-      for (const row of compat) {
-        const year = typeof row.year === 'number' ? row.year : parseInt(String(row.year), 10);
-        if (!Number.isFinite(year) || !row.make || !row.model || row.make === '-' || row.model === '-') continue;
-        candidates.push({ year, make: String(row.make), model: String(row.model), trim: row.trim, engine: row.engine, source: row.source || 'existing' });
-      }
-      if (candidates.length === 0) {
-        const parsed = parseVehicleFromTitle(part.title || '');
-        if (parsed) {
-          for (let y = parsed.startYear; y <= Math.min(parsed.endYear, parsed.startYear + 40); y++) {
-            candidates.push({ year: y, make: parsed.make, model: parsed.model, source: 'title' });
-          }
-        }
-      }
-      if (candidates.length === 0) {
-        skipped++;
-        continue;
-      }
+  console.log(JSON.stringify({ event: 'backfill_start', mode: 'cursor_batch', batchSize: BATCH_SIZE, onlyMissing: ONLY_MISSING, mvlCount }));
 
-      const verifiedRows = [];
-      const configIds = [];
-      const seen = new Set();
+  while (true) {
+    let batch;
+    if (ONLY_MISSING) {
+      const rows = await prisma.$queryRawUnsafe(`
+        SELECT cp.id
+        FROM "CanonicalPart" cp
+        JOIN "SellerOffer" so ON so."canonicalPartId" = cp.id AND so.status = 'ACTIVE'
+        WHERE cp.id > $1
+          AND (
+            NOT ('MVL_VERIFIED' = ANY(cp."fitmentFlags"))
+            OR cp."fitmentStatus" != 'CONFIRMED'
+          )
+        ORDER BY cp.id
+        LIMIT $2
+      `, lastId, BATCH_SIZE);
 
-      for (const c of candidates) {
-        const key = `${c.year}|${normalizeToken(c.make)}|${normalizeToken(c.model)}`;
-        if (seen.has(key)) continue;
-        let hit = null;
-        const nMake = normalizeToken(c.make);
-        for (const variant of modelVariants(c.model)) {
-          const nModel = normalizeToken(variant);
-          if (!nMake || !nModel) continue;
-          for (const market of ['DE', 'UK', 'AU', 'US']) {
-            const rows = await prisma.$queryRaw`
-              SELECT make, model, epid, "kType", trim, engine, market
-              FROM "MvlVehicle"
-              WHERE year = ${c.year}
-                AND "normalizedMake" = ${nMake}
-                AND "normalizedModel" = ${nModel}
-                AND market = ${market}
-              LIMIT 1
-            `;
-            if (rows?.[0]) {
-              hit = rows[0];
-              break;
-            }
-          }
-          if (hit) break;
-        }
-        if (!hit) continue;
-        seen.add(key);
-        verifiedRows.push({
-          year: c.year,
-          make: hit.make,
-          model: hit.model,
-          trim: c.trim && c.trim !== '-' ? c.trim : hit.trim || '-',
-          engine: c.engine && c.engine !== '-' ? c.engine : hit.engine || '-',
-          source: c.source || 'mvl',
-          epid: hit.epid,
-          verified: true,
-        });
+      if (rows.length === 0) break;
 
-        const make = await prisma.vehicleMake.upsert({
-          where: { name: hit.make },
-          update: {},
-          create: { name: hit.make, canonicalName: hit.make, displayName: hit.make },
-        });
-        let model = await prisma.vehicleModel.findFirst({ where: { makeId: make.id, name: hit.model } });
-        if (!model) model = await prisma.vehicleModel.create({ data: { makeId: make.id, name: hit.model } });
-        let generation = await prisma.vehicleGeneration.findFirst({
-          where: { modelId: model.id, startYear: c.year, endYear: c.year },
-        });
-        if (!generation) {
-          generation = await prisma.vehicleGeneration.create({
-            data: { modelId: model.id, name: String(c.year), startYear: c.year, endYear: c.year },
-          });
-        }
-        let config = await prisma.vehicleConfiguration.findFirst({
-          where: { generationId: generation.id, market: hit.market || 'US' },
-        });
-        if (!config) {
-          config = await prisma.vehicleConfiguration.create({
-            data: {
-              generationId: generation.id,
-              market: hit.market || 'US',
-              trim: hit.trim,
-              engine: hit.engine,
-            },
-          });
-        }
-        configIds.push(config.id);
-      }
-
-      if (verifiedRows.length === 0) {
-        skipped++;
-        continue;
-      }
-
-      const fitments = [];
-      for (const vehicleConfigId of [...new Set(configIds)]) {
-        const fitment = await prisma.fitment.upsert({
-          where: {
-            canonicalPartId_vehicleConfigId: { canonicalPartId: part.id, vehicleConfigId },
-          },
-          update: {
-            evidenceLevel: 'B',
-            confidence: 0.9,
-            reviewer: 'Auto (US MVL verified)',
-            source: 'MVL_BACKFILL',
-            verificationStatus: 'VERIFIED',
-            reason: 'Matched US MVL Year/Make/Model',
-          },
-          create: {
-            canonicalPartId: part.id,
-            vehicleConfigId,
-            evidenceLevel: 'B',
-            confidence: 0.9,
-            reviewer: 'Auto (US MVL verified)',
-            source: 'MVL_BACKFILL',
-            verificationStatus: 'VERIFIED',
-            reason: 'Matched US MVL Year/Make/Model',
-          },
-        });
-        fitments.push({ vehicleConfigId, evidenceLevel: 'B', confidence: 0.9 });
-        await prisma.fitmentEvidence.create({
-          data: {
-            id: randomUUID(),
-            fitmentId: fitment.id,
-            evidenceType: 'MVL_MATCH',
-            evidenceLevel: 'B',
-            confidence: 0.9,
-            source: 'MVL_BACKFILL',
-            verifiedBy: 'Auto (US MVL verified)',
-            verifiedAt: new Date(),
-          },
-        }).catch(() => undefined);
-      }
-
-      await prisma.canonicalPart.update({
-        where: { id: part.id },
-        data: {
-          compatibility: verifiedRows,
-          fitmentStatus: 'CONFIRMED',
-          fitmentConfidence: 0.9,
-          fitmentFlags: [...new Set([...(part.fitmentFlags || []), 'MVL_VERIFIED'])],
-        },
+      const ids = rows.map(r => r.id);
+      batch = await prisma.canonicalPart.findMany({
+        where: { id: { in: ids } },
+        select: PART_SELECT,
       });
-
-      try {
-        await os.update({
-          index: INDEX_NAME,
-          id: part.id,
-          body: {
-            doc: {
-              compatibility: verifiedRows,
-              fitments,
-            },
-            doc_as_upsert: true,
-          },
-        });
-      } catch {
-        /* index may lag */
-      }
-
-      verified++;
-      if (verified % 100 === 0) {
-        console.log(JSON.stringify({ event: 'progress', verified, skipped, failed }));
-      }
-    } catch (err) {
-      failed++;
-      console.error(JSON.stringify({ event: 'part_fail', id: part.id, error: String(err?.message || err) }));
+    } else {
+      batch = await prisma.canonicalPart.findMany({
+        where: { offers: { some: { status: 'ACTIVE' } } },
+        select: PART_SELECT,
+        take: BATCH_SIZE,
+        skip: lastId ? 1 : 0,
+        cursor: lastId ? { id: lastId } : undefined,
+        orderBy: { id: 'asc' },
+      });
     }
+
+    if (batch.length === 0) break;
+
+    lastId = batch[batch.length - 1].id;
+    processed += batch.length;
+    totalFound += batch.length;
+
+    for (const part of batch) {
+      try {
+        const result = await processPart(prisma, os, INDEX_NAME, part);
+        if (result === 'verified') verified++;
+        else if (result === 'skipped') skipped++;
+      } catch (err) {
+        failed++;
+        console.error(JSON.stringify({ event: 'part_fail', id: part.id, error: String(err?.message || err) }));
+      }
+    }
+
+    console.log(JSON.stringify({
+      event: 'batch_done',
+      scanned: processed,
+      totalFound,
+      verified,
+      skipped,
+      failed,
+    }));
   }
 
-  console.log(JSON.stringify({ event: 'backfill_done', verified, skipped, failed }));
+  console.log(JSON.stringify({ event: 'backfill_done', scanned: processed, verified, skipped, failed }));
   await prisma.$disconnect();
 }
 

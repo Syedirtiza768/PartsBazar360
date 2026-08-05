@@ -106,7 +106,14 @@ function SearchBox({ categories }: { categories: Facet[] }) {
   }, [reset]);
 
   const submit = useCallback(
-    (value: string, category?: string, brand?: string, categoryGroup?: string) => {
+    (
+      value: string,
+      category?: string,
+      brand?: string,
+      categoryGroup?: string,
+      make?: string,
+      sourceTag?: string,
+    ) => {
       const params = new URLSearchParams();
       const clean = value.trim();
       if (clean) {
@@ -116,6 +123,8 @@ function SearchBox({ categories }: { categories: Facet[] }) {
       if (category) params.set("category", category);
       if (categoryGroup) params.set("categoryGroup", categoryGroup);
       if (brand) params.set("brand", brand);
+      if (make) params.set("make", make);
+      if (sourceTag) params.set("sourceTag", sourceTag);
       setOpen(false);
       reset();
       setQuery("");
@@ -141,9 +150,12 @@ function SearchBox({ categories }: { categories: Facet[] }) {
   // Flat keyboard-navigation index boundaries
   const searchActionEnd = hasQuery ? 1 : 0;
   const partsEnd = searchActionEnd + (results?.parts.length ?? 0);
-  const suggestCatEnd = partsEnd + (results?.categories.length ?? 0);
+  const suggestGroupEnd = partsEnd + (results?.categoryGroups.length ?? 0);
+  const suggestCatEnd = suggestGroupEnd + (results?.categories.length ?? 0);
   const suggestBrandEnd = suggestCatEnd + (results?.brands.length ?? 0);
-  const recentsStart = suggestBrandEnd;
+  const suggestMakeEnd = suggestBrandEnd + (results?.makes.length ?? 0);
+  const suggestTagEnd = suggestMakeEnd + (results?.sourceTags.length ?? 0);
+  const recentsStart = suggestTagEnd;
   const recentsEnd = recentsStart + Math.min(recents.length, 5);
   const totalNav = recentsEnd;
 
@@ -158,8 +170,13 @@ function SearchBox({ categories }: { categories: Facet[] }) {
         if (part) navigateToPart(part.id);
         return;
       }
+      if (index < suggestGroupEnd && results) {
+        const categoryGroup = results.categoryGroups[index - partsEnd];
+        if (categoryGroup) submit("", undefined, undefined, categoryGroup);
+        return;
+      }
       if (index < suggestCatEnd && results) {
-        const cat = results.categories[index - partsEnd];
+        const cat = results.categories[index - suggestGroupEnd];
         if (cat) submit("", cat);
         return;
       }
@@ -168,12 +185,22 @@ function SearchBox({ categories }: { categories: Facet[] }) {
         if (brand) submit("", undefined, brand);
         return;
       }
+      if (index < suggestMakeEnd && results) {
+        const make = results.makes[index - suggestBrandEnd];
+        if (make) submit("", undefined, undefined, undefined, make);
+        return;
+      }
+      if (index < suggestTagEnd && results) {
+        const sourceTag = results.sourceTags[index - suggestMakeEnd];
+        if (sourceTag) submit("", undefined, undefined, undefined, undefined, sourceTag);
+        return;
+      }
       if (index < recentsEnd) {
         const recent = recents[index - recentsStart];
         if (recent) submit(recent);
       }
     },
-    [hasQuery, query, results, recents, submit, navigateToPart, searchActionEnd, partsEnd, suggestCatEnd, suggestBrandEnd, recentsStart, recentsEnd],
+    [hasQuery, query, results, recents, submit, navigateToPart, searchActionEnd, partsEnd, suggestCatEnd, suggestGroupEnd, suggestBrandEnd, suggestMakeEnd, suggestTagEnd, recentsStart, recentsEnd],
   );
 
   const handleKeyDown = useCallback(
@@ -364,16 +391,47 @@ function SearchBox({ categories }: { categories: Facet[] }) {
             </section>
           )}
 
-          {/* Suggested categories + brands (side by side) */}
+          {/* Suggested filters */}
           {showSuggestions &&
-            (results.categories.length > 0 || results.brands.length > 0) && (
+            (results.categories.length > 0 ||
+              results.categoryGroups.length > 0 ||
+              results.brands.length > 0 ||
+              results.makes.length > 0 ||
+              results.sourceTags.length > 0) && (
               <section className="border-b border-stone-200">
                 <div className="grid sm:grid-cols-2">
+                  {results.categoryGroups.length > 0 && (
+                    <div className="border-b border-stone-200 p-3 sm:border-r">
+                      <p className="eyebrow px-2 py-1">Category</p>
+                      {results.categoryGroups.map((categoryGroup, i) => {
+                        const idx = partsEnd + i;
+                        return (
+                          <button
+                            id={`search-opt-${idx}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            key={categoryGroup}
+                            data-aidx={idx}
+                            type="button"
+                            onClick={() => submit("", undefined, undefined, categoryGroup)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
+                          >
+                            <TagIcon className="h-4 w-4 shrink-0 text-brand-700" />
+                            <span className="min-w-0 truncate">
+                              <Highlight text={categoryGroup} q={query} />
+                            </span>
+                            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {results.categories.length > 0 && (
                     <div className="border-b border-stone-200 p-3 sm:border-b-0 sm:border-r">
-                      <p className="eyebrow px-2 py-1">Categories</p>
+                      <p className="eyebrow px-2 py-1">Part Category</p>
                       {results.categories.map((cat, i) => {
-                        const idx = partsEnd + i;
+                        const idx = suggestGroupEnd + i;
                         return (
                           <button
                             id={`search-opt-${idx}`}
@@ -397,8 +455,8 @@ function SearchBox({ categories }: { categories: Facet[] }) {
                     </div>
                   )}
                   {results.brands.length > 0 && (
-                    <div className="p-3">
-                      <p className="eyebrow px-2 py-1">Brands</p>
+                    <div className="border-b border-stone-200 p-3">
+                      <p className="eyebrow px-2 py-1">Brand / Manufacturer</p>
                       {results.brands.map((brand, i) => {
                         const idx = suggestCatEnd + i;
                         return (
@@ -419,6 +477,58 @@ function SearchBox({ categories }: { categories: Facet[] }) {
                             <span className="min-w-0 truncate">
                               <Highlight text={brand} q={query} />
                             </span>
+                            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {results.makes.length > 0 && (
+                    <div className="border-b border-stone-200 p-3 sm:border-r">
+                      <p className="eyebrow px-2 py-1">Fits Vehicle Make</p>
+                      {results.makes.map((make, i) => {
+                        const idx = suggestBrandEnd + i;
+                        return (
+                          <button
+                            id={`search-opt-${idx}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            key={make}
+                            data-aidx={idx}
+                            type="button"
+                            onClick={() => submit("", undefined, undefined, undefined, make)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
+                          >
+                            <CarIcon className="h-4 w-4 shrink-0 text-brand-700" />
+                            <span className="min-w-0 truncate">
+                              <Highlight text={make} q={query} />
+                            </span>
+                            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {results.sourceTags.length > 0 && (
+                    <div className="p-3">
+                      <p className="eyebrow px-2 py-1">Inventory Tag</p>
+                      {results.sourceTags.map((sourceTag, i) => {
+                        const idx = suggestMakeEnd + i;
+                        return (
+                          <button
+                            id={`search-opt-${idx}`}
+                            role="option"
+                            aria-selected={activeIndex === idx}
+                            key={sourceTag}
+                            data-aidx={idx}
+                            type="button"
+                            onClick={() => submit("", undefined, undefined, undefined, undefined, sourceTag)}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            className={`${itemBase} px-2 hover:bg-stone-100 ${activeIndex === idx ? "bg-stone-100" : ""}`}
+                          >
+                            <TagIcon className="h-4 w-4 shrink-0 text-brand-700" />
+                            <span className="min-w-0 truncate">{sourceTag}</span>
                             <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
                           </button>
                         );
@@ -494,7 +604,7 @@ function SearchBox({ categories }: { categories: Facet[] }) {
           )}
 
           {/* No results state */}
-          {hasQuery && !loading && results && results.parts.length === 0 && results.categories.length === 0 && results.brands.length === 0 && (
+          {hasQuery && !loading && results && results.parts.length === 0 && results.categories.length === 0 && results.categoryGroups.length === 0 && results.brands.length === 0 && results.makes.length === 0 && results.sourceTags.length === 0 && (
             <div className="px-4 py-6 text-center">
               <p className="text-sm font-semibold text-graphite-950">No suggestions for &ldquo;{query.trim()}&rdquo;</p>
               <p className="mt-1 text-xs text-graphite-600">

@@ -3,29 +3,79 @@
 import { useState } from "react";
 import { SlidersIcon } from "@repo/ui/icons";
 import { Sheet } from "@repo/ui/sheet";
-import { FilterSectionsClient } from "@/components/FilterSectionsClient";
-import type { SearchParamsShape } from "@/lib/filter-params";
+import {
+  FilterApplyFooter,
+  FilterSectionsClient,
+  MobileFilterDrillIn,
+  MobileFilterRows,
+  useStagedFilters,
+} from "@/components/FilterSectionsClient";
+import type { FilterGroupId, SearchParamsShape } from "@/lib/filter-params";
 import type { FacetsResponse } from "@/lib/types";
 
-/**
- * Mobile filter experience: a trigger button + full-height drawer wrapping
- * FilterSectionsClient. Selections stage locally (zero navigation per tap);
- * the drawer only navigates — and closes — when the buyer taps "Apply
- * filters" in the sticky bar at the top of the content. There's no need to
- * keep the drawer open across navigations here (the old sessionStorage
- * bridge existed because every tap used to navigate immediately); a single
- * Apply is the one moment we want it to close.
- */
+export function AdvancedFiltersButton({
+  facets,
+  params,
+  resultCount,
+  className,
+  label = "All filters",
+}: {
+  facets: FacetsResponse;
+  params: SearchParamsShape;
+  resultCount?: number;
+  className?: string;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={className} aria-label="Open all filters">
+        <SlidersIcon className="h-4 w-4" />
+        {label}
+      </button>
+
+      <Sheet
+        open={open}
+        onClose={() => setOpen(false)}
+        side="right"
+        size="lg"
+        title="All filters"
+        description="Refine the current result set without leaving the page until you apply."
+        bodyClassName="px-5 py-4"
+      >
+        <FilterSectionsClient
+          facets={facets}
+          params={params}
+          resultCount={resultCount}
+          onApply={() => setOpen(false)}
+          variant="advanced"
+        />
+      </Sheet>
+    </>
+  );
+}
+
 export function FilterDrawer({
   activeCount = 0,
   facets,
   params,
+  resultCount,
 }: {
   activeCount?: number;
   facets: FacetsResponse;
   params: SearchParamsShape;
+  resultCount?: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<FilterGroupId | null>(null);
+  const controller = useStagedFilters({
+    params,
+    onApply: () => {
+      setOpen(false);
+      setActiveGroup(null);
+    },
+  });
 
   return (
     <>
@@ -46,13 +96,30 @@ export function FilterDrawer({
 
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          setActiveGroup(null);
+        }}
         side="right"
         size="md"
-        title={activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
-        description="Select one or more options, then tap Apply filters."
+        title={activeGroup ? "Choose filter" : activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
+        footer={<FilterApplyFooter controller={controller} resultCount={resultCount} />}
       >
-        <FilterSectionsClient facets={facets} params={params} onApply={() => setOpen(false)} />
+        {activeGroup ? (
+          <MobileFilterDrillIn
+            groupId={activeGroup}
+            facets={facets}
+            controller={controller}
+            onBack={() => setActiveGroup(null)}
+          />
+        ) : (
+          <MobileFilterRows
+            facets={facets}
+            params={params}
+            controller={controller}
+            onOpenGroup={setActiveGroup}
+          />
+        )}
       </Sheet>
     </>
   );
