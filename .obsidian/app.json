@@ -1,0 +1,21 @@
+{
+  "userIgnoreFilters": [
+    "node_modules/",
+    ".git/",
+    ".turbo/",
+    ".next/",
+    "dist/",
+    "build/",
+    ".ebay-scraper/",
+    ".ebay-scraper-blackline/",
+    ".scraper-state/",
+    "docx-temp/",
+    "tmp/",
+    "exports/",
+    "outputs/",
+    "certbot/",
+    "nginx/",
+    "*.csv",
+    "*.tsv"
+  ]
+}
