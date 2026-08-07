@@ -5,7 +5,7 @@ FROM base AS deps
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/ ./packages/
-RUN npm ci --workspace=api
+RUN npm ci
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
