@@ -14,6 +14,9 @@ export type ShippingQuote = {
     sellerName: string;
     amount: number;
     matchedCountry: boolean;
+    serviceType?: string;
+    /** Customer-facing estimated delivery window, e.g. "04 to 06 Business Days". */
+    leadTime?: string | null;
     /**
      * True when the shipment exceeds courier limits. `amount` is then only the
      * price at that ceiling, and checkout is blocked pending a manual freight

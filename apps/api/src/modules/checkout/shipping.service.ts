@@ -29,6 +29,40 @@ const UAE_COUNTRY_ALIASES = new Set([
   'emirates',
 ]);
 
+/**
+ * The buyer-facing checkout country dropdown (SHIPPING_COUNTRIES) uses
+ * shorter/common country names than the EMX rate sheet does. Without this
+ * map those destinations look "unmatched" — silently falling back to the
+ * generic average rate/lead time — even though the sheet has an exact row
+ * for them under its own naming. Keyed and valued in normalized (lowercased,
+ * whitespace-collapsed) form.
+ *
+ * This list is exhaustive for naming mismatches: every dropdown entry not
+ * covered here and not resolved via `rowsByCountry` genuinely has no EMX row
+ * at all (small/embargoed markets the sheet doesn't service), so no alias
+ * would help — those fall back to `averageRates`/`AVERAGE_LEAD_TIME` below.
+ */
+const COUNTRY_ALIASES: Record<string, string> = {
+  brunei: 'brunei darussalam',
+  'cabo verde': 'cape verde',
+  'congo (drc)': 'congo - d.rep',
+  'congo (republic)': 'congo-rep',
+  'czech republic': 'czech rep.',
+  'north macedonia': 'macedonia',
+  russia: 'russian federation',
+  'south korea': 'korea rep.',
+  'united states': 'united states of america',
+};
+
+/**
+ * Delivery window shown alongside `averageRates` for destinations with no
+ * EMX row at all. Deliberately the widest band on the sheet (see
+ * buildAverageRates' sibling) since there's no carrier data for these
+ * markets to average — better to under-promise than quote a number we can't
+ * back up.
+ */
+const AVERAGE_LEAD_TIME = '08 to 14 Business Days';
+
 export interface ShippingQuoteItem {
   quantity: number;
   /** Actual unit weight in kg. */
@@ -44,6 +78,8 @@ export interface ShippingQuote {
   destinationCountry: string;
   currency: 'AED';
   serviceType: string;
+  /** Customer-facing estimated delivery window, e.g. "04 to 06 Business Days". */
+  leadTime: string | null;
   matchedCountry: boolean;
   totalWeightGrams: number;
   billableWeightGrams: number;
@@ -110,6 +146,7 @@ export class ShippingService {
       return {
         ...common,
         serviceType: `UAE FLAT (${tier.label})`,
+        leadTime: '01 to 02 Business Days',
         matchedCountry: true,
         billableWeightGrams: pricedGrams,
         amount: tier.amount,
@@ -123,6 +160,7 @@ export class ShippingService {
     return {
       ...common,
       serviceType: row?.serviceType ?? 'REGISTERED (POD)',
+      leadTime: row?.leadTime ?? AVERAGE_LEAD_TIME,
       matchedCountry: Boolean(row),
       billableWeightGrams,
       amount: this.lookupAmount(rates, billableWeightGrams),
@@ -249,7 +287,8 @@ export class ShippingService {
   }
 
   private normalizeCountry(country: string) {
-    return country.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalized = country.trim().toLowerCase().replace(/\s+/g, ' ');
+    return COUNTRY_ALIASES[normalized] ?? normalized;
   }
 
   private isUae(countryKey: string) {

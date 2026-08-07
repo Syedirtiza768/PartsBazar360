@@ -17,11 +17,12 @@ import {
 import { useCart, type CartItem } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { humanize } from "@/lib/format";
-import { partTypeFromLegacy } from "@repo/catalog-contracts";
+import { partTypeFromLegacy, partTypeLabel } from "@repo/catalog-contracts";
 import { useCurrency } from "@/lib/currency-context";
 import { PartImage } from "@/components/PartImage";
 import { QuantityStepper } from "@/components/QuantityStepper";
 import { CartLineFitment } from "@/components/CartLineFitment";
+import { ReturnsPolicyNote } from "@/components/ReturnsPolicyNote";
 import {
   resolveShippingCountry,
   setShippingCountry,
@@ -56,7 +57,11 @@ function CartLine({ item }: { item: CartItem }) {
               {part?.title || "Part"}
             </Link>
             <p className="mt-1 text-xs text-graphite-600">
-              {(() => { const c = humanize(item.sellerOffer.condition || ""); const pt = partTypeFromLegacy(item.sellerOffer.partSource || part?.partSource, item.sellerOffer.partType || part?.partType); return (c && pt !== 'GENUINE_OEM') ? `Condition: ${c}` : null; })()}
+              {(() => {
+                const c = humanize(item.sellerOffer.condition || "");
+                const pt = partTypeFromLegacy(item.sellerOffer.partSource || part?.partSource, item.sellerOffer.partType || part?.partType);
+                return [partTypeLabel(pt), pt !== 'GENUINE_OEM' ? c : null].filter(Boolean).join(" · ") || null;
+              })()}
             </p>
             <div className="mt-1.5">
               <CartLineFitment partId={part?.id} />
@@ -140,6 +145,13 @@ export default function CartPage() {
   const initialLoading = loading && items.length === 0;
   const estimatedTotal = quote?.totalAmount ?? subtotal;
   const estimatedCurrency = quote?.currency ?? currency;
+  // Only worth showing when every shipment quotes the same window — mixing
+  // "02 to 04" and "08 to 14" into one line would misrepresent the faster one.
+  const leadTimes = (quote?.sellerQuotes ?? [])
+    .map((q) => q.leadTime)
+    .filter((t): t is string => Boolean(t));
+  const commonLeadTime =
+    leadTimes.length > 0 && leadTimes.every((t) => t === leadTimes[0]) ? leadTimes[0] : null;
   const shippingLabel = !destination.trim()
     ? "Add destination to estimate"
     : !isAuthenticated
@@ -246,6 +258,12 @@ export default function CartPage() {
                     {shippingLabel}
                   </dd>
                 </div>
+                {commonLeadTime && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-graphite-600">Est. delivery</dt>
+                    <dd className="text-right text-graphite-600">{commonLeadTime}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between gap-3 border-t border-slate-100 pt-2.5 text-base">
                   <dt className="font-semibold text-slate-900">Estimated total</dt>
                   <dd className="price">{format(estimatedTotal, estimatedCurrency)}</dd>
@@ -261,6 +279,7 @@ export default function CartPage() {
                   ? `Estimate for ${quote.destinationCountry}, per seller shipment. Final amount confirmed at checkout.`
                   : `Weight-based shipping is added per seller shipment. Checkout is charged in ${displayCurrency} (settlement ${settlementCurrency}).`}
               </p>
+              <ReturnsPolicyNote className="mt-2" />
               <Button
                 fullWidth
                 size="lg"

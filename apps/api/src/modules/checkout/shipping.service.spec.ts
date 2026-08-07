@@ -46,6 +46,53 @@ describe('ShippingService', () => {
     });
   });
 
+  describe('checkout dropdown country aliases', () => {
+    /**
+     * The buyer-facing country dropdown (SHIPPING_COUNTRIES) uses shorter
+     * names than the EMX rate sheet — e.g. "United States" vs "United States
+     * of America". Without aliasing, these destinations silently fall back
+     * to the generic average rate with no lead time even though the sheet
+     * has an exact row for them.
+     */
+    it.each([
+      ['United States', 'United States of America'],
+      ['Brunei', 'Brunei Darussalam'],
+      ['Cabo Verde', 'Cape Verde'],
+      ['Congo (DRC)', 'Congo - D.Rep'],
+      ['Congo (Republic)', 'Congo-Rep'],
+      ['Czech Republic', 'Czech Rep.'],
+      ['North Macedonia', 'Macedonia'],
+      ['Russia', 'Russian Federation'],
+      ['South Korea', 'Korea Rep.'],
+    ])('resolves dropdown name %s to the same rate as sheet name %s', (dropdownName, sheetName) => {
+      const viaDropdown = service.quoteSellerShipping([dense(1)], dropdownName);
+      const viaSheet = service.quoteSellerShipping([dense(1)], sheetName);
+
+      expect(viaDropdown.matchedCountry).toBe(true);
+      expect(viaDropdown.amount).toBe(viaSheet.amount);
+      expect(viaDropdown.leadTime).toBe(viaSheet.leadTime);
+      expect(viaDropdown.leadTime).not.toBeNull();
+    });
+  });
+
+  describe('lead time', () => {
+    it('surfaces the sheet lead time on a matched country', () => {
+      const quote = service.quoteSellerShipping([dense(1)], 'Australia');
+      expect(quote.leadTime).toBe('04 to 06 Business Days');
+    });
+
+    it('falls back to the conservative average window for a country with no rate-sheet row', () => {
+      const quote = service.quoteSellerShipping([dense(1)], 'Atlantis');
+      expect(quote.matchedCountry).toBe(false);
+      expect(quote.leadTime).toBe('08 to 14 Business Days');
+    });
+
+    it('gives UAE domestic delivery its own short window', () => {
+      const quote = service.quoteSellerShipping([dense(1)], 'UAE');
+      expect(quote.leadTime).toBe('01 to 02 Business Days');
+    });
+  });
+
   describe('UAE flat tiers', () => {
     it('applies flat rates by size tier', () => {
       expect(service.quoteSellerShipping([dense(1)], 'UAE')).toMatchObject({

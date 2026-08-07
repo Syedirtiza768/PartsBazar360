@@ -1,6 +1,7 @@
 export type EmxRateRow = {
   country: string;
   serviceType: string;
+  leadTime: string;
   rates: Record<number, number>;
   returnRates: Record<number, number>;
 };
@@ -11,6 +12,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Afghanistan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -36,6 +38,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Algeria",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 24.3,
       "200": 33.75,
@@ -61,6 +64,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Angola",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -86,6 +90,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Antigua and Barbuda",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -111,6 +116,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Argentina",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 39.15,
       "200": 54.0,
@@ -136,6 +142,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Australia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 47.25,
@@ -161,6 +168,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Azerbaijan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -186,6 +194,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bahamas",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -211,6 +220,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bahrain",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "02 to 04 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -236,6 +246,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bangladesh",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -261,6 +272,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Barbados",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -286,6 +298,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Belarus",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 33.75,
       "200": 44.55,
@@ -311,6 +324,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Benin",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 52.65,
@@ -336,6 +350,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bermuda",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -361,6 +376,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bolivia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 43.2,
       "200": 62.1,
@@ -386,6 +402,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bosnia and Herzegovina",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 31.05,
       "200": 43.2,
@@ -411,6 +428,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Botswana",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -436,6 +454,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Brazil",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -461,6 +480,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Brunei Darussalam",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -486,6 +506,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bulgaria",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -511,6 +532,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Burkina Faso",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -536,6 +558,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Burundi",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -561,6 +584,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cambodia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -586,6 +610,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cameroon",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -611,6 +636,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Canada",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 54.0,
@@ -636,6 +662,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cape Verde",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 56.7,
@@ -661,6 +688,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Central African Republic",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 36.45,
       "200": 54.0,
@@ -686,6 +714,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Chad",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -711,6 +740,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Chile",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -736,6 +766,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "China",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -761,6 +792,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Congo - D.Rep",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 35.1,
       "200": 51.3,
@@ -786,6 +818,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Congo-Rep",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -811,6 +844,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Costa Rica",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -836,6 +870,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Croatia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -861,6 +896,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cuba",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -886,6 +922,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Czech Rep.",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -911,6 +948,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Djibouti",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 29.7,
       "200": 39.15,
@@ -936,6 +974,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ecuador",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 49.95,
@@ -961,6 +1000,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "El Salvador",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 39.15,
       "200": 54.0,
@@ -986,6 +1026,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Equatorial Guinea",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 35.1,
       "200": 51.3,
@@ -1011,6 +1052,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Eritrea",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 39.15,
       "200": 54.0,
@@ -1036,6 +1078,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Estonia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 54.0,
@@ -1061,6 +1104,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ethiopia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 41.85,
@@ -1086,6 +1130,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Fiji",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 35.1,
       "200": 51.3,
@@ -1111,6 +1156,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "French Polynesia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 54.0,
@@ -1136,6 +1182,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Gabon",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -1161,6 +1208,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Gambia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -1186,6 +1234,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ghana",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 52.65,
@@ -1211,6 +1260,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Grenada",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -1236,6 +1286,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Guatemala",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 52.65,
@@ -1261,6 +1312,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Guinea",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -1286,6 +1338,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Guinea-Bissau",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -1311,6 +1364,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Guyana",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -1336,6 +1390,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Honduras",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 39.15,
       "200": 54.0,
@@ -1361,6 +1416,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Hong Kong",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -1386,6 +1442,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Hungary",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -1411,6 +1468,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "India",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -1436,6 +1494,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Iran",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -1461,6 +1520,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Iraq",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 22.95,
       "200": 31.05,
@@ -1486,6 +1546,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Israel",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 36.45,
       "200": 54.0,
@@ -1511,6 +1572,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ivory Coast",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 31.05,
       "200": 43.2,
@@ -1536,6 +1598,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Jamaica",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 37.8,
       "200": 52.65,
@@ -1561,6 +1624,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Jordan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -1586,6 +1650,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kazakhstan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 44.55,
@@ -1611,6 +1676,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kenya",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -1636,6 +1702,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Korea Rep.",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -1661,6 +1728,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kuwait",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "02 to 04 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -1686,6 +1754,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kyrgyzstan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -1711,6 +1780,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Latvia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -1736,6 +1806,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Laos",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -1761,6 +1832,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Liberia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -1786,6 +1858,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Macedonia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -1811,6 +1884,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Madagascar",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 31.05,
       "200": 43.2,
@@ -1836,6 +1910,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malawi",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -1861,6 +1936,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malaysia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -1886,6 +1962,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Maldives",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -1911,6 +1988,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mali",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -1936,6 +2014,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mauritania",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 40.5,
       "200": 58.05,
@@ -1961,6 +2040,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mauritius",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 31.05,
       "200": 43.2,
@@ -1986,6 +2066,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Moldova",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 35.1,
       "200": 45.9,
@@ -2011,6 +2092,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mongolia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -2036,6 +2118,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Morocco",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 22.95,
       "200": 31.05,
@@ -2061,6 +2144,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mozambique",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 52.65,
@@ -2086,6 +2170,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Namibia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -2111,6 +2196,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Nepal",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -2136,6 +2222,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Netherlands",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -2161,6 +2248,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "New Caledonia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 37.8,
       "200": 56.7,
@@ -2186,6 +2274,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Nicaragua",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -2211,6 +2300,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Niger",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 35.1,
       "200": 47.25,
@@ -2236,6 +2326,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Nigeria",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -2261,6 +2352,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Norway",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -2286,6 +2378,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Pakistan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -2311,6 +2404,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Panama",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 49.95,
@@ -2336,6 +2430,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Paraguay",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 35.1,
       "200": 49.95,
@@ -2361,6 +2456,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Peru",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 39.15,
       "200": 55.35,
@@ -2386,6 +2482,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Philippines",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 41.85,
@@ -2411,6 +2508,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Poland",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 44.55,
@@ -2436,6 +2534,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Portugal",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 31.05,
       "200": 44.55,
@@ -2461,6 +2560,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Qatar",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "02 to 04 Business Days",
     "rates": {
       "100": 22.95,
       "200": 31.05,
@@ -2486,6 +2586,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Romania",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -2511,6 +2612,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Russian Federation",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 32.4,
       "200": 41.85,
@@ -2536,6 +2638,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Rwanda",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -2561,6 +2664,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Saint Lucia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -2586,6 +2690,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Saudi Arabia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "02 to 04 Business Days",
     "rates": {
       "100": 27.0,
       "200": 35.1,
@@ -2611,6 +2716,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sao Tome and Principe",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 36.45,
       "200": 52.65,
@@ -2636,6 +2742,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Senegal",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 32.4,
       "200": 45.9,
@@ -2661,6 +2768,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Serbia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -2686,6 +2794,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Seychelles",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 44.55,
@@ -2711,6 +2820,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sierra Leone",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 52.65,
@@ -2736,6 +2846,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Singapore",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -2761,6 +2872,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Slovakia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 35.1,
       "200": 47.25,
@@ -2786,6 +2898,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "South Africa",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -2811,6 +2924,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Spain",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 31.05,
       "200": 43.2,
@@ -2836,6 +2950,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sri Lanka",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -2861,6 +2976,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sudan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 31.05,
       "200": 41.85,
@@ -2886,6 +3002,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Suriname",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -2911,6 +3028,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Taiwan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -2936,6 +3054,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Tajikistan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -2961,6 +3080,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Tanzania",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 35.1,
       "200": 47.25,
@@ -2986,6 +3106,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Togo",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "06 to 10 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3011,6 +3132,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Trinidad and Tobago",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -3036,6 +3158,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Tunisia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -3061,6 +3184,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Turkey",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -3086,6 +3210,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Turkmenistan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 29.7,
       "200": 40.5,
@@ -3111,6 +3236,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Uganda",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -3136,6 +3262,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ukraine",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 35.1,
       "200": 45.9,
@@ -3161,6 +3288,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Uzbekistan",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 28.35,
       "200": 37.8,
@@ -3186,6 +3314,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Venezuela",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 33.75,
       "200": 48.6,
@@ -3211,6 +3340,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Vietnam",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 39.15,
@@ -3236,6 +3366,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Virgin Islands",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 39.15,
       "200": 59.4,
@@ -3261,6 +3392,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Zambia",
     "serviceType": "REGISTERED (POD)",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 35.1,
       "200": 45.9,
@@ -3286,6 +3418,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Albania",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 36.45,
       "200": 47.25,
@@ -3311,6 +3444,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Armenia",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 35.1,
       "200": 45.9,
@@ -3336,6 +3470,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Aruba",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 39.15,
       "200": 52.65,
@@ -3361,6 +3496,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Austria",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 41.85,
       "200": 58.05,
@@ -3386,6 +3522,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Belgium",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3411,6 +3548,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Belize",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 39.15,
       "200": 54.0,
@@ -3436,6 +3574,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bhutan",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 35.1,
       "200": 44.55,
@@ -3461,6 +3600,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cayman Islands",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 39.15,
       "200": 52.65,
@@ -3486,6 +3626,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Colombia",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 40.5,
       "200": 56.7,
@@ -3511,6 +3652,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cura\u00e7ao",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3536,6 +3678,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cyprus",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 35.1,
       "200": 44.55,
@@ -3561,6 +3704,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Denmark",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3586,6 +3730,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Dominican Republic",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 37.8,
       "200": 49.95,
@@ -3611,6 +3756,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Egypt",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 29.7,
       "200": 37.8,
@@ -3636,6 +3782,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Finland",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 43.2,
       "200": 62.1,
@@ -3661,6 +3808,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "France",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3686,6 +3834,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Georgia",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 35.1,
       "200": 44.55,
@@ -3711,6 +3860,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Germany",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 40.5,
       "200": 55.35,
@@ -3736,6 +3886,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Greece",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -3761,6 +3912,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Iceland",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 40.5,
       "200": 55.35,
@@ -3786,6 +3938,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Indonesia",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -3811,6 +3964,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ireland",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 39.15,
       "200": 52.65,
@@ -3836,6 +3990,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Italy",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 49.95,
@@ -3861,6 +4016,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Japan",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 35.1,
       "200": 44.55,
@@ -3886,6 +4042,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Lebanon",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "07 to 12 Business Days",
     "rates": {
       "100": 29.7,
       "200": 37.8,
@@ -3911,6 +4068,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Lithuania",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 40.5,
       "200": 56.7,
@@ -3936,6 +4094,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Luxembourg",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 49.95,
@@ -3961,6 +4120,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Macao",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -3986,6 +4146,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malta",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 49.95,
@@ -4011,6 +4172,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mexico",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -4036,6 +4198,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Myanmar",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "07 to 12 Business Days",
     "rates": {
       "100": 37.8,
       "200": 49.95,
@@ -4061,6 +4224,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "New Zealand",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 44.55,
       "200": 64.8,
@@ -4086,6 +4250,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Oman",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "02 to 04 Business Days",
     "rates": {
       "100": 28.35,
       "200": 35.1,
@@ -4111,6 +4276,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Slovenia",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 36.45,
       "200": 48.6,
@@ -4136,6 +4302,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sweden",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -4161,6 +4328,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Switzerland",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 41.85,
       "200": 58.05,
@@ -4186,6 +4354,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Thailand",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 33.75,
       "200": 43.2,
@@ -4211,6 +4380,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "United Kingdom",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "03 to 04 Business Days",
     "rates": {
       "100": 41.85,
       "200": 45.9,
@@ -4236,6 +4406,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "United States of America",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 05 Business Days",
     "rates": {
       "100": 56.7,
       "200": 63.45,
@@ -4261,6 +4432,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Uruguay",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 40.5,
       "200": 56.7,
@@ -4286,6 +4458,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Zimbabwe",
     "serviceType": "PRIME REGISTERED (POD)",
+    "leadTime": "04 to 07 Business Days",
     "rates": {
       "100": 37.8,
       "200": 51.3,
@@ -4311,6 +4484,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Aruba",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 43.2,
@@ -4336,6 +4510,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Belgium",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -4361,6 +4536,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Brazil",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 43.2,
@@ -4386,6 +4562,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bulgaria",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 32.4,
@@ -4411,6 +4588,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Canada",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 37.8,
       "200": 47.25,
@@ -4436,6 +4614,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "China",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 33.75,
@@ -4461,6 +4640,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Croatia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 36.45,
       "200": 40.5,
@@ -4486,6 +4666,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cyprus",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 35.1,
@@ -4511,6 +4692,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Denmark",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -4536,6 +4718,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Dominican Republic",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -4561,6 +4744,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Egypt",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 29.7,
@@ -4586,6 +4770,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Estonia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 33.75,
       "200": 49.95,
@@ -4611,6 +4796,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Finland",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 29.7,
       "200": 43.2,
@@ -4636,6 +4822,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "France",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -4661,6 +4848,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Georgia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 27.0,
       "200": 36.45,
@@ -4686,6 +4874,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Greece",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -4711,6 +4900,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Hong Kong",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 33.75,
@@ -4736,6 +4926,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Hungary",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 36.45,
@@ -4761,6 +4952,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Iceland",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 32.4,
       "200": 48.6,
@@ -4786,6 +4978,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Indonesia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 35.1,
@@ -4811,6 +5004,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ireland",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 36.45,
       "200": 41.85,
@@ -4836,6 +5030,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Israel",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "05 to 08 Business Days",
     "rates": {
       "100": 32.4,
       "200": 47.25,
@@ -4861,6 +5056,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Italy",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 39.15,
@@ -4886,6 +5082,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kazakhstan",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 27.0,
       "200": 36.45,
@@ -4911,6 +5108,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Korea Rep.",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 35.1,
@@ -4936,6 +5134,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Latvia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 29.7,
       "200": 41.85,
@@ -4961,6 +5160,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Lebanon",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "07 to 12 Business Days",
     "rates": {
       "100": 24.3,
       "200": 32.4,
@@ -4986,6 +5186,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Lithuania",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 31.05,
       "200": 45.9,
@@ -5011,6 +5212,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Luxembourg",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 37.8,
@@ -5036,6 +5238,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malaysia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 29.7,
@@ -5061,6 +5264,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malta",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 39.15,
@@ -5086,6 +5290,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mauritius",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 29.7,
       "200": 35.1,
@@ -5111,6 +5316,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mexico",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 31.05,
       "200": 37.8,
@@ -5136,6 +5342,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Myanmar",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "07 to 12 Business Days",
     "rates": {
       "100": 29.7,
       "200": 41.85,
@@ -5161,6 +5368,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Netherlands",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -5186,6 +5394,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "New Zealand",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 31.05,
       "200": 47.25,
@@ -5211,6 +5420,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Poland",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -5236,6 +5446,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Portugal",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 39.15,
@@ -5261,6 +5472,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Saudi Arabia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "02 to 03 Business Days",
     "rates": {
       "100": 25.65,
       "200": 35.1,
@@ -5286,6 +5498,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Serbia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 25.65,
       "200": 35.1,
@@ -5311,6 +5524,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Singapore",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 25.65,
       "200": 33.75,
@@ -5336,6 +5550,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Slovakia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 37.8,
@@ -5361,6 +5576,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Slovenia",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 37.8,
@@ -5386,6 +5602,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "South Africa",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 37.8,
@@ -5411,6 +5628,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Sweden",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -5436,6 +5654,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Thailand",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 05 Business Days",
     "rates": {
       "100": 27.0,
       "200": 29.7,
@@ -5461,6 +5680,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ukraine",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "07 to 12 Business Days",
     "rates": {
       "100": 27.0,
       "200": 37.8,
@@ -5486,6 +5706,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "United Kingdom",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "03 to 04 Business Days",
     "rates": {
       "100": 32.4,
       "200": 36.45,
@@ -5511,6 +5732,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Zimbabwe",
     "serviceType": "PRIME EXPRESS",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 28.35,
       "200": 40.5,
@@ -5536,6 +5758,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "United Kingdom",
     "serviceType": "TRACKED",
+    "leadTime": "03 to 04 Business Days",
     "rates": {
       "100": 18.9,
       "200": 22.95,
@@ -5561,6 +5784,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Aruba",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -5586,6 +5810,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Belarus",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 12.15,
       "200": 14.85,
@@ -5611,6 +5836,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bhutan",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -5636,6 +5862,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Bulgaria",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -5661,6 +5888,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Chile",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -5686,6 +5914,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "China",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -5711,6 +5940,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Congo - D.Rep",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 22.95,
       "200": 28.35,
@@ -5736,6 +5966,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Cura\u00e7ao",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -5761,6 +5992,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Dominican Republic",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 22.95,
       "200": 28.35,
@@ -5786,6 +6018,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Egypt",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -5811,6 +6044,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Estonia",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 24.3,
       "200": 32.4,
@@ -5836,6 +6070,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Georgia",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 20.25,
       "200": 22.95,
@@ -5861,6 +6096,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Hong Kong",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -5886,6 +6122,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "India",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -5911,6 +6148,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Kazakhstan",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 20.25,
       "200": 22.95,
@@ -5936,6 +6174,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Korea Rep.",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -5961,6 +6200,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Lithuania",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 24.3,
       "200": 32.4,
@@ -5986,6 +6226,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Malaysia",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -6011,6 +6252,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Mexico",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 22.95,
       "200": 29.7,
@@ -6036,6 +6278,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Morocco",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 18.9,
       "200": 21.6,
@@ -6061,6 +6304,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Myanmar",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 22.95,
       "200": 28.35,
@@ -6086,6 +6330,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Oman",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "03 to 04 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -6111,6 +6356,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Peru",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 24.3,
       "200": 31.05,
@@ -6136,6 +6382,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Philippines",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -6161,6 +6408,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Singapore",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -6186,6 +6434,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Thailand",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 18.9,
       "200": 20.25,
@@ -6211,6 +6460,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Ukraine",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "08 to 14 Business Days",
     "rates": {
       "100": 21.6,
       "200": 25.65,
@@ -6236,6 +6486,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Uruguay",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 24.3,
       "200": 32.4,
@@ -6261,6 +6512,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Vietnam",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "04 to 06 Business Days",
     "rates": {
       "100": 20.25,
       "200": 22.95,
@@ -6286,6 +6538,7 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
   {
     "country": "Zimbabwe",
     "serviceType": "PRIME TRACKED",
+    "leadTime": "05 to 07 Business Days",
     "rates": {
       "100": 21.6,
       "200": 25.65,
@@ -6308,4 +6561,4 @@ export const EMX_RATE_SHEET: EmxRateRow[] = [
       "2000": 62.1
     }
   }
-] as EmxRateRow[];
+];

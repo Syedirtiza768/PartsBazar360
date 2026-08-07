@@ -20,10 +20,11 @@ import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
 import { humanize } from "@/lib/format";
-import { partTypeFromLegacy } from "@repo/catalog-contracts";
+import { partTypeFromLegacy, partTypeLabel } from "@repo/catalog-contracts";
 import { useCurrency } from "@/lib/currency-context";
 import { SETTLEMENT_CURRENCY } from "@/lib/currency";
 import { CartLineFitment } from "@/components/CartLineFitment";
+import { ReturnsPolicyNote } from "@/components/ReturnsPolicyNote";
 import { storeOrder } from "@/lib/order-history";
 import {
   getShippingCountry,
@@ -140,6 +141,18 @@ function Steps({ current }: { current: 1 | 2 }) {
   );
 }
 
+/**
+ * Only worth showing when every shipment quotes the same window — mixing
+ * "02 to 04" and "08 to 14" into one line would misrepresent the faster one.
+ */
+function commonLeadTime(quote: ShippingQuote | null): string | null {
+  const times = (quote?.sellerQuotes ?? [])
+    .map((q) => q.leadTime)
+    .filter((t): t is string => Boolean(t));
+  if (times.length === 0) return null;
+  return times.every((t) => t === times[0]) ? times[0]! : null;
+}
+
 function SummaryCard({
   items,
   subtotal,
@@ -160,6 +173,7 @@ function SummaryCard({
   chargeCurrency: string;
 }) {
   const { format, settlementCurrency } = useCurrency();
+  const leadTime = commonLeadTime(shippingQuote);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
@@ -195,6 +209,12 @@ function SummaryCard({
                 : "Enter country to estimate"}
           </dd>
         </div>
+        {leadTime && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-graphite-600">Est. delivery</dt>
+            <dd className="text-right text-graphite-600">{leadTime}</dd>
+          </div>
+        )}
         {shippingQuote && (
           <div className="flex justify-between gap-3 border-t border-slate-100 pt-2">
             <dt className="font-semibold text-slate-900">Estimated total</dt>
@@ -213,6 +233,7 @@ function SummaryCard({
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
         Shipping is calculated in AED, then converted into your selected charge currency.
       </p>
+      <ReturnsPolicyNote className="mt-2" />
     </div>
   );
 }
@@ -725,7 +746,11 @@ function CheckoutContent() {
                           {item.quantity}× {item.sellerOffer.canonicalPart?.title || "Part"}
                         </p>
                         <p className="mt-0.5 text-xs text-graphite-600">
-                          {(() => { const c = humanize(item.sellerOffer.condition || ""); const pt = partTypeFromLegacy(item.sellerOffer.partSource || item.sellerOffer.canonicalPart?.partSource, item.sellerOffer.partType || item.sellerOffer.canonicalPart?.partType); return (c && pt !== 'GENUINE_OEM') ? c : null; })()}
+                          {(() => {
+                            const c = humanize(item.sellerOffer.condition || "");
+                            const pt = partTypeFromLegacy(item.sellerOffer.partSource || item.sellerOffer.canonicalPart?.partSource, item.sellerOffer.partType || item.sellerOffer.canonicalPart?.partType);
+                            return [partTypeLabel(pt), pt !== 'GENUINE_OEM' ? c : null].filter(Boolean).join(" · ") || null;
+                          })()}
                         </p>
                         <div className="mt-1.5">
                           <CartLineFitment partId={item.sellerOffer.canonicalPart?.id} />
@@ -808,8 +833,16 @@ function CheckoutContent() {
                   {shippingQuote.sellerQuotes.map((quote) => (
                     <li key={quote.sellerId} className="flex items-start justify-between gap-3">
                       <span className="min-w-0 text-graphite-700">
-                        {quote.sellerName}
-                        {!quote.matchedCountry ? " (average fallback rate)" : ""}
+                        <span className="block">
+                          {quote.sellerName}
+                          {!quote.matchedCountry ? " (average fallback rate)" : ""}
+                        </span>
+                        {quote.leadTime && !quote.requiresFreightQuote && (
+                          <span className="mt-0.5 flex items-center gap-1 text-xs text-graphite-500">
+                            <TruckIcon className="h-3 w-3 shrink-0" />
+                            Est. delivery: {quote.leadTime}
+                          </span>
+                        )}
                       </span>
                       <span className="price shrink-0">
                         {quote.requiresFreightQuote
