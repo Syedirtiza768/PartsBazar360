@@ -34,6 +34,15 @@ Run modes: `start:dev` (web process, watch), `start:worker` (background job work
 - `sms` — SMSGlobal REST API (see [[../decisions]])
 - `vehicle`
 
+## Guest-first checkout
+
+Checkout identity is separate from account authentication. `Customer` owns the
+verified E.164 phone and order history; a `User` password account is optional.
+Short-lived `CheckoutSession` tokens authorize one transaction without exposing
+account data. OTP challenges are hashed, rate limited, attempt limited, and
+consumed once. Order creation is idempotent and payment retries create
+`PaymentAttempt` audit rows on the same order. See [[../CHECKOUT_GUEST_FIRST]].
+
 *(This list is mechanically generated from the folder structure — module responsibilities beyond the name are TODO. Fill in as you touch each one.)*
 
 ## Seed / import / enrichment CLIs

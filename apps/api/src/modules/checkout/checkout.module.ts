@@ -8,10 +8,17 @@ import { CartModule } from '../cart/cart.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { OrderModule } from '../order/order.module';
 import { AuthModule } from '../auth/auth.module';
+import { CheckoutIdentityService } from './checkout-identity.service';
 
 @Module({
   imports: [CartModule, InventoryModule, OrderModule, AuthModule],
-  providers: [CheckoutService, ShippingService, StripeService, TamaraService],
+  providers: [
+    CheckoutService,
+    CheckoutIdentityService,
+    ShippingService,
+    StripeService,
+    TamaraService,
+  ],
   controllers: [CheckoutController],
   exports: [StripeService, TamaraService],
 })

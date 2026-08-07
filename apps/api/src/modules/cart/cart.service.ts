@@ -19,6 +19,7 @@ export class CartService {
               include: {
                 seller: true,
                 canonicalPart: true,
+                inventory: true,
               },
             },
           },

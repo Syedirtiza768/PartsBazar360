@@ -13,6 +13,12 @@ export class OrderService {
     shippingAddress: any,
     shippingTotalsBySeller: Record<string, number>,
     currency = 'AED',
+    identity?: {
+      customerId: string;
+      checkoutSessionId?: string;
+      verifiedPhone: string;
+      idempotencyKey: string;
+    },
   ) {
     // We group cart items by Seller ID to split them into SellerOrders
     const itemsBySeller = cartItems.reduce(
@@ -33,6 +39,10 @@ export class OrderService {
       const parentOrder = await tx.order.create({
         data: {
           buyerId,
+          customerId: identity?.customerId,
+          checkoutSessionId: identity?.checkoutSessionId,
+          verifiedPhone: identity?.verifiedPhone,
+          idempotencyKey: identity?.idempotencyKey,
           totalAmount: 0, // Will update after summation
           currency,
           shippingAddress,

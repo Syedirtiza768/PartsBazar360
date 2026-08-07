@@ -20,21 +20,33 @@ export class ReservationService {
     cartId: string,
     offerId: string,
     quantity: number,
+    availableQuantity = Number.MAX_SAFE_INTEGER,
   ): Promise<boolean> {
     const lockKey = `stock_lock:${offerId}:${cartId}`;
-
-    // We attempt to set the lock. In a real highly-concurrent environment,
-    // we would check the existing stock minus locked stock before granting this lock.
-    // For MVP, we will assume setting the lock represents our intent to hold.
-    const result = await this.redisClient.set(
+    const totalKey = `stock_reserved:${offerId}`;
+    const result = await this.redisClient.eval(
+      `
+        local existing = redis.call('GET', KEYS[1])
+        if existing then
+          if tonumber(existing) >= tonumber(ARGV[1]) then return 1 end
+          return 0
+        end
+        local reserved = tonumber(redis.call('GET', KEYS[2]) or '0')
+        if reserved + tonumber(ARGV[1]) > tonumber(ARGV[2]) then return 0 end
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+        redis.call('INCRBY', KEYS[2], ARGV[1])
+        redis.call('EXPIRE', KEYS[2], ARGV[3])
+        return 1
+      `,
+      2,
       lockKey,
+      totalKey,
       quantity,
-      'EX',
+      availableQuantity,
       this.LOCK_TTL_SECONDS,
-      'NX',
     );
 
-    if (result === 'OK') {
+    if (Number(result) === 1) {
       this.logger.log(
         `Reserved ${quantity} of offer ${offerId} for cart ${cartId}`,
       );
@@ -47,7 +59,21 @@ export class ReservationService {
 
   async releaseStock(cartId: string, offerId: string): Promise<void> {
     const lockKey = `stock_lock:${offerId}:${cartId}`;
-    await this.redisClient.del(lockKey);
+    const totalKey = `stock_reserved:${offerId}`;
+    await this.redisClient.eval(
+      `
+        local quantity = tonumber(redis.call('GET', KEYS[1]) or '0')
+        if quantity > 0 then
+          redis.call('DEL', KEYS[1])
+          local remaining = tonumber(redis.call('DECRBY', KEYS[2], quantity) or '0')
+          if remaining <= 0 then redis.call('DEL', KEYS[2]) end
+        end
+        return quantity
+      `,
+      2,
+      lockKey,
+      totalKey,
+    );
     this.logger.log(
       `Released stock lock for offer ${offerId} in cart ${cartId}`,
     );

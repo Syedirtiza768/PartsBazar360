@@ -16,13 +16,17 @@ async function main() {
 
   // 1. Setup a Buyer User
   const buyer = await prisma.user.create({
-    data: { email: 'buyer@marketplace.local', name: 'John Buyer', role: 'BUYER' }
+    data: {
+      email: 'buyer@marketplace.local',
+      name: 'John Buyer',
+      role: 'BUYER',
+    },
   });
 
   // 2. We need two items from potentially two sellers to demonstrate multi-seller cart
   const offers = await prisma.sellerOffer.findMany({
     take: 2,
-    include: { inventory: true, canonicalPart: true }
+    include: { inventory: true, canonicalPart: true },
   });
 
   if (offers.length === 0) {
@@ -35,7 +39,7 @@ async function main() {
     if (!offer.canonicalPart?.weight) {
       await prisma.canonicalPart.update({
         where: { id: offer.canonicalPartId },
-        data: { weight: 5.0 } // default 5kg
+        data: { weight: 5.0 }, // default 5kg
       });
     }
   }
@@ -56,6 +60,7 @@ async function main() {
     tamaraService,
     prisma as any,
     null as any,
+    null as any,
   );
 
   // 4. Create Cart and Add Items
@@ -70,8 +75,12 @@ async function main() {
   }
 
   // 5. Perform Checkout
-  const shippingAddress = { line1: '123 Fake Street', city: 'Dubai', country: 'UAE' };
-  
+  const shippingAddress = {
+    line1: '123 Fake Street',
+    city: 'Dubai',
+    country: 'UAE',
+  };
+
   try {
     const checkoutResult = await checkoutService.processCheckout(
       cart.id,
@@ -80,10 +89,16 @@ async function main() {
     );
     console.log(`\nCheckout Successful!`);
     console.log(`Parent Order ID: ${checkoutResult.order.id}`);
-    console.log(`Total Amount (incl Shipping): ${checkoutResult.order.totalAmount} ${checkoutResult.order.currency}`);
-    console.log(`Payment Intent Status: ${checkoutResult.paymentIntent.status} via ${checkoutResult.paymentIntent.provider}`);
+    console.log(
+      `Total Amount (incl Shipping): ${checkoutResult.order.totalAmount} ${checkoutResult.order.currency}`,
+    );
+    console.log(
+      `Payment Intent Status: ${checkoutResult.paymentIntent.status} via ${checkoutResult.paymentIntent.provider}`,
+    );
     console.log(`Checkout URL: ${checkoutResult.checkoutUrl}`);
-    console.log(`Seller Orders Split Count: ${checkoutResult.order.sellerOrders.length}`);
+    console.log(
+      `Seller Orders Split Count: ${checkoutResult.order.sellerOrders.length}`,
+    );
   } catch (error) {
     console.error('Checkout failed:', error.message);
   }

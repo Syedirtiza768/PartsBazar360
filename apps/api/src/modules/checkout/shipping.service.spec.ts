@@ -64,15 +64,21 @@ describe('ShippingService', () => {
       ['North Macedonia', 'Macedonia'],
       ['Russia', 'Russian Federation'],
       ['South Korea', 'Korea Rep.'],
-    ])('resolves dropdown name %s to the same rate as sheet name %s', (dropdownName, sheetName) => {
-      const viaDropdown = service.quoteSellerShipping([dense(1)], dropdownName);
-      const viaSheet = service.quoteSellerShipping([dense(1)], sheetName);
+    ])(
+      'resolves dropdown name %s to the same rate as sheet name %s',
+      (dropdownName, sheetName) => {
+        const viaDropdown = service.quoteSellerShipping(
+          [dense(1)],
+          dropdownName,
+        );
+        const viaSheet = service.quoteSellerShipping([dense(1)], sheetName);
 
-      expect(viaDropdown.matchedCountry).toBe(true);
-      expect(viaDropdown.amount).toBe(viaSheet.amount);
-      expect(viaDropdown.leadTime).toBe(viaSheet.leadTime);
-      expect(viaDropdown.leadTime).not.toBeNull();
-    });
+        expect(viaDropdown.matchedCountry).toBe(true);
+        expect(viaDropdown.amount).toBe(viaSheet.amount);
+        expect(viaDropdown.leadTime).toBe(viaSheet.leadTime);
+        expect(viaDropdown.leadTime).not.toBeNull();
+      },
+    );
   });
 
   describe('lead time', () => {
@@ -216,7 +222,15 @@ describe('ShippingService', () => {
   describe('weight source trust', () => {
     it('reports the weakest source across the cart', () => {
       const quote = service.quoteSellerShipping(
-        [dense(1), { quantity: 1, weightKg: 2, weightSource: 'AI', partClassKey: 'SENSOR' }],
+        [
+          dense(1),
+          {
+            quantity: 1,
+            weightKg: 2,
+            weightSource: 'AI',
+            partClassKey: 'SENSOR',
+          },
+        ],
         'Australia',
       );
 
@@ -242,7 +256,7 @@ describe('ShippingService', () => {
       expect(quote.totalWeightGrams).toBe(profile.maxWeightKg * 1000);
     });
 
-    it('trusts a measured weight outside the class envelope', () => {
+    it('corrects a measured weight that is a plausible grams-to-kilograms unit error', () => {
       const quote = service.quoteSellerShipping(
         [
           {
@@ -256,7 +270,7 @@ describe('ShippingService', () => {
         'United Arab Emirates',
       );
 
-      expect(quote.totalWeightGrams).toBe(400_000);
+      expect(quote.totalWeightGrams).toBe(400);
     });
   });
 
@@ -340,7 +354,15 @@ describe('ShippingService', () => {
   describe('legacy caller compatibility', () => {
     it('still accepts the old `weight` field name', () => {
       const quote = service.quoteSellerShipping(
-        [{ weight: 0.55, quantity: 1, weightSource: 'SPREADSHEET', partClassKey: 'BRAKE_PAD_SET', dimensionsCm: { lengthCm: 20, widthCm: 12, heightCm: 6 } }],
+        [
+          {
+            weight: 0.55,
+            quantity: 1,
+            weightSource: 'SPREADSHEET',
+            partClassKey: 'BRAKE_PAD_SET',
+            dimensionsCm: { lengthCm: 20, widthCm: 12, heightCm: 6 },
+          },
+        ],
         'Australia',
       );
 

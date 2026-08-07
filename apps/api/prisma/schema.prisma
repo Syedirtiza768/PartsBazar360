@@ -645,6 +645,7 @@ model SourceRecord {
 
 model User {
   id                  String             @id @default(uuid())
+  customerId          String?            @unique
   email               String?            @unique
   phone               String?            @unique
   phoneVerified       Boolean            @default(false)
@@ -663,8 +664,27 @@ model User {
   otpExpiry           DateTime?
   vehicles            UserVehicle[]
   memberships         SellerMembership[]
+  customer            Customer?          @relation(fields: [customerId], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+}
+
+/**
+ * Commerce identity, deliberately separate from an authentication account.
+ * A verified phone can own orders without ever having a password/login.
+ */
+model Customer {
+  id              String   @id @default(uuid())
+  phoneNormalized String   @unique
+  phoneVerifiedAt DateTime
+  name            String?
+  email           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  account          User?
+  orders           Order[]
+  checkoutSessions CheckoutSession[]
 }
 
 /**
@@ -712,9 +732,74 @@ model Cart {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items CartItem[]
+  items            CartItem[]
+  checkoutSessions CheckoutSession[]
 
   @@index([userId, status])
+}
+
+/**
+ * Transaction-scoped identity and draft state. Its token authorizes only this
+ * checkout; it is not an account login token.
+ */
+model CheckoutSession {
+  id                String    @id @default(uuid())
+  cartId            String
+  customerId        String?
+  phoneNormalized   String?
+  phoneVerifiedAt   DateTime?
+  checkoutTokenHash String?
+  tokenExpiresAt    DateTime?
+  status            String    @default("ACTIVE")
+  draft             Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  cart       Cart                         @relation(fields: [cartId], references: [id])
+  customer   Customer?                    @relation(fields: [customerId], references: [id])
+  challenges PhoneVerificationChallenge[]
+  order      Order?
+  events     CheckoutEvent[]
+
+  @@index([cartId, status])
+  @@index([phoneNormalized, createdAt])
+}
+
+model PhoneVerificationChallenge {
+  id                String    @id @default(uuid())
+  checkoutSessionId String
+  phoneNormalized   String
+  codeHash          String
+  expiresAt         DateTime
+  attempts          Int       @default(0)
+  maxAttempts       Int       @default(5)
+  lastSentAt        DateTime  @default(now())
+  consumedAt        DateTime?
+  deliveryStatus    String    @default("PENDING")
+  requestIpHash     String?
+  deviceHash        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  checkoutSession CheckoutSession @relation(fields: [checkoutSessionId], references: [id], onDelete: Cascade)
+
+  @@index([checkoutSessionId, createdAt])
+  @@index([phoneNormalized, createdAt])
+  @@index([requestIpHash, createdAt])
+}
+
+model CheckoutEvent {
+  id                String   @id @default(uuid())
+  checkoutSessionId String?
+  name              String
+  deviceClass       String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  checkoutSession CheckoutSession? @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([checkoutSessionId, createdAt])
 }
 
 model CartItem {
@@ -761,18 +846,26 @@ enum PaymentStatus {
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  buyerId         String?
-  totalAmount     Float
-  currency        String      @default("AED")
-  status          OrderStatus @default(PENDING_PAYMENT)
-  shippingAddress Json?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                String      @id @default(uuid())
+  buyerId           String?
+  customerId        String?
+  checkoutSessionId String?     @unique
+  verifiedPhone     String?
+  idempotencyKey    String?     @unique
+  totalAmount       Float
+  currency          String      @default("AED")
+  status            OrderStatus @default(PENDING_PAYMENT)
+  shippingAddress   Json?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  sellerOrders   SellerOrder[]
-  paymentIntent  PaymentIntent?
-  supportTickets SupportTicket[]
+  sellerOrders    SellerOrder[]
+  paymentIntent   PaymentIntent?
+  customer        Customer?        @relation(fields: [customerId], references: [id])
+  checkoutSession CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
+  supportTickets  SupportTicket[]
+
+  @@index([customerId, createdAt])
 }
 
 model SellerOrder {
@@ -827,7 +920,24 @@ model PaymentIntent {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id])
+  order    Order            @relation(fields: [orderId], references: [id])
+  attempts PaymentAttempt[]
+}
+
+model PaymentAttempt {
+  id              String        @id @default(uuid())
+  paymentIntentId String
+  provider        String
+  externalId      String?       @unique
+  checkoutUrl     String?
+  status          PaymentStatus @default(PENDING)
+  failureCode     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  paymentIntent PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentIntentId, createdAt])
 }
 
 model SellerUploadJob {

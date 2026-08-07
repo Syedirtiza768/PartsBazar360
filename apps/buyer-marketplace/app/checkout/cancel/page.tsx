@@ -17,19 +17,22 @@ function CancelContent() {
         Payment {failed ? "couldn’t be completed" : "cancelled"}
       </h1>
       <p className="mt-2 text-sm text-graphite-600">
-        {failed ? `${provider} could not complete this payment.` : `You left ${provider} before paying.`}{" "}
-        Your cart may already be checked out for this attempt
+        {failed
+          ? `${provider} could not complete this payment.`
+          : `You left ${provider} before paying.`}{" "}
+        Your cart, verified phone, and delivery details are still saved
         {orderId ? (
           <>
             {" "}
-            (order <span className="part-number text-slate-800">{orderId}</span>)
+            (order <span className="part-number text-slate-800">{orderId}</span>
+            )
           </>
         ) : null}
-        . Add items again if you still want to buy.
+        . You can retry payment without entering them again.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Link href="/cart" className={buttonClasses()}>
-          Back to cart
+        <Link href="/checkout" className={buttonClasses()}>
+          Try payment again
         </Link>
         <Link href="/search" className={buttonClasses({ variant: "outline" })}>
           Browse parts
@@ -41,7 +44,13 @@ function CancelContent() {
 
 export default function CheckoutCancelPage() {
   return (
-    <Suspense fallback={<div className="gutter py-16 text-center text-sm text-graphite-600">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="gutter py-16 text-center text-sm text-graphite-600">
+          Loading…
+        </div>
+      }
+    >
       <CancelContent />
     </Suspense>
   );

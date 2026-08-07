@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { createHmac, randomBytes } from 'node:crypto';
 
 /**
@@ -40,11 +44,15 @@ export class SmsGlobalService {
 
   /** `phone` must already be E.164-normalized (leading `+`, digits only after). */
   async sendOtpSms(phone: string, code: string): Promise<void> {
-    const message = `Your PartsBazar360 verification code is ${code}. It expires in 10 minutes.`;
+    const message = `Your PartsBazar360 verification code is ${code}. It expires in 5 minutes.`;
 
     if (!this.apiKey || !this.apiSecret) {
-      this.logger.log(`[DRY RUN] Would send SMS to ${phone}: ${message}`);
-      return;
+      this.logger.warn(
+        `SMS provider is not configured; verification message was not sent to ${phone.slice(0, 4)}***${phone.slice(-4)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Text message verification is temporarily unavailable',
+      );
     }
 
     const destination = phone.replace(/^\+/, '');
@@ -61,8 +69,7 @@ export class SmsGlobalService {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      this.logger.error(`SMSGlobal send failed (${response.status}): ${body}`);
+      this.logger.error(`SMSGlobal send failed (${response.status})`);
       throw new Error('Failed to send SMS verification code');
     }
   }

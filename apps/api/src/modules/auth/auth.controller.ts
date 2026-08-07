@@ -24,6 +24,15 @@ class LoginDto {
   password!: string;
 }
 
+class PhoneLoginDto {
+  @IsString()
+  phone!: string;
+
+  @IsString()
+  @MinLength(1)
+  password!: string;
+}
+
 class ForgotPasswordDto {
   @IsEmail()
   email!: string;
@@ -38,48 +47,6 @@ class ResetPasswordDto {
   newPassword!: string;
 }
 
-class SendPhoneOtpDto {
-  @IsString()
-  phone!: string;
-}
-
-class VerifyPhoneOtpDto {
-  @IsString()
-  phone!: string;
-
-  @IsString()
-  @MinLength(4)
-  code!: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-  password?: string;
-}
-
-class SendEmailOtpDto {
-  @IsEmail()
-  email!: string;
-}
-
-class VerifyEmailOtpDto {
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  @MinLength(4)
-  code!: string;
-
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-  password?: string;
-}
-
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -92,6 +59,11 @@ export class AuthController {
   @Post('login')
   login(@Body() body: LoginDto) {
     return this.auth.login(body);
+  }
+
+  @Post('login/phone')
+  loginWithPhone(@Body() body: PhoneLoginDto) {
+    return this.auth.loginWithPhone(body);
   }
 
   @Get('me')
@@ -114,30 +86,5 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() body: ResetPasswordDto) {
     return this.auth.resetPassword(body.token, body.newPassword);
-  }
-
-  @Post('phone/otp/send')
-  sendPhoneOtp(@Body() body: SendPhoneOtpDto) {
-    return this.auth.sendPhoneOtp(body.phone);
-  }
-
-  @Post('phone/otp/verify')
-  verifyPhoneOtp(@Body() body: VerifyPhoneOtpDto) {
-    return this.auth.verifyPhoneOtp(body.phone, body.code, body.password);
-  }
-
-  @Post('email/otp/send')
-  sendEmailOtp(@Body() body: SendEmailOtpDto) {
-    return this.auth.sendEmailOtp(body.email);
-  }
-
-  @Post('email/otp/verify')
-  verifyEmailOtp(@Body() body: VerifyEmailOtpDto) {
-    return this.auth.verifyEmailOtp(
-      body.email,
-      body.code,
-      body.phone,
-      body.password,
-    );
   }
 }

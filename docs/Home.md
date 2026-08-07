@@ -1,6 +1,6 @@
 # PartsBazar360 — Map of Content
 
-**Last reviewed:** 2026-08-06
+**Last reviewed:** 2026-08-07
 
 Entry point for the vault. This is a monorepo (Turborepo + npm workspaces) for an auto-parts marketplace: buyers, sellers, workshops, and an admin console sit on top of one shared catalog and API.
 
@@ -25,6 +25,7 @@ Open this vault in Obsidian at the repo root (`F:\apps\PartsBazar360`) — the g
 - [[SEEDING_AND_IMPORTS]] — how marketplace data gets seeded and imported
 - [[DESIGN_SYSTEM]] — visual/UX system ("Workshop Ledger" direction)
 - [[RESPONSIVE_SYSTEM]] — cross-device responsive handling
+- [[CHECKOUT_GUEST_FIRST]] — guest-first SMS verification, customer identity, payment retry, and optional accounts
 - [[SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[SEARCH_PHASE1_AUDIT]], [[SEARCH_PHASE2_RESULTS]] — search/filtering/pagination work
 - [[FILTERS_UX_AUDIT]], [[UX_AUDIT]] — UX audits
 - [[MARKETPLACE_TRANSFORMATION]] — eBay-Motors-style transformation history

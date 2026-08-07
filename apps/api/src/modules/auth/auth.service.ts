@@ -9,12 +9,12 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
 import { SendGridService } from '../email/sendgrid.service';
 import { SmsGlobalService } from '../sms/smsglobal.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
+import { normalizePhone } from './phone.util';
 
 /**
  * SUPPORT_AGENT and FULFILLMENT_OPERATOR are scoped staff roles — narrower
@@ -53,15 +53,6 @@ export class AuthService {
     private readonly sendGridService: SendGridService,
     private readonly smsGlobalService: SmsGlobalService,
   ) {}
-
-  /** Normalizes to E.164 (assumes UAE if no country code is given, since that's the primary market). */
-  private normalizePhone(phone: string): string {
-    const parsed = parsePhoneNumberFromString(phone, 'AE');
-    if (!parsed || !parsed.isValid()) {
-      throw new BadRequestException('Enter a valid mobile number');
-    }
-    return parsed.number;
-  }
 
   private jwtSecret() {
     return (
@@ -176,6 +167,41 @@ export class AuthService {
     };
   }
 
+  async loginWithPhone(input: { phone: string; password: string }) {
+    const phone = normalizePhone(input.phone);
+    const user = await this.prisma.user.findUnique({
+      where: { phone },
+    });
+    if (
+      !user?.passwordHash ||
+      !this.verifyPassword(input.password, user.passwordHash)
+    ) {
+      throw new UnauthorizedException('Invalid phone number or password');
+    }
+    return this.issueSessionForUser(user.id);
+  }
+
+  async issueSessionForUser(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { memberships: true },
+    });
+    const role = (user.role as AuthRole) || 'BUYER';
+    const sellerIds =
+      role === 'ADMIN'
+        ? Object.values(MARKETPLACE_SELLERS).map((seller) => seller.id)
+        : user.memberships.map((membership) => membership.sellerId);
+    return {
+      user: await this.toPublicUser(user.id),
+      accessToken: this.signToken({
+        sub: user.id,
+        email: user.email,
+        role,
+        sellerIds,
+      }),
+    };
+  }
+
   async me(token: string) {
     const payload = this.verifyToken(token);
     return this.toPublicUser(payload.sub);
@@ -279,7 +305,7 @@ export class AuthService {
    * columns and 10-minute expiry as sendEmailOtp below.
    */
   async sendPhoneOtp(phone: string): Promise<{ exists: boolean }> {
-    const normalizedPhone = this.normalizePhone(phone);
+    const normalizedPhone = normalizePhone(phone);
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -310,7 +336,7 @@ export class AuthService {
   }
 
   async verifyPhoneOtp(phone: string, code: string, password?: string) {
-    const normalizedPhone = this.normalizePhone(phone);
+    const normalizedPhone = normalizePhone(phone);
     if (!code) {
       throw new BadRequestException('Verification code is required');
     }
@@ -417,7 +443,7 @@ export class AuthService {
     if (!normalizedEmail || !code) {
       throw new BadRequestException('Email and code are required');
     }
-    const normalizedPhone = phone ? this.normalizePhone(phone) : undefined;
+    const normalizedPhone = phone ? normalizePhone(phone) : undefined;
 
     const existing = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },

@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   Headers,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -12,24 +14,33 @@ import {
 import { Transform } from 'class-transformer';
 import {
   IsIn,
+  IsEmail,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  Length,
+  MinLength,
 } from 'class-validator';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { CheckoutService } from './checkout.service';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/auth.types';
 import { CHARGE_CURRENCIES } from './currency.util';
 import type { TamaraWebhookPayload } from './tamara.service';
+import { CheckoutIdentityService } from './checkout-identity.service';
 
 class CheckoutDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsString()
   phone!: string;
@@ -69,9 +80,141 @@ class ShippingQuoteDto {
   currency?: string;
 }
 
+class CheckoutSessionDto {
+  @IsOptional()
+  @IsObject()
+  draft?: Record<string, unknown>;
+}
+
+class CheckoutDraftDto {
+  @IsObject()
+  draft!: Record<string, unknown>;
+}
+
+class RequestCheckoutOtpDto {
+  @IsString()
+  phone!: string;
+}
+
+class VerifyCheckoutOtpDto {
+  @IsString()
+  @Length(6, 6)
+  code!: string;
+}
+
+class CreateCheckoutAccountDto {
+  @IsString()
+  @MinLength(8)
+  password!: string;
+}
+
+class CheckoutEventDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  checkoutSessionId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceClass?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, string | number | boolean>;
+}
+
 @Controller('checkout')
 export class CheckoutController {
-  constructor(private readonly checkoutService: CheckoutService) {}
+  constructor(
+    private readonly checkoutService: CheckoutService,
+    private readonly identity: CheckoutIdentityService,
+    private readonly auth: AuthService,
+  ) {}
+
+  @Post(':cartId/session')
+  createCheckoutSession(
+    @Param('cartId') cartId: string,
+    @Body() body: CheckoutSessionDto,
+  ) {
+    return this.identity.createSession(cartId, body.draft);
+  }
+
+  @Patch('sessions/:sessionId/draft')
+  updateCheckoutDraft(
+    @Param('sessionId') sessionId: string,
+    @Body() body: CheckoutDraftDto,
+  ) {
+    return this.identity.updateDraft(sessionId, body.draft);
+  }
+
+  @Post('sessions/:sessionId/phone/send')
+  requestCheckoutOtp(
+    @Param('sessionId') sessionId: string,
+    @Body() body: RequestCheckoutOtpDto,
+    @Req() request: Request,
+  ) {
+    return this.identity.requestOtp(
+      sessionId,
+      body.phone,
+      request.ip,
+      Array.isArray(request.headers['user-agent'])
+        ? request.headers['user-agent'][0]
+        : request.headers['user-agent'],
+    );
+  }
+
+  @Post('sessions/:sessionId/phone/verify')
+  verifyCheckoutOtp(
+    @Param('sessionId') sessionId: string,
+    @Body() body: VerifyCheckoutOtpDto,
+  ) {
+    return this.identity.verifyOtp(sessionId, body.code);
+  }
+
+  @Post('sessions/:sessionId/account')
+  createCheckoutAccount(
+    @Param('sessionId') sessionId: string,
+    @Headers('x-checkout-token') checkoutToken: string | undefined,
+    @Body() body: CreateCheckoutAccountDto,
+  ) {
+    return this.identity.createAccount(sessionId, checkoutToken, body.password);
+  }
+
+  @Post('events')
+  trackCheckoutEvent(@Body() body: CheckoutEventDto) {
+    return this.identity.trackEvent(
+      body.checkoutSessionId,
+      body.name,
+      body.metadata,
+      body.deviceClass,
+    );
+  }
+
+  @Get('orders')
+  @UseGuards(JwtAuthGuard)
+  listCustomerOrders(@CurrentUser() user: AuthenticatedUser) {
+    return this.checkoutService.listCustomerOrders(user.userId);
+  }
+
+  @Get('orders/:orderId')
+  async getOrder(
+    @Param('orderId') orderId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-checkout-session') checkoutSessionId: string | undefined,
+    @Headers('x-checkout-token') checkoutToken: string | undefined,
+  ) {
+    const accountToken = authorization?.replace(/^Bearer\s+/i, '').trim();
+    const userId = accountToken
+      ? this.auth.verifyToken(accountToken).sub
+      : undefined;
+    return this.checkoutService.getCustomerOrder(orderId, {
+      userId,
+      checkoutSessionId,
+      checkoutToken,
+    });
+  }
 
   /** Stripe-hosted Checkout webhook — card data never touches our servers. */
   @Post('webhooks/stripe')
@@ -133,23 +276,40 @@ export class CheckoutController {
   }
 
   @Post(':cartId')
-  @UseGuards(JwtAuthGuard)
   async checkout(
     @Param('cartId') cartId: string,
-    @CurrentUser() user: AuthenticatedUser,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-checkout-session') checkoutSessionId: string | undefined,
+    @Headers('x-checkout-token') checkoutToken: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() body: CheckoutDto,
   ) {
+    let user: AuthenticatedUser | undefined;
+    const accountToken = authorization?.replace(/^Bearer\s+/i, '').trim();
+    if (accountToken) {
+      const payload = this.auth.verifyToken(accountToken);
+      user = {
+        userId: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        sellerIds: payload.sellerIds ?? [],
+      };
+    }
     return this.checkoutService.processCheckout(
       cartId,
-      {
-        buyerId: user.userId,
-        email: user.email,
-        name: body.name,
-        phone: body.phone,
-      },
+      user
+        ? {
+            buyerId: user.userId,
+            email: user.email,
+            ...(body.email ? { email: body.email } : {}),
+            name: body.name,
+            phone: body.phone,
+          }
+        : { name: body.name, email: body.email, phone: body.phone },
       body.shippingAddress,
       body.chargeCurrency,
       body.paymentProvider,
+      { checkoutSessionId, checkoutToken, idempotencyKey },
     );
   }
 }

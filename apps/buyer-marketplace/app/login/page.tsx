@@ -13,7 +13,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/account";
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -27,7 +27,7 @@ function LoginForm() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(email.trim(), password);
+      await login(identifier.trim(), password);
       router.replace(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
@@ -43,23 +43,27 @@ function LoginForm() {
         Sign in
       </h1>
       <p className="mt-2 text-sm text-graphite-600">
-        Sign in to checkout. Payment is completed on Stripe — card details never touch PartsBazar360.
+        View your orders and account. You never need to sign in just to check
+        out.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6">
+      <form
+        onSubmit={onSubmit}
+        className="mt-7 space-y-4 border-2 border-graphite-950 bg-white p-4 sm:mt-8 sm:p-6"
+      >
         <Input
-          label="Email"
-          type="email"
+          label="Email or mobile number"
+          type="text"
           // Keeps the on-screen keyboard on the e-mail layout and stops iOS
           // capitalising / autocorrecting the local part into a word.
-          inputMode="email"
-          autoComplete="email"
+          inputMode="text"
+          autoComplete="username"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
         />
         <Input
           label="Password"
@@ -102,7 +106,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-md px-4 py-16 text-sm text-graphite-600">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-md px-4 py-16 text-sm text-graphite-600">
+          Loading…
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

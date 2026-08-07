@@ -12,6 +12,7 @@ describe('CheckoutService freight gate', () => {
     buyerId: 'buyer-1',
     email: 'buyer@example.com',
     name: 'Test Buyer',
+    phone: '+971501234567',
   };
   const address = { country: 'Australia', line1: '1 Test St' };
 
@@ -29,8 +30,10 @@ describe('CheckoutService freight gate', () => {
             sellerId: 'seller-1',
             price: 1200,
             currency: 'AED',
+            status: 'ACTIVE',
+            inventory: [{ quantity: 10 }],
             canonicalPart: part,
-            seller: { name: 'Test Seller' },
+            seller: { name: 'Test Seller', onboardingStatus: 'ACTIVE' },
           },
         },
       ],
@@ -42,9 +45,25 @@ describe('CheckoutService freight gate', () => {
       { createMultiSellerOrder: jest.fn() } as any,
       new ShippingService(),
       { isConfigured: () => true, createCheckoutSession: jest.fn() } as any,
+      { isConfigured: () => false, createCheckoutSession: jest.fn() } as any,
       {
-        user: { findUnique: jest.fn().mockResolvedValue({ id: 'buyer-1', name: 'Test Buyer' }) },
+        user: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'buyer-1',
+            customerId: 'customer-1',
+            name: 'Test Buyer',
+            phone: '+971501234567',
+            phoneVerified: true,
+          }),
+          update: jest.fn(),
+        },
+        customer: {
+          update: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+        },
+        order: { findFirst: jest.fn().mockResolvedValue(null) },
       } as any,
+      { sendOrderConfirmation: jest.fn() } as any,
+      { trackEvent: jest.fn() } as any,
     );
 
     return { service, reserveStock, releaseStock };
@@ -62,11 +81,15 @@ describe('CheckoutService freight gate', () => {
     });
 
     await expect(
-      service.processCheckout('cart-1', buyer, address, 'AED'),
+      service.processCheckout('cart-1', buyer, address, 'AED', undefined, {
+        idempotencyKey: 'freight-test',
+      }),
     ).rejects.toThrow(BadRequestException);
 
     await expect(
-      service.processCheckout('cart-1', buyer, address, 'AED'),
+      service.processCheckout('cart-1', buyer, address, 'AED', undefined, {
+        idempotencyKey: 'freight-test',
+      }),
     ).rejects.toThrow(/freight quote/i);
 
     expect(reserveStock).not.toHaveBeenCalled();
@@ -86,9 +109,11 @@ describe('CheckoutService freight gate', () => {
     // Fails later (order creation is stubbed), but must get past the gate and
     // reserve stock — proving the freight check did not reject it.
     await service
-      .processCheckout('cart-1', buyer, address, 'AED')
+      .processCheckout('cart-1', buyer, address, 'AED', undefined, {
+        idempotencyKey: 'parcel-test',
+      })
       .catch(() => undefined);
 
-    expect(reserveStock).toHaveBeenCalledWith('cart-1', 'offer-1', 1);
+    expect(reserveStock).toHaveBeenCalledWith('cart-1', 'offer-1', 1, 10);
   });
 });

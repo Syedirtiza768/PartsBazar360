@@ -27,12 +27,17 @@ type AuthContextValue = {
   token: string | null;
   ready: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
-  register: (input: { email: string; password: string; name?: string }) => Promise<AuthUser>;
-  sendPhoneOtp: (phone: string) => Promise<{ exists: boolean }>;
-  verifyPhoneOtp: (phone: string, code: string, password?: string) => Promise<AuthUser>;
-  sendEmailOtp: (email: string) => Promise<{ exists: boolean }>;
-  verifyEmailOtp: (email: string, code: string, phone?: string, password?: string) => Promise<AuthUser>;
+  login: (identifier: string, password: string) => Promise<AuthUser>;
+  createCheckoutAccount: (
+    checkoutSessionId: string,
+    checkoutToken: string,
+    password: string,
+  ) => Promise<AuthUser | null>;
+  register: (input: {
+    email: string;
+    password: string;
+    name?: string;
+  }) => Promise<AuthUser>;
   logout: () => void;
   authHeaders: () => HeadersInit;
 };
@@ -55,13 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  const persist = useCallback((nextToken: string | null, nextUser: AuthUser | null) => {
-    setToken(nextToken);
-    setUser(nextUser);
-    if (typeof window === "undefined") return;
-    if (nextToken) localStorage.setItem(TOKEN_KEY, nextToken);
-    else localStorage.removeItem(TOKEN_KEY);
-  }, []);
+  const persist = useCallback(
+    (nextToken: string | null, nextUser: AuthUser | null) => {
+      setToken(nextToken);
+      setUser(nextUser);
+      if (typeof window === "undefined") return;
+      if (nextToken) localStorage.setItem(TOKEN_KEY, nextToken);
+      else localStorage.removeItem(TOKEN_KEY);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -96,16 +104,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+    async (identifier: string, password: string) => {
+      const byEmail = identifier.includes("@");
+      const res = await fetch(
+        `${API_BASE_URL}/auth/${byEmail ? "login" : "login/phone"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            byEmail
+              ? { email: identifier, password }
+              : { phone: identifier, password },
+          ),
+        },
+      );
       if (!res.ok) throw new Error(await parseError(res));
-      const data = (await res.json()) as { user: AuthUser; accessToken: string };
+      const data = (await res.json()) as {
+        user: AuthUser;
+        accessToken: string;
+      };
       persist(data.accessToken, data.user);
       return data.user;
+    },
+    [persist],
+  );
+
+  const createCheckoutAccount = useCallback(
+    async (
+      checkoutSessionId: string,
+      checkoutToken: string,
+      password: string,
+    ) => {
+      const res = await fetch(
+        `${API_BASE_URL}/checkout/sessions/${checkoutSessionId}/account`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Checkout-Token": checkoutToken,
+          },
+          body: JSON.stringify({ password }),
+        },
+      );
+      if (!res.ok) throw new Error(await parseError(res));
+      const data = (await res.json()) as {
+        user?: AuthUser;
+        accessToken?: string;
+      };
+      if (data.user && data.accessToken) {
+        persist(data.accessToken, data.user);
+        return data.user;
+      }
+      return null;
     },
     [persist],
   );
@@ -118,57 +168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(input),
       });
       if (!res.ok) throw new Error(await parseError(res));
-      const data = (await res.json()) as { user: AuthUser; accessToken: string };
-      persist(data.accessToken, data.user);
-      return data.user;
-    },
-    [persist],
-  );
-
-  const sendPhoneOtp = useCallback(async (phone: string) => {
-    const res = await fetch(`${API_BASE_URL}/auth/phone/otp/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone }),
-    });
-    if (!res.ok) throw new Error(await parseError(res));
-    return (await res.json()) as { exists: boolean };
-  }, []);
-
-  const verifyPhoneOtp = useCallback(
-    async (phone: string, code: string, password?: string) => {
-      const res = await fetch(`${API_BASE_URL}/auth/phone/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, password }),
-      });
-      if (!res.ok) throw new Error(await parseError(res));
-      const data = (await res.json()) as { user: AuthUser; accessToken: string };
-      persist(data.accessToken, data.user);
-      return data.user;
-    },
-    [persist],
-  );
-
-  const sendEmailOtp = useCallback(async (email: string) => {
-    const res = await fetch(`${API_BASE_URL}/auth/email/otp/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (!res.ok) throw new Error(await parseError(res));
-    return (await res.json()) as { exists: boolean };
-  }, []);
-
-  const verifyEmailOtp = useCallback(
-    async (email: string, code: string, phone?: string, password?: string) => {
-      const res = await fetch(`${API_BASE_URL}/auth/email/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, phone, password }),
-      });
-      if (!res.ok) throw new Error(await parseError(res));
-      const data = (await res.json()) as { user: AuthUser; accessToken: string };
+      const data = (await res.json()) as {
+        user: AuthUser;
+        accessToken: string;
+      };
       persist(data.accessToken, data.user);
       return data.user;
     },
@@ -189,11 +192,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready,
       isAuthenticated: Boolean(user && token),
       login,
+      createCheckoutAccount,
       register,
-      sendPhoneOtp,
-      verifyPhoneOtp,
-      sendEmailOtp,
-      verifyEmailOtp,
       logout,
       authHeaders,
     }),
@@ -202,11 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       ready,
       login,
+      createCheckoutAccount,
       register,
-      sendPhoneOtp,
-      verifyPhoneOtp,
-      sendEmailOtp,
-      verifyEmailOtp,
       logout,
       authHeaders,
     ],
