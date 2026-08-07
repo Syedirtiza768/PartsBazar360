@@ -792,6 +792,12 @@ export function Header({ categories }: { categories: Facet[] }) {
                 {category}
               </Link>
             ))}
+            <Link
+              href="/search"
+              className="flex min-h-11 shrink-0 items-center border-r border-stone-300 px-3.5 text-xs font-bold text-brand-700 hover:bg-white hover:text-brand-900 sm:px-4"
+            >
+              See all
+            </Link>
           </nav>
         </div>
       </div>
