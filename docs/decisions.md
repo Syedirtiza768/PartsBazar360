@@ -1,6 +1,6 @@
 # Decision log
 
-**Last reviewed:** 2026-08-06
+**Last reviewed:** 2026-08-07
 
 Running log of non-obvious decisions, workarounds, and their reasons. Newest first. Add an entry whenever a change is driven by something that isn't obvious from the code alone (a past incident, an external constraint, a workaround for a broken dependency).
 
@@ -14,7 +14,12 @@ Format:
 
 ---
 
-## 2026-08-06 — Checkout defaults to email OTP, not SMS
+## 2026-08-07 — SMS OTP provider switched from Twilio to SMSGlobal
+**Decision:** Checkout ([[apps/buyer-marketplace]] + [[apps/api]] `auth`/`sms` modules) sends phone OTP via the SMSGlobal REST API (`SMSGLOBAL_API_KEY`/`SMSGLOBAL_API_SECRET`/`SMSGLOBAL_SENDER_ID`) instead of Twilio Verify, and defaults back to SMS as the checkout verification channel (email remains the fallback).
+**Why:** Twilio's account was stuck on a trial-only SMS restriction (see the superseded 2026-08-06 entry below). SMSGlobal is a plain send API rather than a hosted verify service, so OTP code generation/storage/expiry now lives in `AuthService.sendPhoneOtp`/`verifyPhoneOtp` (reusing the `otpCode`/`otpExpiry` `User` columns), mirroring the email OTP flow instead of delegating to the provider.
+**Revisit when:** N/A unless SMSGlobal delivery becomes unreliable, in which case flip `SMS_CHANNEL_ENABLED` in `checkout/page.tsx` back to `false`.
+
+## 2026-08-06 — Checkout defaults to email OTP, not SMS *(superseded 2026-08-07)*
 **Decision:** Checkout ([[apps/buyer-marketplace]] + [[apps/api]] `auth`/`sms` modules) defaults to email OTP for verification.
 **Why:** Twilio SMS delivery is currently down/unreliable.
 **Revisit when:** Twilio SMS is confirmed stable again — re-enable SMS as an option rather than leaving email as the sole path.

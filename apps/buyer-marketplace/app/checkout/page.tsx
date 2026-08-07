@@ -61,11 +61,11 @@ const REQUIRED: Array<keyof FormState> = ["name", "phone", "line1", "city", "cou
 const RESEND_COOLDOWN_SECONDS = 45;
 
 /**
- * Twilio's account is stuck on a trial-only SMS restriction (pending their
- * support). Flip back to true once that's resolved — everything else in the
- * SMS path is already built and working, this just changes the default.
+ * SMS OTP now sends via SMSGlobal (replaced Twilio, which was stuck on a
+ * trial-only restriction). Flip to false only if the SMS provider goes
+ * down again — email OTP is the fallback either way.
  */
-const SMS_CHANNEL_ENABLED = false;
+const SMS_CHANNEL_ENABLED = true;
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
@@ -243,8 +243,8 @@ function CheckoutContent() {
   const [showOtpPanel, setShowOtpPanel] = useState(false);
   const [otpExists, setOtpExists] = useState<boolean | null>(null);
   const [otpCode, setOtpCode] = useState("");
-  // Twilio SMS is the default channel; email is an explicit fallback while
-  // Twilio's account issue is unresolved — see otpChannel below.
+  // SMS is the default channel; email is an explicit fallback — see
+  // otpChannel below.
   const [otpChannel, setOtpChannel] = useState<"sms" | "email">("sms");
   const [otpEmail, setOtpEmail] = useState("");
   const [otpEmailSent, setOtpEmailSent] = useState(false);
@@ -468,7 +468,7 @@ function CheckoutContent() {
   };
 
   // "Trouble receiving a text?" — switches the panel to collect an email
-  // and send the code via SendGrid instead, while Twilio SMS is unreliable.
+  // and send the code via SendGrid instead.
   const handleSwitchToEmail = () => {
     setOtpChannel("email");
     setOtpEmailSent(false);

@@ -26,6 +26,8 @@
     "seed:salvagea": "node dist/src/seed-salvagea.cli.js",
     "seed:blackline": "node dist/src/seed-blackline.cli.js",
     "cleanup:ebay-feed": "node dist/src/cleanup-ebay-feed.cli.js",
+    "reconcile:active-listings": "node dist/src/reconcile-active-listings.cli.js",
+    "backfill:targeted-listings": "node dist/src/backfill-targeted-listings.cli.js",
     "export:salvage": "node dist/src/export-salvage.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
     "import:mvl": "node scripts/import-us-mvl.mjs",
@@ -52,8 +54,7 @@
     "prisma": "^7.8.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "stripe": "^22.3.2",
-    "twilio": "^5.13.1"
+    "stripe": "^22.3.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

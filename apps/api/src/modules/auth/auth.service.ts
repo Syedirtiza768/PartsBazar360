@@ -13,7 +13,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
 import { SendGridService } from '../email/sendgrid.service';
-import { TwilioService } from '../sms/twilio.service';
+import { SmsGlobalService } from '../sms/smsglobal.service';
 import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 
 /**
@@ -51,7 +51,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly sendGridService: SendGridService,
-    private readonly twilioService: TwilioService,
+    private readonly smsGlobalService: SmsGlobalService,
   ) {}
 
   /** Normalizes to E.164 (assumes UAE if no country code is given, since that's the primary market). */
@@ -273,15 +273,38 @@ export class AuthService {
    * Sends the checkout phone OTP and reports whether the number already has
    * an account, so the buyer-marketplace client knows whether to offer the
    * "create an account" password prompt alongside the code field.
+   *
+   * SMSGlobal is a plain send API (no hosted Verify service like Twilio's),
+   * so the code is generated and stored here — same otpCode/otpExpiry
+   * columns and 10-minute expiry as sendEmailOtp below.
    */
   async sendPhoneOtp(phone: string): Promise<{ exists: boolean }> {
     const normalizedPhone = this.normalizePhone(phone);
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     const existing = await this.prisma.user.findUnique({
       where: { phone: normalizedPhone },
     });
 
-    await this.twilioService.startVerification(normalizedPhone);
+    if (existing) {
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { otpCode: code, otpExpiry },
+      });
+    } else {
+      await this.prisma.user.create({
+        data: {
+          phone: normalizedPhone,
+          role: 'BUYER',
+          otpCode: code,
+          otpExpiry,
+        },
+      });
+    }
+
+    await this.smsGlobalService.sendOtpSms(normalizedPhone, code);
 
     return { exists: Boolean(existing) };
   }
@@ -292,36 +315,37 @@ export class AuthService {
       throw new BadRequestException('Verification code is required');
     }
 
-    const approved = await this.twilioService.checkVerification(
-      normalizedPhone,
-      code,
-    );
-    if (!approved) {
-      throw new BadRequestException('Invalid or expired verification code');
-    }
-
     const existing = await this.prisma.user.findUnique({
       where: { phone: normalizedPhone },
       include: { memberships: true },
     });
 
-    // Returning numbers never get a password prompt, so any `password` here
-    // only applies to brand-new accounts.
-    const user = existing
-      ? await this.prisma.user.update({
-          where: { id: existing.id },
-          data: { phoneVerified: true },
-          include: { memberships: true },
-        })
-      : await this.prisma.user.create({
-          data: {
-            phone: normalizedPhone,
-            phoneVerified: true,
-            role: 'BUYER',
-            passwordHash: password ? this.hashPassword(password) : null,
-          },
-          include: { memberships: true },
-        });
+    if (
+      !existing ||
+      existing.otpCode !== code ||
+      !existing.otpExpiry ||
+      existing.otpExpiry < new Date()
+    ) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    // Whether this was a pre-existing account or the bare row sendPhoneOtp
+    // just created, the "new account?" password only applies the first time
+    // a password isn't already set — returning users keep their own.
+    const user = await this.prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        otpCode: null,
+        otpExpiry: null,
+        phoneVerified: true,
+        passwordHash: existing.passwordHash
+          ? existing.passwordHash
+          : password
+            ? this.hashPassword(password)
+            : null,
+      },
+      include: { memberships: true },
+    });
 
     const role = (user.role as AuthRole) || 'BUYER';
     const sellerIds =

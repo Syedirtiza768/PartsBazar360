@@ -1,9 +1,9 @@
 import { Global, Module } from '@nestjs/common';
-import { TwilioService } from './twilio.service';
+import { SmsGlobalService } from './smsglobal.service';
 
 @Global()
 @Module({
-  providers: [TwilioService],
-  exports: [TwilioService],
+  providers: [SmsGlobalService],
+  exports: [SmsGlobalService],
 })
 export class SmsModule {}

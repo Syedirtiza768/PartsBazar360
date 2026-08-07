@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-06
+**Last reviewed:** 2026-08-07
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -14,7 +14,7 @@ NestJS backend for the whole marketplace. Lives at `apps/api`.
 Run modes: `start:dev` (web process, watch), `start:worker` (background job worker — separate process, see `src/worker.js`).
 
 ## Modules (`src/modules/*`)
-- `auth` — authentication (see [[../decisions]] re: email OTP vs Twilio SMS)
+- `auth` — authentication (see [[../decisions]] re: email vs SMS OTP)
 - `cart`
 - `catalog-import` — bulk catalog import pipeline
 - `checkout`
@@ -31,7 +31,7 @@ Run modes: `start:dev` (web process, watch), `start:worker` (background job work
 - `pricing`
 - `search` — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[../SEARCH_PHASE1_AUDIT]], [[../SEARCH_PHASE2_RESULTS]]
 - `seed` — marketplace seeding, see [[../SEEDING_AND_IMPORTS]]
-- `sms` — Twilio SMS (currently degraded, see [[../decisions]])
+- `sms` — SMSGlobal REST API (see [[../decisions]])
 - `vehicle`
 
 *(This list is mechanically generated from the folder structure — module responsibilities beyond the name are TODO. Fill in as you touch each one.)*
