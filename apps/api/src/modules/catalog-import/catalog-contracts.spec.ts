@@ -8,7 +8,7 @@ import {
 describe('catalog contracts', () => {
   it('labels controlled part types for buyer/admin UI', () => {
     expect(partTypeLabel('AFTERMARKET')).toBe('Aftermarket');
-    expect(partTypeLabel('SALVAGE_OEM')).toBe('Used Original');
+    expect(partTypeLabel('SALVAGE_OEM')).toBe('Used Genuine OEM');
     expect(partTypeFromLegacy('AFTERMARKET', null)).toBe('AFTERMARKET');
     expect(partTypeFromLegacy('OEM', 'UNCLASSIFIED')).toBe('UNCLASSIFIED');
   });

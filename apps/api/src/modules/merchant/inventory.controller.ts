@@ -12,6 +12,7 @@ import { PrismaService } from '../../prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { BuyerCacheService } from '../search/buyer-cache.service';
 import { OpenSearchService } from '../search/opensearch.service';
+import { SearchOutboxService } from '../search/index/search-outbox.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -26,6 +27,7 @@ export class InventoryController {
     private readonly pricing: PricingService,
     private readonly buyerCache: BuyerCacheService,
     private readonly search: OpenSearchService,
+    private readonly searchOutbox: SearchOutboxService,
   ) {}
 
   @Get()
@@ -93,15 +95,11 @@ export class InventoryController {
       // it off. Sync both the durable outbox (feeds the newer index path)
       // and the live legacy index directly, matching the pattern used in
       // merchant/uploads.service.ts.
-      await this.prisma.searchOutbox.create({
-        data: {
-          entityType: 'CanonicalPart',
-          entityId: offer.canonicalPartId,
-          operation: 'UPSERT',
-          payload: { source: 'MERCHANT_INVENTORY_STATUS_UPDATE', offerId },
-          status: 'PENDING',
-        },
-      });
+      await this.searchOutbox.enqueue(
+        offer.canonicalPartId,
+        'UPSERT',
+        'MERCHANT_INVENTORY_STATUS_UPDATE',
+      );
       const part = await this.prisma.canonicalPart.findUnique({
         where: { id: offer.canonicalPartId },
         include: {

@@ -80,7 +80,9 @@ export function ProductCard({
   const qualityTier =
     part.qualityTier || bestOffer?.condition || bestOffer?.qualityTier;
   const partSource = part.partSource || bestOffer?.partSource;
-  const partType = part.partType || bestOffer?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
+  // part.partType is the indexed title-derived product-category facet (e.g.
+  // "Engine Mount"), not provenance — only the offer carries genuine/aftermarket.
+  const partType = bestOffer?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
   const isAftermarket = partType === "AFTERMARKET";
   const isSalvage = partType === "SALVAGE_OEM";
   const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];

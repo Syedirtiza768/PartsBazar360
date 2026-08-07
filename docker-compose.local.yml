@@ -2,8 +2,11 @@ services:
   nginx:
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx-local.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - api
       - admin-portal
@@ -12,21 +15,39 @@ services:
       - workshop-portal
 
   api:
+    image: partsbazar360-api:latest
+    build: null
     environment:
-      CORS_ORIGIN: http://localhost
+      CORS_ORIGIN: https://s.partsbazar360.com
+      BUYER_APP_URL: https://s.partsbazar360.com/buyer
+      ADMIN_APP_URL: https://s.partsbazar360.com/admin
       RUN_INGESTION_WORKER: "0"
-      SCHEMA_MODE: ${SCHEMA_MODE:-migrate}
-      BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
-      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-partsbazar-local-revalidate}
 
   worker:
+    image: partsbazar360-worker:latest
+    build: null
     environment:
       RUN_INGESTION_WORKER: "1"
+      ADMIN_APP_URL: https://s.partsbazar360.com/admin
+
+  admin-portal:
+    image: partsbazar360-admin-portal:local
+    build: null
 
   buyer-marketplace:
+    image: partsbazar360-buyer-marketplace:local
+    build: null
     environment:
-      SITE_URL: http://localhost/buyer
-      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-partsbazar-local-revalidate}
+      SITE_URL: https://s.partsbazar360.com/buyer
+
+  seller-portal:
+    image: partsbazar360-seller-portal:local
+    build: null
+
+  workshop-portal:
+    image: partsbazar360-workshop-portal:local
+    build: null
+
   certbot:
     profiles:
       - donotstart

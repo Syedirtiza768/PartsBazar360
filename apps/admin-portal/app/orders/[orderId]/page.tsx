@@ -11,6 +11,7 @@ import { Skeleton } from "@repo/ui/skeleton";
 import { ArrowLeftIcon } from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { orderStatusTone } from "@/lib/order-status";
 
 interface OrderDetail {
   id: string;
@@ -44,20 +45,6 @@ interface OrderDetail {
     }>;
   }>;
 }
-
-const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  PAID: "success",
-  PENDING_PAYMENT: "warning",
-  PAYMENT_FAILED: "danger",
-  CANCELLED: "neutral",
-  REFUNDED: "neutral",
-  PROCESSING: "warning",
-  SHIPPED: "success",
-  DELIVERED: "success",
-  SUCCEEDED: "success",
-  PENDING: "warning",
-  FAILED: "danger",
-};
 
 export default function OrderDetailPage() {
   const params = useParams<{ orderId: string }>();
@@ -180,7 +167,7 @@ export default function OrderDetailPage() {
         description={`Placed ${new Date(order.createdAt).toLocaleString()}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Badge tone={STATUS_TONE[order.status] || "neutral"}>{order.status.replace(/_/g, " ")}</Badge>
+            <Badge tone={orderStatusTone(order.status)}>{order.status.replace(/_/g, " ")}</Badge>
             {canCancel && (
               <Button variant="outline" size="sm" loading={acting === "cancel"} onClick={cancelOrder}>
                 Cancel order
@@ -225,7 +212,7 @@ export default function OrderDetailPage() {
           {order.paymentIntent ? (
             <>
               <div className="mt-2 flex items-center gap-2">
-                <Badge tone={STATUS_TONE[order.paymentIntent.status] || "neutral"} size="sm">
+                <Badge tone={orderStatusTone(order.paymentIntent.status)} size="sm">
                   {order.paymentIntent.status}
                 </Badge>
                 <span className="text-sm text-graphite-600 capitalize">{order.paymentIntent.provider}</span>
@@ -260,7 +247,7 @@ export default function OrderDetailPage() {
                 <p className="part-number text-xs text-graphite-600">{so.id}</p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={STATUS_TONE[so.status] || "neutral"} size="sm">
+                <Badge tone={orderStatusTone(so.status)} size="sm">
                   {so.status.replace(/_/g, " ")}
                 </Badge>
                 {so.trackingNumber && (

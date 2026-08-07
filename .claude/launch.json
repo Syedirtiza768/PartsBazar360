@@ -5,7 +5,8 @@
       "name": "buyer-marketplace",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace=buyer-marketplace"],
-      "port": 3000
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "seller-portal",

@@ -14,6 +14,43 @@ Format:
 
 ---
 
+## 2026-08-07 — Checkout verification is transaction identity, not login
+
+**Decision:** Checkout resolves a dedicated `Customer` from an OTP-verified
+E.164 phone and issues a cart-bound checkout token. It does not issue a normal
+account token or require a password. Orders attach to the customer whether the
+linked `User` account exists, is logged out, or is created after payment.
+
+**Why:** Conflating OTP verification with login interrupted existing customers,
+leaked account existence, created bare authentication rows before ownership was
+proven, and made guest history unreliable. Purchase completion must take
+priority while account data remains protected.
+
+**Compatibility:** Legacy `buyerId`, `PaymentIntent`, email/password login,
+shipping lead times, freight gating, fitment confirmation, and returns policy
+remain intact during rollout. See [[CHECKOUT_GUEST_FIRST]].
+
+---
+
+## 2026-08-07 — Search outbox wired into real write paths (uploads, inventory, ingestion)
+**Decision:** `merchant/uploads.service.ts`, `merchant/inventory.controller.ts`, and the three
+indexing call sites in `ingestion/ingestion.processor.ts` now call `SearchOutboxService.enqueue()`
+in addition to their existing synchronous `OpenSearchService.indexPart()` calls. The legacy
+(buyer-facing, `/search/parts`) index is untouched — same synchronous best-effort call as before.
+This only gives the v2 outbox/index (`SearchIndexerService`, not yet promoted to the buyer-facing
+alias) real producers, so it stays current instead of drifting stale until the next full CLI
+reindex. `uploads.service.ts` also had its old create-PENDING-then-immediately-force-DONE block
+removed — that was the literal RC-7 bug the outbox was built to fix (see
+`search-outbox.service.ts`'s file header): it faked completion without ever calling the real
+indexer.
+**Why:** `docs/SEARCH_PHASE2_RESULTS.md` (§5, 2026-08-01) had explicitly deferred this wiring until
+alias promotion, on the grounds that the worker wasn't yet running the outbox runner. That's no
+longer true — `SearchOutboxRunner` is built, unit-tested (14 passing tests), and runs by default in
+any worker process with `RUN_INGESTION_WORKER=1` (every deployed worker container). Queuing rows
+now is safe because they're actually drained, not orphaned.
+**Revisit when:** the `parts_search` alias is promoted — at that point the legacy
+`OpenSearchService.indexPart()` calls become dead code and should be removed from all four sites.
+
 ## 2026-08-07 — Shipping lead-time falls back to a conservative estimate, not null
 **Decision:** `checkout/shipping.service.ts`'s `quoteSellerShipping` now returns
 `AVERAGE_LEAD_TIME` ("08 to 14 Business Days" — the widest window on the EMX sheet) instead of

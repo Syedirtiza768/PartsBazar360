@@ -165,9 +165,20 @@ Stated plainly so the state is not overclaimed.
 - **The reconcile repair has not been applied.** It has only been dry-run. Applying it would
   enqueue 3,145 UPSERT + 27,814 DELETE rows into a queue that currently has no consumer, so it
   must wait until the worker is deployed.
-- **Existing write paths still hand-build their own `indexPart` payloads** and have not been
-  switched to `outbox.enqueue()`. That change is deliberately deferred until the alias is
-  promoted, so the legacy index keeps being maintained in the meantime.
+- ~~**Existing write paths still hand-build their own `indexPart` payloads** and have not been
+  switched to `outbox.enqueue()`.~~ **Done 2026-08-07.** `uploads.service.ts`,
+  `inventory.controller.ts`, and the three `ingestion.processor.ts` sites now call
+  `searchOutbox.enqueue()` alongside (not instead of) their existing hand-built `indexPart` calls —
+  the legacy index is still maintained synchronously exactly as before, so buyer search (still on
+  `/search/parts`) is unaffected. This only adds a producer for the v2 index/outbox, so it stays
+  warm continuously instead of drifting stale until the next full CLI reindex. Safe to do ahead of
+  alias promotion because the runner side (`SearchOutboxRunner`, `SearchIndexerService`) is already
+  built, unit-tested, and runs by default in the worker process (`RUN_SEARCH_OUTBOX_WORKER`
+  defaults to on wherever `RUN_INGESTION_WORKER=1`, which every worker container sets) — so queued
+  rows are actually drained, not just piling up.
+  `uploads.service.ts`'s old create-PENDING-then-immediately-force-DONE block (the literal RC-7 bug
+  described at the top of `search-outbox.service.ts`) is also removed; that path now lets the real
+  outbox own the DONE transition.
 - **Frontend is untouched.** No interpretation summary, no did-you-mean, no new facet groups.
 - **Part-type coverage is 29.1 %.** Honest partial coverage from title classification; the other
   71 % have no part type and are simply absent from that facet rather than bucketed into a

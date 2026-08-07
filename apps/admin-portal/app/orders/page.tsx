@@ -11,6 +11,7 @@ import { Input, Select } from "@repo/ui/field";
 import { PageHeader } from "@repo/ui/page-header";
 import { useAdminAuth } from "@/lib/auth-context";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { orderStatusTone } from "@/lib/order-status";
 
 const STATUSES = ["PENDING_PAYMENT", "PAID", "PAYMENT_FAILED", "CANCELLED", "REFUNDED"];
 
@@ -23,14 +24,6 @@ interface OrderRow {
   buyerId?: string | null;
   sellerOrders?: Array<{ id: string; seller?: { name?: string } }>;
 }
-
-const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  PAID: "success",
-  PENDING_PAYMENT: "warning",
-  PAYMENT_FAILED: "danger",
-  CANCELLED: "neutral",
-  REFUNDED: "neutral",
-};
 
 export default function OrdersListPage() {
   const { token } = useAdminAuth();
@@ -96,7 +89,7 @@ export default function OrdersListPage() {
       header: "Status",
       priority: "secondary",
       cell: (row) => (
-        <Badge tone={STATUS_TONE[row.status] || "neutral"} size="sm">
+        <Badge tone={orderStatusTone(row.status)} size="sm">
           {row.status.replace(/_/g, " ")}
         </Badge>
       ),

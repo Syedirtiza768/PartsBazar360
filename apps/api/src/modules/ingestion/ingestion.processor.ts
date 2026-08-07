@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { RealTrackService } from '../integration/realtrack.service';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
+import { SearchOutboxService } from '../search/index/search-outbox.service';
 import {
   extractCategory,
   parseVehicleFromTitle,
@@ -60,6 +61,7 @@ export class IngestionProcessor extends WorkerHost {
     private readonly realTrackService: RealTrackService,
     private readonly prisma: PrismaService,
     private readonly searchService: OpenSearchService,
+    private readonly searchOutbox: SearchOutboxService,
     private readonly pricing: PricingService,
     private readonly mvlFitment: MvlFitmentService,
   ) {
@@ -274,6 +276,99 @@ export class IngestionProcessor extends WorkerHost {
       skippedEbayMag,
       skippedExcludedBrand,
       staleDeactivated,
+      errors,
+    };
+  }
+
+  /**
+   * Backfill specific eBay listings from RealTrack without a full unbounded
+   * store resync. Walks the same paginated feed as syncStoreComplete, but
+   * only calls processListing for items whose ebayItemId is in the target
+   * set — skipping the expensive per-item DB writes for everything else.
+   * Used to bring in listings an authoritative active-listings export says
+   * should exist but that have no offer in our DB yet, without reprocessing
+   * the entire (much larger) RealTrack feed for the store.
+   */
+  async syncTargetedListings(
+    storeId: string,
+    storeSlug: string | undefined,
+    targetEbayItemIds: Set<string>,
+  ) {
+    const target = resolveRealTrackSyncTarget({ storeId, storeSlug });
+    const canonicalStoreId = target.storeId!;
+    const remaining = new Set(targetEbayItemIds);
+    const errors: Array<{ listingId?: string; message: string }> = [];
+    let page = 1;
+    let scanned = 0;
+    let imported = 0;
+
+    const MAX_ATTEMPTS = 8;
+    while (remaining.size > 0) {
+      let result: Awaited<ReturnType<typeof this.realTrackService.fetchListings>> | undefined;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          result = await this.realTrackService.fetchListings({
+            page,
+            limit: 200,
+            storeId: canonicalStoreId,
+            marketplaceId: BUYER_MARKETPLACE_ID,
+          });
+          lastErr = undefined;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `[targeted] ${target.name} page ${page} fetch failed (attempt ${attempt + 1}/${MAX_ATTEMPTS}): ${msg}`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(30000, 2000 * 2 ** attempt)),
+          );
+        }
+      }
+      if (!result) {
+        throw lastErr instanceof Error
+          ? lastErr
+          : new Error(`fetchListings failed after retries: ${String(lastErr)}`);
+      }
+      if (result.items.length === 0) break;
+      scanned += result.items.length;
+      // Proactive throttle — RealTrack rate-limits (429) under sustained
+      // paging, compounded by other production traffic sharing the same
+      // credential; a wider gap keeps our share of the budget low instead
+      // of relying on reactive retries alone.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      for (const summary of result.items) {
+        if (!summary.ebayItemId || !remaining.has(summary.ebayItemId)) {
+          continue;
+        }
+        remaining.delete(summary.ebayItemId);
+        try {
+          const outcome = await this.processListing(summary, canonicalStoreId);
+          if (outcome === 'imported') imported++;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          errors.push({ listingId: summary.id, message: msg });
+        }
+      }
+
+      this.logger.log(
+        `[targeted] ${target.name} page ${page}: scanned=${scanned} imported=${imported} remaining=${remaining.size}`,
+      );
+
+      if (scanned >= result.total) break;
+      if (result.items.length < result.limit) break;
+      page++;
+    }
+
+    return {
+      storeId: canonicalStoreId,
+      seller: target.name,
+      scanned,
+      imported,
+      notFound: [...remaining],
       errors,
     };
   }
@@ -917,6 +1012,12 @@ export class IngestionProcessor extends WorkerHost {
       ),
     ];
 
+    // Durable v2-index producer. Cheap (one row insert), so — unlike the
+    // synchronous legacy call below — this always runs, even during bulk
+    // sync: the outbox runner catches these up on its own schedule, so the
+    // v2 index doesn't just miss every ingested listing wholesale.
+    await this.searchOutbox.enqueue(canonicalPart.id, 'UPSERT', 'INGESTION');
+
     // Skip per-listing OpenSearch indexing during bulk sync — a single
     // bulk reindex runs after all stores finish (much faster overall).
     if (!process.env.SKIP_OS_INDEX_ON_INGEST) {
@@ -1036,6 +1137,7 @@ export class IngestionProcessor extends WorkerHost {
           },
         });
         if (part) await this.searchService.indexPart(part);
+        await this.searchOutbox.enqueue(offer.canonicalPartId, 'UPSERT', 'INGESTION_DEACTIVATE');
       } catch (err) {
         this.logger.warn(
           `Failed to reindex after deactivating offer ${offer.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -1087,6 +1189,7 @@ export class IngestionProcessor extends WorkerHost {
           },
         });
         if (part) await this.searchService.indexPart(part);
+        await this.searchOutbox.enqueue(partId, 'UPSERT', 'INGESTION_TOMBSTONE');
       } catch (err) {
         this.logger.warn(
           `tombstone: failed to reindex ${partId}: ${err instanceof Error ? err.message : String(err)}`,

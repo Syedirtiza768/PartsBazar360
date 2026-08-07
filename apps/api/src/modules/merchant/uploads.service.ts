@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { OpenSearchService } from '../search/opensearch.service';
+import { SearchOutboxService } from '../search/index/search-outbox.service';
 import {
   extractCategory,
   extractOeNumbers,
@@ -164,6 +165,7 @@ export class MerchantUploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly search: OpenSearchService,
+    private readonly searchOutbox: SearchOutboxService,
     private readonly pricing: PricingService,
     private readonly spreadsheetParser: SpreadsheetParserService,
     private readonly catalogMatch: CatalogMatchService,
@@ -1431,16 +1433,6 @@ export class MerchantUploadsService {
         .catch(() => undefined);
     }
 
-    await this.prisma.searchOutbox.create({
-      data: {
-        entityType: 'CanonicalPart',
-        entityId: canonicalPart.id,
-        operation: 'UPSERT',
-        payload: { source: 'SELLER_UPLOAD', offerId: offer.id },
-        status: 'PENDING',
-      },
-    });
-
     await this.search.indexPart({
       id: canonicalPart.id,
       title: canonicalPart.title,
@@ -1494,10 +1486,13 @@ export class MerchantUploadsService {
       ],
     });
 
-    await this.prisma.searchOutbox.updateMany({
-      where: { entityId: canonicalPart.id, status: 'PENDING' },
-      data: { status: 'DONE', processedAt: new Date() },
-    });
+    // Durable v2-index producer: the outbox runner actually processes this
+    // row (claim → index → DONE-only-on-success), unlike the immediate
+    // `this.search.indexPart` call above which is best-effort and swallows
+    // failures. Do not mark this DONE here — that was the bug (brief §19
+    // / docs/SEARCH_PHASE1_AUDIT.md §4 RC-7): it faked completion without
+    // the v2 index ever being written.
+    await this.searchOutbox.enqueue(canonicalPart.id, 'UPSERT', 'SELLER_UPLOAD');
 
     if (classification.status !== 'READY') {
       await this.reviewTasks.enqueue({

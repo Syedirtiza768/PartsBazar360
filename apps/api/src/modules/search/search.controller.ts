@@ -815,12 +815,6 @@ export class SearchController implements OnModuleDestroy {
       }
     }
 
-    // If no images at all, inject the placeholder SVG so the gallery shows a
-    // branded spec card instead of the camera-icon fallback.
-    if (imageUrls.length === 0) {
-      imageUrls = [`/api/search/parts/${id}/placeholder.svg`];
-    }
-
     return {
       ...partWithOffers,
       brand: canonicalizeCatalogBrand(partWithOffers.brand),
@@ -1009,11 +1003,11 @@ export class SearchController implements OnModuleDestroy {
         if (row) row.value = part.brand;
       }
       spec.badge = isGenuineOem
-        ? 'OEM'
+        ? 'Genuine OEM'
         : part.partType === 'AFTERMARKET'
           ? 'Aftermarket'
           : part.partType === 'SALVAGE_OEM'
-            ? 'Salvage OEM'
+            ? 'Used Genuine OEM'
             : spec.badge;
 
       if (isGenuineOem) {
