@@ -14,6 +14,22 @@ Format:
 
 ---
 
+## 2026-08-07 — Shipping lead-time falls back to a conservative estimate, not null
+**Decision:** `checkout/shipping.service.ts`'s `quoteSellerShipping` now returns
+`AVERAGE_LEAD_TIME` ("08 to 14 Business Days" — the widest window on the EMX sheet) instead of
+`leadTime: null` for destinations with no EMX rate-sheet row, mirroring how `amount` already falls
+back to `averageRates` for the same countries.
+**Why:** Looked like a `COUNTRY_ALIASES` coverage gap at first (~30 dropdown countries unmatched),
+but diffing `SHIPPING_COUNTRIES` against `EMX_RATE_SHEET` showed `COUNTRY_ALIASES` already covers
+every real naming mismatch (9 entries) — the remaining unmatched countries (Kosovo, Libya, Syria,
+Monaco, Vatican City, etc.) simply have no row in the sheet at all, so no alias could fix them. The
+actual inconsistency was that price got an average fallback but lead time silently got none, so
+"Est. delivery" just vanished for those destinations even though a price was quoted.
+**Revisit when:** EMX adds coverage for any of the currently-absent countries — remove them from
+this reasoning, no code change needed (they'll just start matching `rowsByCountry`).
+
+---
+
 ## 2026-08-07 — SMS OTP provider switched from Twilio to SMSGlobal
 **Decision:** Checkout ([[apps/buyer-marketplace]] + [[apps/api]] `auth`/`sms` modules) sends phone OTP via the SMSGlobal REST API (`SMSGLOBAL_API_KEY`/`SMSGLOBAL_API_SECRET`/`SMSGLOBAL_SENDER_ID`) instead of Twilio Verify, and defaults back to SMS as the checkout verification channel (email remains the fallback).
 **Why:** Twilio's account was stuck on a trial-only SMS restriction (see the superseded 2026-08-06 entry below). SMSGlobal is a plain send API rather than a hosted verify service, so OTP code generation/storage/expiry now lives in `AuthService.sendPhoneOtp`/`verifyPhoneOtp` (reusing the `otpCode`/`otpExpiry` `User` columns), mirroring the email OTP flow instead of delegating to the provider.
