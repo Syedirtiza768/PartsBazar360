@@ -12,12 +12,10 @@ import { Pagination } from "@/components/Pagination";
 import { VehicleModeBanner } from "@/components/VehicleModeBanner";
 import { FilterDrawer } from "@/components/FilterDrawer";
 import { QuickFilterRow } from "@/components/FilterSectionsClient";
-import { SearchFilterSidebar } from "@/components/SearchFilterSidebar";
 import {
   ActiveFilterChips,
   countActiveFilters,
   buildHref,
-  clearFiltersHref,
   type SearchParamsShape,
 } from "@/components/FilterSidebar";
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
@@ -231,7 +229,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       facets.partTypes.length > 0 ||
       facets.sourceTags.length > 0);
   const resultCount = results?.total;
-  const clearHref = clearFiltersHref(paramsShape);
   const interchangeOff = params.includeInterchange === "false";
   const isAtLeast = results?.totalRelation === "gte";
   // Only meaningful for a keyword search — a filter-only browse is never relaxed.
@@ -336,19 +333,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         )}
       </div>
 
-      <div className="flex flex-col gap-8 pt-6 lg:flex-row">
-        {/* Filters sidebar — check multiple options, then Apply commits them in one navigation */}
-        {showFilters && (
-          <SearchFilterSidebar
-            activeFilterCount={activeFilterCount}
-            clearHref={clearHref}
-            facets={facets}
-            params={paramsShape}
-            resultCount={resultCount}
-          />
-        )}
-
-        <div className="min-w-0 flex-1">
+      <div className="pt-6">
+        <div className="min-w-0">
           {results === null ? (
             <EmptyState
               variant="page"

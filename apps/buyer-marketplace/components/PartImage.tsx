@@ -66,7 +66,11 @@ export function PartImage({
   const [errored, setErrored] = useState(false);
   const size = resolveEbaySize(priority, imageSize, sizes);
 
-  if (!src || errored) {
+  // TEMP: force the "no photo" placeholder for every tile in production.
+  // Revert by deleting this line.
+  const forceNoPhoto = true;
+
+  if (forceNoPhoto || !src || errored) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-1.5 bg-slate-100 text-slate-300 ${fill ? "absolute inset-0 h-full w-full" : ""} ${className ?? ""}`}

@@ -215,22 +215,14 @@ export default async function Home() {
           eyebrow="Category-first shopping"
           title="Shop by vehicle system"
           id="systems-heading"
-          action={
-            <Link
-              href="/search"
-              className="inline-flex min-h-touch items-center gap-2 text-sm font-black uppercase tracking-wide text-brand-700 hover:text-brand-900"
-            >
-              All categories <ArrowRightIcon className="h-4 w-4" />
-            </Link>
-          }
         />
         {facets.categoryGroups.length ? (
-          <div className="mt-6 grid grid-cols-2 border-l border-t border-stone-300 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="-mx-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {facets.categoryGroups.slice(0, 12).map((category, index) => (
               <Link
                 key={category.name}
                 href={`/search?categoryGroup=${encodeURIComponent(category.name)}`}
-                className="group flex min-h-32 min-w-0 flex-col border-b border-r border-stone-300 bg-white p-3 transition-colors hover:bg-brand-950 hover:text-white sm:p-4"
+                className="group flex min-h-32 w-36 shrink-0 snap-start flex-col border border-stone-300 bg-white p-3 transition-colors hover:bg-brand-950 hover:text-white sm:w-40 sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2">
                   <CategoryIcon category={category.name} className="h-6 w-6 shrink-0 text-brand-700 group-hover:text-brand-200 sm:h-7 sm:w-7" />
@@ -246,6 +238,15 @@ export default async function Home() {
                 </p>
               </Link>
             ))}
+            <Link
+              href="/search"
+              className="group flex min-h-32 w-36 shrink-0 snap-start flex-col items-start justify-between border border-stone-300 bg-brand-950 p-3 text-white transition-colors hover:bg-brand-900 sm:w-40 sm:p-4"
+            >
+              <ArrowRightIcon className="h-6 w-6 shrink-0 text-brand-200 sm:h-7 sm:w-7" />
+              <p className="font-display text-sm font-black uppercase leading-tight tracking-tight sm:text-base">
+                See all categories
+              </p>
+            </Link>
           </div>
         ) : (
           <div className="mt-6 border border-stone-300 bg-white p-6 text-sm text-graphite-700 sm:p-8">
