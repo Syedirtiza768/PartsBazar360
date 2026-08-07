@@ -28,7 +28,6 @@
     "cleanup:ebay-feed": "node dist/src/cleanup-ebay-feed.cli.js",
     "reconcile:active-listings": "node dist/src/reconcile-active-listings.cli.js",
     "backfill:targeted-listings": "node dist/src/backfill-targeted-listings.cli.js",
-    "audit:checkout-customers": "node dist/src/audit-checkout-customers.cli.js",
     "export:salvage": "node dist/src/export-salvage.cli.js",
     "enrich:febest": "node scripts/enrich-febest-from-website.mjs",
     "import:mvl": "node scripts/import-us-mvl.mjs",

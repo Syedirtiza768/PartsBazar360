@@ -62,7 +62,9 @@ seller orders, closes the cart, and tolerates webhook replay.
 ## Migration and duplicate safety
 
 The migration is additive and backfills only already-verified E.164 phones.
-Run `npm run audit:checkout-customers --workspace=api` before production rollout.
+Build the API, then run `node apps/api/dist/src/audit-checkout-customers.cli.js`
+before production rollout (or run the same compiled CLI in a one-off API
+container attached to the application network).
 The audit is read-only and reports invalid numbers, normalized collisions, and
 verified users missing a customer identity. Never auto-merge two password
 accounts; those collisions require manual review. For safe cases, prefer the
