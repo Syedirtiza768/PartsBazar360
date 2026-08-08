@@ -556,16 +556,21 @@ export class SearchController implements OnModuleDestroy {
     }
 
     // Consolidate every available image: ProductMedia rows + stored imageUrls.
-    // Dedupe by URL and upgrade eBay thumbnails to s-l1600 for display.
+    // Dedupe by normalized URL (upgrade s-l variant to s-l1600) and upgrade
+    // eBay thumbnails to s-l1600 for display.
     const mediaUrls = (partWithOffers.media || [])
       .map((m) => m.url)
       .filter(Boolean);
     const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean);
+    const normalizeUrl = (u: string) =>
+      u.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, "/s-l1600.$1")
+       .replace(/\/s-l\d+\?/i, "/s-l1600?");
     const seenUrl = new Set<string>();
     const dedupePush = (list: string[]) => {
       for (const u of list) {
-        if (u && !seenUrl.has(u)) {
-          seenUrl.add(u);
+        const norm = normalizeUrl(u);
+        if (u && !seenUrl.has(norm)) {
+          seenUrl.add(norm);
           imageUrls.push(u);
         }
       }
@@ -808,9 +813,10 @@ export class SearchController implements OnModuleDestroy {
     );
     for (const lead of [infographic, locationDiagram]) {
       if (lead?.url) {
+        const leadNorm = normalizeUrl(lead.url);
         imageUrls = [
           lead.url,
-          ...imageUrls.filter((url) => url !== lead.url),
+          ...imageUrls.filter((url) => normalizeUrl(url) !== leadNorm),
         ];
       }
     }

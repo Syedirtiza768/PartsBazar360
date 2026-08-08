@@ -10,6 +10,7 @@ import { RecentlyViewed } from "@/components/RecentlyViewed";
 import { SalvagePanel } from "@/components/SalvagePanel";
 import { buyerVisibleOffers, lowestOfferPrice, offerCurrency, humanize } from "@/lib/format";
 import { partTypeFromLegacy } from "@repo/catalog-contracts";
+import { sanitizeProductHtml, stripHtmlTags } from "@/lib/sanitize-html";
 import type { Part } from "@/lib/types";
 
 // Short ISR window: PDPs are mostly catalog data. Merchant edits trigger
@@ -218,15 +219,16 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
             <SalvagePanel units={part.salvageUnits || []} />
           )}
 
-          {/* Product description from enrichment */}
+          {/* Product description from enrichment — stored as eBay seller HTML */}
           {part.description && (
             <section aria-labelledby="description-heading">
               <h2 id="description-heading" className="text-lg font-bold tracking-tight text-slate-900">
                 Product description
               </h2>
-              <p className="mt-3 text-sm leading-relaxed text-slate-700">
-                {part.description}
-              </p>
+              <div
+                className="prose prose-sm mt-3 max-w-none text-slate-700 leading-relaxed [&_img]:rounded-lg [&_img]:max-w-full [&_table]:text-xs [&_table]:border-collapse [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-200 [&_th]:px-2 [&_th]:py-1 [&_th]:font-semibold"
+                dangerouslySetInnerHTML={{ __html: sanitizeProductHtml(part.description) }}
+              />
               {part.itemSpecifics?.compatibilityNote && (
                 <p className="mt-3 text-xs leading-relaxed text-graphite-600 italic">
                   {part.itemSpecifics.compatibilityNote}

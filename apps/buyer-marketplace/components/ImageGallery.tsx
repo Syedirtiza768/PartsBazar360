@@ -20,7 +20,17 @@ function fullSizeUrl(src: string): string {
  * and keyboard navigation (arrows in the lightbox, Escape to close).
  */
 export function ImageGallery({ images, title }: { images: string[]; title: string }) {
-  const uniqueImages = [...new Set((images || []).filter(Boolean))];
+  // Deduplicate by URL ignoring eBay s-l size variants (e.g. s-l1600 vs s-l500).
+  const seen = new Set<string>();
+  const allImages = (images || []).filter(Boolean);
+  const uniqueImages: string[] = [];
+  for (const img of allImages) {
+    const norm = img.replace(/\/s-l\d+\./i, "/s-l1600.").toLowerCase();
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      uniqueImages.push(img);
+    }
+  }
   const hasImages = uniqueImages.length > 0;
 
   const [index, setIndex] = useState(0);

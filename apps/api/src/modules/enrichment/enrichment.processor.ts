@@ -27,6 +27,7 @@ import {
   parseDimensionsJson,
   resolveItemWeight,
 } from '../checkout/billable-weight.util';
+import { upgradeImageUrl } from '../ingestion/listing-enrichment.util';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -307,14 +308,19 @@ export class EnrichmentProcessor extends WorkerHost {
           : null);
 
       // Trading gallery is authoritative — put it first, keep any extras.
+      // Normalize URLs to collapse different s-l sizes of the same image.
+      const normalizeUrl = (u: string) => upgradeImageUrl(u.trim());
       const imageUrls =
         mapped.imageUrls && mapped.imageUrls.length
-          ? [
-              ...mapped.imageUrls,
-              ...(part.imageUrls || []).filter(
-                (u) => !mapped.imageUrls!.includes(u),
-              ),
-            ]
+          ? (() => {
+              const normSet = new Set(mapped.imageUrls.map(normalizeUrl));
+              return [
+                ...mapped.imageUrls,
+                ...(part.imageUrls || []).filter(
+                  (u) => !normSet.has(normalizeUrl(u)),
+                ),
+              ];
+            })()
           : null;
 
       // Diagrams still use OpenRouter; gated separately so RT failures don't
