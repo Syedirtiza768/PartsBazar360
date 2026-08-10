@@ -24,11 +24,12 @@ import { fitmentForConfig, FITMENT_COPY } from "@/lib/fitment";
 import { pushRecentlyViewed } from "@/lib/recent";
 import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
 import { resolveShippingCountry, setShippingCountry } from "@/lib/shipping-destination";
+import { usePartShippingQuote, type PartShippingQuote } from "@/lib/use-part-shipping-quote";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge, shouldSuppressCondition } from "./ConditionBadge";
 import { SourcePill } from "./SourcePill";
 import { WatchlistButton } from "./WatchlistButton";
-import { ShippingSummaryRow } from "./ShippingSummaryRow";
+import { ShippingDestinationPicker } from "./ShippingDestinationPicker";
 import { PaymentBadgeRow } from "./PaymentBadgeRow";
 import type { Part, Offer } from "@/lib/types";
 
@@ -175,11 +176,19 @@ function OfferRow({
   part,
   isBest,
   showBestLabel,
+  destination,
+  requiresFreightQuote,
+  shippingQuote,
+  shippingLoading,
 }: {
   offer: Offer;
   part: Part;
   isBest: boolean;
   showBestLabel: boolean;
+  destination: string;
+  requiresFreightQuote: boolean;
+  shippingQuote: PartShippingQuote | null;
+  shippingLoading: boolean;
 }) {
   const { addToCart, loading } = useCart();
   const { push } = useToast();
@@ -252,7 +261,20 @@ function OfferRow({
             <SourceBadge partSource={offer.partSource} partType={offer.partType || part.partType} size="sm" />
           </div>
         </div>
-        <p className="price shrink-0 text-lg sm:text-xl">{format(offer.price, offer.currency)}</p>
+        <div className="shrink-0 text-right">
+          <p className="price text-lg sm:text-xl">{format(offer.price, offer.currency)}</p>
+          {requiresFreightQuote ? (
+            <p className="mt-0.5 text-xs font-medium text-amber-600">+ freight quote</p>
+          ) : !destination ? null : shippingLoading && !shippingQuote ? (
+            <p className="mt-0.5 text-xs text-graphite-500">+ shipping…</p>
+          ) : shippingQuote ? (
+            <p className="mt-0.5 text-xs text-graphite-600">
+              + <span className="price text-xs">{format(shippingQuote.amount, shippingQuote.currency)}</span>{" "}
+              shipping
+              {shippingQuote.leadTime ? ` · ${shippingQuote.leadTime}` : ""}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {offer.inventory && offer.inventory.length > 0 && (
@@ -354,6 +376,15 @@ export function BuyBox({ part }: { part: Part }) {
     setShippingCountry(destination);
   }, [destination, destinationReady]);
 
+  // One shared quote for the part — every offer's price shares the same
+  // weight, so a single fetch covers all of them (see ShippingService).
+  const requiresFreightQuote = part.shipping?.requiresFreightQuote ?? false;
+  const { quote: shippingQuote, loading: shippingLoading } = usePartShippingQuote({
+    partId: part.id,
+    country: destination,
+    enabled: Boolean(destination) && !requiresFreightQuote,
+  });
+
   return (
     <div className="space-y-4">
       {/* Title block */}
@@ -426,8 +457,24 @@ export function BuyBox({ part }: { part: Part }) {
               {offers.length} offers from {format(best!.price, best!.currency)}
             </p>
           )}
+          <ShippingDestinationPicker
+            part={part}
+            shipping={part.shipping}
+            destination={destination}
+            onDestinationChange={setDestination}
+          />
           {offers.map((offer, i) => (
-            <OfferRow key={offer.id} offer={offer} part={part} isBest={i === 0} showBestLabel={offers.length > 1} />
+            <OfferRow
+              key={offer.id}
+              offer={offer}
+              part={part}
+              isBest={i === 0}
+              showBestLabel={offers.length > 1}
+              destination={destination}
+              requiresFreightQuote={requiresFreightQuote}
+              shippingQuote={shippingQuote}
+              shippingLoading={shippingLoading}
+            />
           ))}
         </div>
       )}
@@ -436,12 +483,6 @@ export function BuyBox({ part }: { part: Part }) {
 
       {/* Trust rows */}
       <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-[13px] text-slate-600">
-        <ShippingSummaryRow
-          part={part}
-          shipping={part.shipping}
-          destination={destination}
-          onDestinationChange={setDestination}
-        />
         <li className="flex items-start gap-2.5">
           <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
           Fitment evidence and condition are disclosed on every listing — what you see is what
