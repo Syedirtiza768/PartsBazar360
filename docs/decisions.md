@@ -1,5 +1,68 @@
 # Decision log
 
+**Last reviewed:** 2026-08-10
+
+## 2026-08-10 - GEN catalog enhancement uses evidence-only enrichment
+
+**Decision:** Active `GEN` listings are enhanced by `apps/api/scripts/enhance-gen-listings.mjs`
+with GPT-5.6 Luna content, exact brand/MPN image evidence, and MVL verification only from
+existing compatibility rows. `apps/api/scripts/reindex-gen-enhanced.mjs` then refreshes the
+buyer-search index for that campaign.
+
+**Why:** The catalog needed consistent SEO titles, descriptions, and item specifics, but generic
+part names are not sufficient evidence for vehicle fitment or OEM claims. The worker therefore
+preserves factual uncertainty and leaves unverified fitment unclaimed. During the production
+refresh, an OpenSearch flood-stage disk block was cleared after removing only a rebuildable
+Next.js fetch cache; the targeted refresh then completed for all 1,771 active GEN parts.
+
+**Revisit when:** the image evidence provider or the MVL source changes, or the GEN catalog is
+re-imported and needs a new campaign version.
+
+Running log of non-obvious decisions, workarounds, and their reasons. Newest first. Add an entry whenever a change is driven by something that isn't obvious from the code alone (a past incident, an external constraint, a workaround for a broken dependency).
+
+Format:
+```
+## YYYY-MM-DD — Short title
+**Decision:** what was decided/done.
+**Why:** the constraint or incident that drove it.
+**Revisit when:** condition under which this should be reconsidered (optional).
+```
+
+---
+
+## 2026-08-10 — Product image deduplication, SVG filtering, and description HTML entity decoding
+
+**Decision:** Three related PDP quality fixes applied across the API and buyer marketplace:
+
+1. **Image deduplication** — `search.controller.ts:getPart`, `search-document.builder.ts`,
+   `buyer-visible-offers.util.ts`, and `ImageGallery.tsx` now normalize image URLs by stripping
+   query parameters (e.g. eBay `?set_id=8800005007` tracking duplicates) and canonicalising eBay
+   size tokens (`s-l500` → `s-l1600`, `$_1` → `$_57`) before deduplicating. This prevents the
+   same photo from appearing multiple times in the gallery.
+
+2. **SVG filtering** — Seller-provided `imageUrls` are filtered to drop `.svg` entries at every
+   layer: index time (`search-document.builder.ts`), read time (`buyer-visible-offers.util.ts`),
+   PDP API (`search.controller.ts`), and defensively in the frontend (`ImageGallery.tsx`,
+   `PartImage.tsx`). SVGs are not valid product photos and were leaking into listings from
+   malformed scrape data.
+
+3. **Description HTML entity decoding** — `sanitizeProductHtml` now decodes common HTML entities
+   (`&lt;`, `&gt;`, `&quot;`, `&#39;`, `&nbsp;`, numeric entities) before returning. Seller
+   descriptions stored with encoded tags were rendering as raw text (e.g. literal `<p>Hello</p>`)
+   instead of formatted HTML.
+
+**Why:** Production PDPs (example: part `0a4583af-44cd-44bc-a459-4cd17f2df80d`) showed raw HTML
+in the description and repeated the same eBay image 6× because `$_1.JPG` and
+`$_1.JPG?set_id=8800005007` were treated as distinct URLs. The old `normalizeUrl` only handled
+`s-l\d+` patterns and ignored query params entirely.
+
+**Revisit when:** never — the normalisation rules are conservative (strip query params for dedup
+only, keep original URLs for display) and the SVG filter is a data-quality guard.
+
+---
+
+## 2026-08-07 — Checkout verification is transaction identity, not login
+
 **Last reviewed:** 2026-08-07
 
 Running log of non-obvious decisions, workarounds, and their reasons. Newest first. Add an entry whenever a change is driven by something that isn't obvious from the code alone (a past incident, an external constraint, a workaround for a broken dependency).

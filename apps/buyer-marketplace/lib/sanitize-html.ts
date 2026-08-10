@@ -15,15 +15,34 @@ const DATA_URI_IMG =
   /src\s*=\s*["']?\s*data\s*:(?!image\/(png|jpe?g|gif|webp|svg\+xml))/gi;
 const COMMENTS = /<!--[\s\S]*?-->/g;
 
+/** Decode common HTML entities so descriptions render as formatted HTML
+ *  rather than literal text (e.g. `&lt;p&gt;` → `<p>`). */
+function decodeHtmlEntities(html: string): string {
+  if (!html) return "";
+  return (
+    html
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+  );
+}
+
 export function sanitizeProductHtml(html: string): string {
   if (!html) return "";
-  return html
-    .replace(COMMENTS, "")
-    .replace(DANGEROUS_TAGS, "")
-    .replace(EVENT_HANDLER, "")
-    .replace(JAVASCRIPT_URI, ' $1="about:blank"')
-    .replace(DATA_URI_IMG, 'src="about:blank"')
-    .trim();
+  return decodeHtmlEntities(
+    html
+      .replace(COMMENTS, "")
+      .replace(DANGEROUS_TAGS, "")
+      .replace(EVENT_HANDLER, "")
+      .replace(JAVASCRIPT_URI, ' $1="about:blank"')
+      .replace(DATA_URI_IMG, 'src="about:blank"')
+      .trim(),
+  );
 }
 
 /**

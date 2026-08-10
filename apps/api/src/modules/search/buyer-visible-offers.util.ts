@@ -151,7 +151,21 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
     );
   if (offers.length === 0) return null;
   const minPrice = Math.min(...offers.map((o) => Number(o.price) || Infinity));
-  const imageUrls = (item.imageUrls as string[] | undefined) || [];
+  const rawImageUrls = (item.imageUrls as string[] | undefined) || [];
+  const seenImg = new Set<string>();
+  const imageUrls: string[] = [];
+  for (const url of rawImageUrls) {
+    if (!url || /\.svg(?:\?.*)?$/i.test(url)) continue;
+    const norm = url
+      .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+      .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1')
+      .replace(/\?.*$/, '')
+      .toLowerCase();
+    if (!seenImg.has(norm)) {
+      seenImg.add(norm);
+      imageUrls.push(url);
+    }
+  }
   return {
     ...item,
     brand: canonicalizeCatalogBrand(item.brand),

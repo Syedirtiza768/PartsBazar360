@@ -16,16 +16,43 @@ function fullSizeUrl(src: string): string {
 }
 
 /**
+ * Normalize an image URL for deduplication: strip query params, upgrade
+ * eBay size tokens to a canonical size, and lower-case.
+ */
+function normalizeForDedup(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname
+      .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+      .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1');
+    return `${parsed.origin}${pathname}`.toLowerCase();
+  } catch {
+    return url
+      .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+      .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1')
+      .replace(/\?.*$/, '')
+      .toLowerCase();
+  }
+}
+
+function isSvgUrl(url: string): boolean {
+  return /\.svg(?:\?.*)?$/i.test(url);
+}
+
+/**
  * Product gallery: main stage with tap-to-zoom lightbox, thumbnail strip,
  * and keyboard navigation (arrows in the lightbox, Escape to close).
  */
 export function ImageGallery({ images, title }: { images: string[]; title: string }) {
-  // Deduplicate by URL ignoring eBay s-l size variants (e.g. s-l1600 vs s-l500).
+  // Deduplicate by normalized URL ignoring eBay size variants and query-param
+  // tracking duplicates (e.g. `?set_id=8800005007`). Also drop SVGs — seller
+  // listing images should never be SVGs.
   const seen = new Set<string>();
   const allImages = (images || []).filter(Boolean);
   const uniqueImages: string[] = [];
   for (const img of allImages) {
-    const norm = img.replace(/\/s-l\d+\./i, "/s-l1600.").toLowerCase();
+    if (isSvgUrl(img)) continue;
+    const norm = normalizeForDedup(img);
     if (!seen.has(norm)) {
       seen.add(norm);
       uniqueImages.push(img);

@@ -562,14 +562,28 @@ export class SearchController implements OnModuleDestroy {
       .map((m) => m.url)
       .filter(Boolean);
     const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean);
-    const normalizeUrl = (u: string) =>
-      u.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, "/s-l1600.$1")
-       .replace(/\/s-l\d+\?/i, "/s-l1600?");
+    const normalizeUrl = (u: string) => {
+      try {
+        const parsed = new URL(u);
+        const pathname = parsed.pathname
+          .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+          .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1');
+        return `${parsed.origin}${pathname}`.toLowerCase();
+      } catch {
+        return u
+          .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+          .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1')
+          .replace(/\?.*$/, '')
+          .toLowerCase();
+      }
+    };
+    const isSvgUrl = (u: string) => /\.svg(?:\?.*)?$/i.test(u);
     const seenUrl = new Set<string>();
     const dedupePush = (list: string[]) => {
       for (const u of list) {
+        if (!u || isSvgUrl(u)) continue;
         const norm = normalizeUrl(u);
-        if (u && !seenUrl.has(norm)) {
+        if (!seenUrl.has(norm)) {
           seenUrl.add(norm);
           imageUrls.push(u);
         }
@@ -623,11 +637,15 @@ export class SearchController implements OnModuleDestroy {
         listingUrl = live.detailsUrl;
         if (live.imageUrls.length > 0) {
           // Merge live FEBEST images with stored ones; live take priority.
+          // Re-apply SVG filter and full URL normalization so FEBEST scrape
+          // can't re-introduce duplicates the earlier dedup removed.
           const merged: string[] = [];
           const seen = new Set<string>();
           for (const u of [...live.imageUrls, ...imageUrls]) {
-            if (u && !seen.has(u)) {
-              seen.add(u);
+            if (!u || isSvgUrl(u)) continue;
+            const norm = normalizeUrl(u);
+            if (!seen.has(norm)) {
+              seen.add(norm);
               merged.push(u);
             }
           }

@@ -54,6 +54,18 @@ function proxyUrl(
  * Card/thumbnail callers should pass `sizes` (or `imageSize={300}`) so we do
  * not pull full `s-l1600` assets into grid layouts.
  */
+function isSvgUrl(url: string): boolean {
+  return /\.svg(?:\?.*)?$/i.test(url);
+}
+
+/**
+ * Real listing photos come from many third-party seller CDNs, so we can't
+ * guarantee every URL stays reachable. Routes external images through the
+ * nginx proxy to bypass hotlinking restrictions. Falls back to a placeholder.
+ *
+ * Card/thumbnail callers should pass `sizes` (or `imageSize={300}`) so we do
+ * not pull full `s-l1600` assets into grid layouts.
+ */
 export function PartImage({
   src,
   alt,
@@ -66,7 +78,7 @@ export function PartImage({
   const [errored, setErrored] = useState(false);
   const size = resolveEbaySize(priority, imageSize, sizes);
 
-  if (!src || errored) {
+  if (!src || errored || isSvgUrl(src)) {
     return (
       <div
         className={`flex flex-col items-center justify-center gap-1.5 bg-slate-100 text-slate-300 ${fill ? "absolute inset-0 h-full w-full" : ""} ${className ?? ""}`}

@@ -154,7 +154,21 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
     .map((offer: any) => Number(offer?.price))
     .filter((price: number) => Number.isFinite(price) && price > 0);
 
-  const imageUrls = Array.isArray(part?.imageUrls) ? part.imageUrls.filter(Boolean) : [];
+  const rawImageUrls = Array.isArray(part?.imageUrls) ? part.imageUrls.filter(Boolean) : [];
+  const seenImg = new Set<string>();
+  const imageUrls: string[] = [];
+  for (const url of rawImageUrls) {
+    if (/\.svg(?:\?.*)?$/i.test(url)) continue;
+    const norm = url
+      .replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1')
+      .replace(/\/\$_\d+\.(jpg|jpeg|png|webp)$/i, '/$_57.$1')
+      .replace(/\?.*$/, '')
+      .toLowerCase();
+    if (!seenImg.has(norm)) {
+      seenImg.add(norm);
+      imageUrls.push(url);
+    }
+  }
   const hasImage = imageUrls.length > 0;
 
   const fitments = Array.isArray(part?.fitments) ? part.fitments : [];
