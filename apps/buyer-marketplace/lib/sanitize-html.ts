@@ -20,6 +20,12 @@ const COMMENTS = /<!--[\s\S]*?-->/g;
  *  visible text (e.g. CSS rules showing on the page). */
 const BLOCK_ELEMENTS = /<(style|script|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi;
 
+/** eBay sellers often embed the same product photos inside the description HTML.
+ *  Because the PDP already has a dedicated image gallery, these inline photos
+ *  only create visual repetition (and sometimes SVG logos). Stripping them
+ *  keeps the description focused on text content. */
+const IMG_TAGS = /<img\b[^>]*>/gi;
+
 /** Decode common HTML entities so descriptions render as formatted HTML
  *  rather than literal text (e.g. `&lt;p&gt;` → `<p>`). */
 function decodeHtmlEntities(html: string): string {
@@ -44,6 +50,7 @@ export function sanitizeProductHtml(html: string): string {
       .replace(COMMENTS, "")
       .replace(BLOCK_ELEMENTS, "")
       .replace(DANGEROUS_TAGS, "")
+      .replace(IMG_TAGS, "")
       .replace(EVENT_HANDLER, "")
       .replace(JAVASCRIPT_URI, ' $1="about:blank"')
       .replace(DATA_URI_IMG, 'src="about:blank"')

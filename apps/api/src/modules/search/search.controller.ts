@@ -830,7 +830,7 @@ export class SearchController implements OnModuleDestroy {
       (m) => m.mediaType === 'INFOGRAPHIC',
     );
     for (const lead of [infographic, locationDiagram]) {
-      if (lead?.url) {
+      if (lead?.url && !isSvgUrl(lead.url)) {
         const leadNorm = normalizeUrl(lead.url);
         imageUrls = [
           lead.url,
