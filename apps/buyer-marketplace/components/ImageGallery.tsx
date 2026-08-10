@@ -137,30 +137,35 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
         )}
       </div>
 
-      {/* Thumbnails */}
+      {/* Thumbnails — skip the active image so the main stage and strip never
+          show the same photo side-by-side (the active one is already hero-sized). */}
       {uniqueImages.length > 1 && (
         <div
           className="scroll-rail mt-3 gap-2.5 pb-1"
           role="group"
           aria-label="Image thumbnails"
         >
-          {uniqueImages.slice(0, 16).map((img, i) => (
-            <button
-              key={img + i}
-              type="button"
-              onClick={() => setIndex(i)}
-              aria-label={`View image ${i + 1} of ${uniqueImages.length}`}
-              aria-current={i === clamped}
-              className={cn(
-                "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors",
-                i === clamped
-                  ? "border-brand-600"
-                  : "border-slate-200 opacity-80 hover:border-slate-300 hover:opacity-100",
-              )}
-            >
-              <PartImage src={img} alt="" className="object-contain p-1" imageSize={300} />
-            </button>
-          ))}
+          {uniqueImages
+            .filter((_, i) => i !== clamped)
+            .slice(0, 15)
+            .map((img, i) => {
+              // `i` is the filtered index; we need the original index for setIndex.
+              const originalIndex = uniqueImages.indexOf(img);
+              return (
+                <button
+                  key={img + originalIndex}
+                  type="button"
+                  onClick={() => setIndex(originalIndex)}
+                  aria-label={`View image ${originalIndex + 1} of ${uniqueImages.length}`}
+                  className={cn(
+                    "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors",
+                    "border-slate-200 opacity-80 hover:border-slate-300 hover:opacity-100",
+                  )}
+                >
+                  <PartImage src={img} alt="" className="object-contain p-1" imageSize={300} />
+                </button>
+              );
+            })}
         </div>
       )}
 
