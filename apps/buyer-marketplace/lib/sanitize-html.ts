@@ -15,6 +15,11 @@ const DATA_URI_IMG =
   /src\s*=\s*["']?\s*data\s*:(?!image\/(png|jpe?g|gif|webp|svg\+xml))/gi;
 const COMMENTS = /<!--[\s\S]*?-->/g;
 
+/** Strip entire <style>, <script> and <noscript> blocks including their
+ *  content — the tag-only regex above would leave the inner text as raw
+ *  visible text (e.g. CSS rules showing on the page). */
+const BLOCK_ELEMENTS = /<(style|script|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi;
+
 /** Decode common HTML entities so descriptions render as formatted HTML
  *  rather than literal text (e.g. `&lt;p&gt;` → `<p>`). */
 function decodeHtmlEntities(html: string): string {
@@ -37,6 +42,7 @@ export function sanitizeProductHtml(html: string): string {
   return decodeHtmlEntities(
     html
       .replace(COMMENTS, "")
+      .replace(BLOCK_ELEMENTS, "")
       .replace(DANGEROUS_TAGS, "")
       .replace(EVENT_HANDLER, "")
       .replace(JAVASCRIPT_URI, ' $1="about:blank"')
