@@ -40,8 +40,16 @@ export function PartDetailLive({
           ) : null}
         </div>
 
+        {/*
+          `lg:max-h-[calc(100dvh-7rem)]` matches `lg:top-28` (7rem): once the
+          box has more content than fits below the sticky offset, it scrolls
+          internally instead of overflowing below the viewport where sticky
+          positioning would strand it — unreachable until the page scrolled
+          far enough to release the pin. Same bounded-scroll pattern as the
+          AppShell rail and Sheet body.
+        */}
         <aside
-          className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2"
+          className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-none-y"
           aria-label="Purchase options"
         >
           <BuyBox part={livePart} />
