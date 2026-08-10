@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import localFont from "next/font/local";
 import "./globals.css";
 import { CartProvider } from "@/lib/cart-context";
@@ -131,10 +132,20 @@ export default async function RootLayout({
       data-scroll-behavior="smooth"
       className={`${sans.variable} ${display.variable}`}
     >
+      <Script id="gtm" strategy="afterInteractive">{`
+        (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+        })(window,document,'script','dataLayer','GTM-N373KFW3');
+      `}</Script>
       {/* min-h-dvh, not min-h-screen: `100vh` on mobile Safari is the *largest*
           viewport, so a min-h-screen column leaves a scroll gap the height of
           the retracted toolbar under every short page. */}
       <body className="flex min-h-dvh flex-col">
+        <noscript>
+          <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N373KFW3" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
+        </noscript>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
