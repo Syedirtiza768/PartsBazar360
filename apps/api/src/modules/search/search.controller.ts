@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   Header,
@@ -22,6 +23,7 @@ import {
   sanitizeSearchItems,
 } from './buyer-visible-offers.util';
 import { buildPartShippingSummary } from '../checkout/part-shipping-summary.util';
+import { ShippingService } from '../checkout/shipping.service';
 import { EnrichmentService } from '../enrichment/enrichment.service';
 import { renderInfographicSvg } from '../enrichment/infographic-renderer';
 import { renderPlaceholderSvg } from '../enrichment/placeholder-svg';
@@ -93,6 +95,7 @@ export class SearchController implements OnModuleDestroy {
     private readonly febestWebsite: FebestWebsiteService,
     private readonly mvlOeCatalog: MvlOeCatalogService,
     private readonly enrichment: EnrichmentService,
+    private readonly shippingService: ShippingService,
   ) {
     try {
       this.redis = new Redis({
@@ -952,6 +955,59 @@ export class SearchController implements OnModuleDestroy {
       infographicUrl: infographic?.url ?? null,
       infographicAlt: infographic?.altText ?? null,
     };
+  }
+
+  /**
+   * Live, per-destination shipping cost + lead time for a single listing.
+   * Reuses checkout's ShippingService against a synthetic one-item cart so
+   * the PDP can show a real price without requiring an actual cart/session.
+   */
+  @Get('parts/:id/shipping-quote')
+  async getPartShippingQuote(
+    @Param('id') id: string,
+    @Query('country') country?: string,
+  ) {
+    const destination = (country || '').trim();
+    if (!destination) {
+      throw new BadRequestException('country is required');
+    }
+
+    const cacheK = this.cacheKey('shipping-quote', { id, country: destination });
+    const cached = await this.cacheGet<any>(cacheK);
+    if (cached) return cached;
+
+    const part = await this.prisma.canonicalPart.findUnique({
+      where: { id },
+      select: {
+        weight: true,
+        weightSource: true,
+        weightConfidence: true,
+        partClassKey: true,
+        dimensions: true,
+        enrichmentStatus: true,
+      },
+    });
+    if (!part) {
+      throw new NotFoundException(`Part ${id} not found`);
+    }
+
+    const summary = buildPartShippingSummary(part);
+    const quote = this.shippingService.quoteSellerShipping(
+      [
+        {
+          quantity: 1,
+          weightKg: summary.weightKg,
+          dimensionsCm: summary.dimensionsCm,
+          weightSource: summary.source,
+          partClassKey: summary.partClassKey,
+        },
+      ],
+      destination,
+    );
+
+    const result = { partId: id, weightState: summary.state, ...quote };
+    this.cacheSet(cacheK, result, 45);
+    return result;
   }
 
   /**

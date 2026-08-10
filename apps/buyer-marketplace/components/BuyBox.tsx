@@ -23,11 +23,13 @@ import { useCurrency } from "@/lib/currency-context";
 import { fitmentForConfig, FITMENT_COPY } from "@/lib/fitment";
 import { pushRecentlyViewed } from "@/lib/recent";
 import { humanize, lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
+import { resolveShippingCountry, setShippingCountry } from "@/lib/shipping-destination";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge, shouldSuppressCondition } from "./ConditionBadge";
 import { SourcePill } from "./SourcePill";
 import { WatchlistButton } from "./WatchlistButton";
 import { ShippingSummaryRow } from "./ShippingSummaryRow";
+import { PaymentBadgeRow } from "./PaymentBadgeRow";
 import type { Part, Offer } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -321,7 +323,7 @@ function OfferRow({
 export function BuyBox({ part }: { part: Part }) {
   const offers = useMemo(() => buyerVisibleOffers(part.offers), [part.offers]);
   const best = offers[0];
-  const { format } = useCurrency();
+  const { format, detectedCountry, ready: currencyReady } = useCurrency();
   const partType = part.partType || best?.partType || (part.partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
   const identityLabel = partType === "AFTERMARKET" ? "Aftermarket brand" : partType === "SALVAGE_OEM" ? "Original make" : "Genuine vehicle make";
 
@@ -335,6 +337,22 @@ export function BuyBox({ part }: { part: Part }) {
       currency: offerCurrency(part.offers),
     });
   }, [part]);
+
+  // Destination drives both the shipping quote line and the payment badges,
+  // so it's resolved once here rather than duplicated in each child.
+  const [destination, setDestination] = useState("");
+  const [destinationReady, setDestinationReady] = useState(false);
+
+  useEffect(() => {
+    if (!currencyReady) return;
+    setDestination(resolveShippingCountry(detectedCountry));
+    setDestinationReady(true);
+  }, [currencyReady, detectedCountry]);
+
+  useEffect(() => {
+    if (!destinationReady) return;
+    setShippingCountry(destination);
+  }, [destination, destinationReady]);
 
   return (
     <div className="space-y-4">
@@ -414,9 +432,16 @@ export function BuyBox({ part }: { part: Part }) {
         </div>
       )}
 
+      <PaymentBadgeRow destinationCountry={destination} />
+
       {/* Trust rows */}
       <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-[13px] text-slate-600">
-        <ShippingSummaryRow part={part} shipping={part.shipping} />
+        <ShippingSummaryRow
+          part={part}
+          shipping={part.shipping}
+          destination={destination}
+          onDestinationChange={setDestination}
+        />
         <li className="flex items-start gap-2.5">
           <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
           Fitment evidence and condition are disclosed on every listing — what you see is what

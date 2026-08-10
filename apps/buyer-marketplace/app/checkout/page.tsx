@@ -47,6 +47,7 @@ import {
   SHIPPING_COUNTRIES,
 } from "@/lib/shipping-destination";
 import { useShippingQuote, type ShippingQuote } from "@/lib/use-shipping-quote";
+import { tamaraMarket } from "@/lib/tamara";
 
 type FormState = {
   name: string;
@@ -116,22 +117,6 @@ function toCheckoutDraft(
   paymentProvider: "stripe" | "tamara",
 ): CheckoutDraft {
   return { ...form, paymentProvider };
-}
-
-function tamaraMarket(
-  country: string,
-): { countryCode: "AE" | "SA"; currency: "AED" | "SAR" } | null {
-  const normalized = country
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
-  if (["ae", "uae", "unitedarabemirates"].includes(normalized)) {
-    return { countryCode: "AE", currency: "AED" };
-  }
-  if (["sa", "ksa", "saudiarabia"].includes(normalized)) {
-    return { countryCode: "SA", currency: "SAR" };
-  }
-  return null;
 }
 
 function Steps({ current }: { current: 1 | 2 }) {

@@ -10,9 +10,10 @@ import { SearchIndexerService } from './index/search-indexer.service';
 import { SearchOutboxService } from './index/search-outbox.service';
 import { SearchOutboxRunner } from './index/search-outbox.runner';
 import { EnrichmentModule } from '../enrichment/enrichment.module';
+import { CheckoutModule } from '../checkout/checkout.module';
 
 @Module({
-  imports: [EnrichmentModule],
+  imports: [EnrichmentModule, CheckoutModule],
   providers: [
     OpenSearchService,
     FebestWebsiteService,

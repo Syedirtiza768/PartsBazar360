@@ -20,6 +20,6 @@ import { CheckoutIdentityService } from './checkout-identity.service';
     TamaraService,
   ],
   controllers: [CheckoutController],
-  exports: [StripeService, TamaraService],
+  exports: [ShippingService, StripeService, TamaraService],
 })
 export class CheckoutModule {}
