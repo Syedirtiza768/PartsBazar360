@@ -25,37 +25,40 @@ import {
 import { PrismaService } from '../../prisma.service';
 
 /**
- * The condition a part must meet to be a *candidate* for indexing, expressed
- * as SQL so a million-row catalog never has to be loaded into Node to be
- * counted. It is deliberately a subset of the full engine rule
- * (`decidePartIndexability`): SQL can cheaply check "live, priced, in stock,
- * has an image", and the engine applies the content-quality checks on top.
+ * The one definition of "this part may appear in a sitemap", as a composable
+ * SQL fragment.
  *
- * The consequence is that this predicate over-selects slightly — a part it
- * accepts may still end up noindex. Sitemap generation re-checks each part
- * through the engine before emitting it, so the sitemap never advertises a
- * noindex URL; the SQL predicate only has to be a cheap, safe superset.
+ * It is raw SQL rather than a Prisma `where` for a specific reason. The
+ * exclusions are JSON-column conditions, and Prisma renders
+ * `NOT { seo: { path: ['robots'], equals: 'noindex' } }` as
+ * `NOT (seo->>'robots' = 'noindex')`. For the overwhelming majority of rows
+ * `seo` is NULL, so that comparison is *unknown*, `NOT(unknown)` is unknown,
+ * and the row is silently dropped — which emptied every sitemap while the
+ * equivalent hand-written SQL counted 42,180. `IS DISTINCT FROM` is
+ * null-safe and says what was meant.
+ *
+ * Keeping it in one fragment also removes the failure mode that caused it:
+ * the count, the keyset page, and the chunk boundaries previously had two
+ * separate definitions that could disagree, so chunk sizes could drift from
+ * the emitted set.
  */
-const INDEXABLE_PART_WHERE: Prisma.CanonicalPartWhereInput = {
-  slug: { not: null },
-  imageUrls: { isEmpty: false },
-  // An admin `noindex` override, and a catalog-hidden part (the
-  // payment-verification item), must never reach a sitemap — a sitemap that
-  // lists a noindex URL asks Google to crawl something the page then tells it
-  // to drop. Expressed here rather than filtered afterwards so the count and
-  // the chunk boundaries agree with what is actually emitted.
-  NOT: [
-    { seo: { path: ['robots'], equals: 'noindex' } },
-    { itemSpecifics: { path: ['_hiddenFromCatalog'], equals: true } },
-  ],
-  offers: {
-    some: {
-      status: 'ACTIVE',
-      price: { gt: 0 },
-      seller: { onboardingStatus: 'ACTIVE' },
-    },
-  },
-};
+const INDEXABLE_PART_SQL = Prisma.sql`
+  cp."slug" IS NOT NULL
+  AND array_length(cp."imageUrls", 1) > 0
+  -- Null-safe: an absent override, or an override without a robots key,
+  -- must not exclude the part.
+  AND (cp."seo" IS NULL OR cp."seo"->>'robots' IS DISTINCT FROM 'noindex')
+  AND (cp."itemSpecifics" IS NULL
+       OR cp."itemSpecifics"->>'_hiddenFromCatalog' IS DISTINCT FROM 'true')
+  AND EXISTS (
+    SELECT 1 FROM "SellerOffer" so
+    JOIN "Seller" s ON s."id" = so."sellerId"
+    WHERE so."canonicalPartId" = cp."id"
+      AND so."status" = 'ACTIVE'
+      AND so."price" > 0
+      AND s."onboardingStatus" = 'ACTIVE'
+  )
+`;
 
 export interface SitemapPartEntry {
   id: string;
@@ -108,9 +111,12 @@ export class SeoCatalogService {
 
   /** Total number of sitemap-candidate parts. */
   async countIndexableParts(): Promise<number> {
-    return this.cached('count:parts', () =>
-      this.prisma.canonicalPart.count({ where: INDEXABLE_PART_WHERE }),
-    );
+    return this.cached('count:parts', async () => {
+      const rows = await this.prisma.$queryRaw<Array<{ count: bigint }>>(
+        Prisma.sql`SELECT count(*) AS count FROM "CanonicalPart" cp WHERE ${INDEXABLE_PART_SQL}`,
+      );
+      return Number(rows[0]?.count ?? 0);
+    });
   }
 
   /**
@@ -127,22 +133,21 @@ export class SeoCatalogService {
   }): Promise<SitemapPartEntry[]> {
     const { limit, cursorUpdatedAt, cursorId } = options;
 
-    const rows = await this.prisma.canonicalPart.findMany({
-      where: {
-        ...INDEXABLE_PART_WHERE,
-        ...(cursorUpdatedAt && cursorId
-          ? {
-              OR: [
-                { updatedAt: { gt: cursorUpdatedAt } },
-                { updatedAt: cursorUpdatedAt, id: { gt: cursorId } },
-              ],
-            }
-          : {}),
-      },
-      select: { id: true, slug: true, updatedAt: true },
-      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
-      take: limit,
-    });
+    const cursor =
+      cursorUpdatedAt && cursorId
+        ? Prisma.sql`AND (cp."updatedAt", cp."id") > (${cursorUpdatedAt}, ${cursorId})`
+        : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ id: string; slug: string | null; updatedAt: Date }>
+    >(Prisma.sql`
+      SELECT cp."id", cp."slug", cp."updatedAt"
+      FROM "CanonicalPart" cp
+      WHERE ${INDEXABLE_PART_SQL}
+      ${cursor}
+      ORDER BY cp."updatedAt", cp."id"
+      LIMIT ${limit}
+    `);
 
     return rows
       .filter((row): row is typeof row & { slug: string } => Boolean(row.slug))
@@ -165,29 +170,18 @@ export class SeoCatalogService {
       const size = seoConfig().limits.sitemapPageSize;
       const rows = await this.prisma.$queryRaw<
         Array<{ updatedAt: Date; id: string }>
-      >`
+      >(Prisma.sql`
         SELECT "updatedAt", "id"
         FROM (
           SELECT cp."updatedAt",
                  cp."id",
                  ROW_NUMBER() OVER (ORDER BY cp."updatedAt", cp."id") AS rn
           FROM "CanonicalPart" cp
-          WHERE cp."slug" IS NOT NULL
-            AND array_length(cp."imageUrls", 1) > 0
-            AND (cp."seo" IS NULL OR cp."seo"->>'robots' IS DISTINCT FROM 'noindex')
-            AND (cp."itemSpecifics" IS NULL OR cp."itemSpecifics"->>'_hiddenFromCatalog' IS DISTINCT FROM 'true')
-            AND EXISTS (
-              SELECT 1 FROM "SellerOffer" so
-              JOIN "Seller" s ON s."id" = so."sellerId"
-              WHERE so."canonicalPartId" = cp."id"
-                AND so."status" = 'ACTIVE'
-                AND so."price" > 0
-                AND s."onboardingStatus" = 'ACTIVE'
-            )
+          WHERE ${INDEXABLE_PART_SQL}
         ) ranked
         WHERE ranked.rn % ${size}::bigint = 0
         ORDER BY ranked.rn
-      `;
+      `);
       return rows;
     });
   }
@@ -239,40 +233,36 @@ export class SeoCatalogService {
    */
   async listFlatTaxonomy(): Promise<TaxonomyNodeSummary[]> {
     return this.cached('taxonomy:flat', async () => {
+      // Raw SQL, same fragment as the sitemap, for the same reason: a Prisma
+      // `groupBy` here would carry the null-unsafe JSON predicate and count
+      // zero rows for every dimension.
+      const aggregate = (column: 'category' | 'categoryGroup' | 'brand') =>
+        this.prisma.$queryRaw<
+          Array<{ name: string | null; product_count: bigint; updated_at: Date | null }>
+        >(Prisma.sql`
+          SELECT cp.${Prisma.raw(`"${column}"`)} AS name,
+                 count(*)              AS product_count,
+                 max(cp."updatedAt")   AS updated_at
+          FROM "CanonicalPart" cp
+          WHERE ${INDEXABLE_PART_SQL}
+            AND cp.${Prisma.raw(`"${column}"`)} IS NOT NULL
+          GROUP BY cp.${Prisma.raw(`"${column}"`)}
+        `);
+
       const [categories, groups, brands] = await Promise.all([
-        this.prisma.canonicalPart.groupBy({
-          by: ['category'],
-          where: { ...INDEXABLE_PART_WHERE, category: { not: null } },
-          _count: { _all: true },
-          _max: { updatedAt: true },
-        }),
-        this.prisma.canonicalPart.groupBy({
-          by: ['categoryGroup'],
-          where: { ...INDEXABLE_PART_WHERE, categoryGroup: { not: null } },
-          _count: { _all: true },
-          _max: { updatedAt: true },
-        }),
-        this.prisma.canonicalPart.groupBy({
-          by: ['brand'],
-          where: { ...INDEXABLE_PART_WHERE, brand: { not: null } },
-          _count: { _all: true },
-          _max: { updatedAt: true },
-        }),
+        aggregate('category'),
+        aggregate('categoryGroup'),
+        aggregate('brand'),
       ]);
 
       const build = (
         kind: SeoTaxonomyKind,
-        rows: Array<{
-          _count: { _all: number };
-          _max: { updatedAt: Date | null };
-          [key: string]: unknown;
-        }>,
-        field: string,
+        rows: Array<{ name: string | null; product_count: bigint; updated_at: Date | null }>,
       ): TaxonomyNodeSummary[] =>
         rows
           .map((row) => {
-            const name = String(row[field] ?? '').trim();
-            const productCount = row._count._all;
+            const name = String(row.name ?? '').trim();
+            const productCount = Number(row.product_count);
             const node: SeoTaxonomyInput = { kind, name, productCount };
             return {
               kind,
@@ -280,16 +270,16 @@ export class SeoCatalogService {
               slug: taxonomySlug(name),
               productCount,
               indexable: decideTaxonomyIndexability(node).robots.index,
-              ...(row._max.updatedAt ? { updatedAt: row._max.updatedAt } : {}),
+              ...(row.updated_at ? { updatedAt: row.updated_at } : {}),
             };
           })
           .filter((node) => node.name && node.slug)
           .sort((a, b) => b.productCount - a.productCount);
 
       return [
-        ...build('category', categories, 'category'),
-        ...build('categoryGroup', groups, 'categoryGroup'),
-        ...build('brand', brands, 'brand'),
+        ...build('category', categories),
+        ...build('categoryGroup', groups),
+        ...build('brand', brands),
       ];
     });
   }
