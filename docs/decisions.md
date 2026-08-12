@@ -2,6 +2,25 @@
 
 **Last reviewed:** 2026-08-12
 
+## 2026-08-12 — A part-source label in `brand` is not a brand
+
+**Decision:** `isMeaningfulBrand()` rejects values like "Genuine OEM",
+"ORIGINAL", "Unbranded", and "N/A" everywhere a brand becomes user- or
+URL-visible. See [[SEO_ARCHITECTURE]].
+
+**Why:** Found on production during the SEO deploy: `CanonicalPart.brand` holds
+a part-source label on ~7% of the catalog (14,860 "Genuine OEM" + 5,042
+"ORIGINAL"). The slug generator trusted the column and produced
+`genuine-oem-2019-2023-bmw-x6-front-bumper-51118069942`, and the taxonomy layer
+would have published an indexed `/brands/genuine-oem` page. Caught after 7
+slugs had been auto-assigned and before the 274k-row backfill — slugs are
+frozen once assigned, so these would have been permanent URLs.
+
+**Revisit when:** a new supplier feed lands. Check with
+`select brand, count(*) from "CanonicalPart" group by brand order by 2 desc`
+and extend `NON_BRAND_LABELS` in `packages/catalog-contracts/src/seo/text.ts`.
+The real fix is upstream — brand and part-source should not share a column.
+
 ## 2026-08-12 — SEO lives in the domain, and hangs off the search indexer
 
 **Decision:** The whole programmatic SEO system (slugs, URLs, metadata, JSON-LD,

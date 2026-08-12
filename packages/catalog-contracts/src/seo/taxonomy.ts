@@ -13,7 +13,7 @@
  * internal links), so the two can never disagree about where a part lives.
  */
 
-import { titleCase, text, uniqueStrings } from './text';
+import { meaningfulBrand, titleCase, text, uniqueStrings } from './text';
 import type { SeoPartInput, SeoTaxonomyInput, SeoTaxonomyKind } from './types';
 
 export interface TaxonomyNodeRef {
@@ -48,7 +48,10 @@ export function partTaxonomy(part: SeoPartInput): TaxonomyNodeRef[] {
     });
   }
 
-  const brand = text(part.brand) || text(part.manufacturer);
+  // A part-source label in the brand column must never become a brand page:
+  // "Genuine OEM" alone would clear the inventory threshold many times over
+  // and produce an indexed landing page that means nothing.
+  const brand = meaningfulBrand(part.brand) || meaningfulBrand(part.manufacturer);
   if (brand) nodes.push({ kind: 'brand', name: brand });
 
   const vehicles = part.compatibleVehicles || [];

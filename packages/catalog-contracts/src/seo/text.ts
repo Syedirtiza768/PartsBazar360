@@ -226,6 +226,45 @@ export function dedupeWords(value: unknown): string {
   return out.join(' ');
 }
 
+/**
+ * Values that occupy the `brand` column but are not brands.
+ *
+ * This catalog uses `brand` for a part-source label on a meaningful slice of
+ * inventory — "Genuine OEM" on ~14 900 listings and "ORIGINAL" on ~5 000.
+ * Trusting those blindly produces `/parts/genuine-oem-bmw-x6-front-bumper-…`
+ * slugs and, worse, mints an indexable `/brands/genuine-oem` landing page that
+ * would comfortably clear the inventory threshold while meaning nothing.
+ *
+ * The condition/source information is not lost — it is already carried
+ * properly by `partSource`, `qualityTier`, and the condition badge.
+ */
+const NON_BRAND_LABELS = new Set([
+  'genuineoem', 'genuine', 'oem', 'oe', 'oempart', 'oemgenuine', 'genuinepart',
+  'original', 'originalpart', 'originalequipment', 'aftermarket',
+  'unbranded', 'nobrand', 'noname', 'generic', 'universal', 'standard',
+  'replacement', 'quality', 'unknown', 'none', 'na', 'n', 'various', 'misc',
+  'other', 'assorted', 'default', 'null', 'undefined',
+]);
+
+/**
+ * True when a `brand` value names an actual manufacturer rather than a
+ * condition or provenance label. Used everywhere a brand would become
+ * user-visible or URL-visible: slugs, titles, breadcrumbs, `Brand` JSON-LD,
+ * and brand taxonomy pages.
+ */
+export function isMeaningfulBrand(value: unknown): boolean {
+  const normalized = text(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!normalized) return false;
+  // A single character is never a brand a buyer would search for.
+  if (normalized.length < 2) return false;
+  return !NON_BRAND_LABELS.has(normalized);
+}
+
+/** The brand if it names a manufacturer, otherwise an empty string. */
+export function meaningfulBrand(value: unknown): string {
+  return isMeaningfulBrand(value) ? text(value) : '';
+}
+
 /** Sentence-ends a description so meta text does not read as a fragment. */
 export function endSentence(value: unknown): string {
   const normalized = text(value);

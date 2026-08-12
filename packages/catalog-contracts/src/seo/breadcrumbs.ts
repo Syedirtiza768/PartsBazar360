@@ -15,7 +15,7 @@
 import { seoConfig } from './config';
 import { partNameCore, taxonomyLabel } from './metadata';
 import { dominantVehicle } from './slug';
-import { clip, text, titleCase } from './text';
+import { clip, meaningfulBrand, text, titleCase } from './text';
 import {
   absoluteUrl,
   brandPath,
@@ -54,7 +54,7 @@ export function partBreadcrumbs(part: SeoPartInput): SeoBreadcrumb[] {
   if (category) trail.push(crumb(titleCase(category), categoryPath(category)));
 
   const { make, model } = dominantVehicle(part);
-  const brand = text(part.brand) || text(part.manufacturer);
+  const brand = meaningfulBrand(part.brand) || meaningfulBrand(part.manufacturer);
 
   // Prefer the vehicle when the part fits exactly one — it is the stronger
   // navigational context for a buyer who arrived on a fitment query.

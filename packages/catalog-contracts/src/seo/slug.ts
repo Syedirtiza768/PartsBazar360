@@ -19,6 +19,7 @@
 import { seoConfig } from './config';
 import {
   clipHard,
+  meaningfulBrand,
   normalizeIdentifier,
   removeRedundant,
   text,
@@ -210,14 +211,17 @@ export function dominantVehicle(part: SeoPartInput): {
  * produces a usable slug, which is the whole point of the fallback chain.
  */
 export function partSlugParts(part: SeoPartInput): PartSlugParts {
-  const brand = text(part.brand) || text(part.manufacturer);
+  // `rawBrand` still drives redundancy-stripping from the title (removing a
+  // "Genuine OEM" prefix there is desirable); only `brand` reaches the URL.
+  const rawBrand = text(part.brand) || text(part.manufacturer);
+  const brand = meaningfulBrand(rawBrand);
   const { make, model } = dominantVehicle(part);
   const number = primaryPartNumber(part);
 
   // Strip the brand, vehicle, and number out of the title before slugifying
   // it, so the same words are not spent twice in one URL.
   let name = text(part.title);
-  for (const redundant of [brand, make, model]) {
+  for (const redundant of [rawBrand, make, model]) {
     if (redundant) name = removeRedundant(name, redundant);
   }
   if (number) {

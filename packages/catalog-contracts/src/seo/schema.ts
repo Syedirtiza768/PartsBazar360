@@ -18,6 +18,7 @@ import { availabilityFor, purchasableOffers } from './indexability';
 import { primaryPartNumber } from './slug';
 import {
   humanizeToken,
+  meaningfulBrand,
   normalizeIdentifier,
   text,
   titleCase,
@@ -241,7 +242,8 @@ export function productJsonLd(
 ): Record<string, unknown> {
   const { canonical, name, description, images } = options;
   const mpn = primaryPartNumber(part);
-  const brand = text(part.brand) || text(part.manufacturer);
+  // Emitting `Brand: "Genuine OEM"` would be factually wrong markup.
+  const brand = meaningfulBrand(part.brand) || meaningfulBrand(part.manufacturer);
 
   // OE numbers other than the MPN are genuine alternate identifiers.
   const alternateNumbers = uniqueStrings(part.oeNumbers || []).filter(

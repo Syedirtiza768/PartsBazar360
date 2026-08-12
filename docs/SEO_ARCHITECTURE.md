@@ -117,6 +117,25 @@ brand → vehicle (only if the part fits exactly one) → part name → part num
    FNV-1a hash of the part id, not a counter — so concurrent importers compute
    the same slug and re-running the backfill is idempotent.
 
+### Non-brands in the `brand` column
+
+Roughly 7% of the catalog puts a *part-source label* in `CanonicalPart.brand`
+rather than a manufacturer — "Genuine OEM" on ~14,860 listings and "ORIGINAL"
+on ~5,042. Taken at face value that produced slugs like
+`genuine-oem-2019-2023-bmw-x6-front-bumper-51118069942`, and would have minted
+an indexable `/brands/genuine-oem` landing page clearing the inventory
+threshold many times over while meaning nothing to a buyer.
+
+`isMeaningfulBrand()` / `meaningfulBrand()` in `text.ts` gate every place a
+brand becomes user- or URL-visible: slugs, titles, H1s, breadcrumbs, `Brand`
+JSON-LD, brand taxonomy nodes, internal links, and the PDP spec table. The raw
+value is still used to strip the label out of listing *titles*, which is
+desirable. No condition information is lost — that lives in `partSource`,
+`qualityTier`, and the condition badge.
+
+Extend `NON_BRAND_LABELS` if new supplier feeds introduce further labels; a
+quick `select brand, count(*) ... group by brand order by 2 desc` is the check.
+
 ### Changing a slug
 
 `regenerateSlug` is the only supported way. It writes the outgoing slug to

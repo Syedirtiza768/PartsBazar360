@@ -24,6 +24,7 @@ import {
   joinParts,
   normalizeIdentifier,
   removeRedundant,
+  meaningfulBrand,
   stripHtml,
   stripListingNoise,
   text,
@@ -48,6 +49,8 @@ export function withSiteName(core: string): string {
  * templates can re-add them in a controlled order without stuttering.
  */
 export function partNameCore(part: SeoPartInput): string {
+  // Raw brand here on purpose: stripping a literal "Genuine OEM" prefix out
+  // of the title is exactly what we want, even though it is not a brand.
   const brand = text(part.brand) || text(part.manufacturer);
   const { make, model } = dominantVehicle(part);
   const number = primaryPartNumber(part);
@@ -85,7 +88,7 @@ export function vehicleLabel(part: SeoPartInput): string {
  * every OEM listing reads "Toyota Toyota Corolla".
  */
 export function subjectPrefix(part: SeoPartInput): string {
-  const brand = titleCase(text(part.brand) || text(part.manufacturer));
+  const brand = titleCase(meaningfulBrand(part.brand) || meaningfulBrand(part.manufacturer));
   const vehicle = vehicleLabel(part);
   if (!vehicle) return brand;
   if (!brand) return vehicle;
@@ -126,7 +129,7 @@ export function partTitle(part: SeoPartInput): string {
 
   // Too tight. Shed the least valuable element first — the vehicle model,
   // then the vehicle entirely — before ever dropping the name or the number.
-  const brandOnly = titleCase(text(part.brand) || text(part.manufacturer));
+  const brandOnly = titleCase(meaningfulBrand(part.brand) || meaningfulBrand(part.manufacturer));
   const fallbacks = [
     joinParts([brandOnly, name, number]),
     joinParts([name, number]),

@@ -18,6 +18,7 @@ import {
   decideTaxonomyIndexability,
   findDuplicates,
   imageAlt,
+  isMeaningfulBrand,
   partH1,
   partImages,
   partTitle,
@@ -722,5 +723,68 @@ describe('social card image', () => {
     expect(doc.openGraph.images[0]!.url).toBe(
       'https://partsbazar360.com/buyer/og.png',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Catalog reality: `brand` sometimes holds a part-source label, not a brand.
+// ~14 900 listings say "Genuine OEM" and ~5 000 say "ORIGINAL".
+// ---------------------------------------------------------------------------
+describe('non-brand values in the brand column', () => {
+  const genuineOem = () =>
+    makePart({
+      slug: null,
+      brand: 'Genuine OEM',
+      manufacturer: null,
+      title: '2019-2023 BMW X6 Front Bumper 51118069942',
+      manufacturerPartNumber: '51118069942',
+      genuineOemPartNumber: null,
+      oeNumbers: ['51118069942'],
+      category: 'Body',
+      categoryGroup: null,
+      compatibleVehicles: [{ make: 'BMW', model: 'X6', startYear: 2019, endYear: 2023 }],
+    });
+
+  it('keeps the label out of the slug', () => {
+    const slug = buildPartSlugBase(genuineOem());
+    expect(slug).not.toContain('genuine');
+    expect(slug).not.toContain('oem');
+    expect(slug).toContain('bmw');
+    expect(slug).toContain('51118069942');
+  });
+
+  it('keeps the label out of the title and H1', () => {
+    const part = genuineOem();
+    expect(partTitle(part)).not.toMatch(/genuine/i);
+    expect(partH1(part)).not.toMatch(/genuine oem/i);
+  });
+
+  it('never emits it as a schema.org Brand', () => {
+    const part = { ...genuineOem(), slug: 'bmw-x6-front-bumper-51118069942' };
+    const graph = buildPartSeoDocument(part).structuredData['@graph'] as Array<
+      Record<string, any>
+    >;
+    const product = graph.find((node) => node['@type'] === 'Product')!;
+    expect(product.brand).toBeUndefined();
+  });
+
+  it('never files it under a brand taxonomy page', () => {
+    // A /brands/genuine-oem page would clear the inventory threshold many
+    // times over while meaning nothing to a buyer.
+    expect(partTaxonomy(genuineOem()).some((node) => node.kind === 'brand')).toBe(false);
+    expect(
+      buildPartSeoDocument({ ...genuineOem(), slug: 'x' }).internalLinks.some(
+        (link) => link.relation === 'brand',
+      ),
+    ).toBe(false);
+  });
+
+  it('still recognises real brands', () => {
+    for (const brand of ['Bosch', 'FEBEST', 'BMW', 'Mercedes-Benz', 'FEBI', 'MAXPART']) {
+      expect(isMeaningfulBrand(brand)).toBe(true);
+    }
+    for (const label of ['Genuine OEM', 'ORIGINAL', 'OEM', 'Unbranded', 'N/A', 'generic', '']) {
+      expect(isMeaningfulBrand(label)).toBe(false);
+    }
   });
 });

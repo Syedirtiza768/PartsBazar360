@@ -12,7 +12,12 @@
  * property Google requires.
  */
 
-import { partTypeFromLegacy, titleCase } from "@repo/catalog-contracts";
+import {
+  isMeaningfulBrand,
+  meaningfulBrand,
+  partTypeFromLegacy,
+  titleCase,
+} from "@repo/catalog-contracts";
 import { humanize } from "@/lib/format";
 import { brandPath, categoryPath } from "@repo/catalog-contracts";
 import type { Part } from "@/lib/types";
@@ -70,9 +75,12 @@ export function productSpecifications(part: Part): ProductSpecification[] {
       value: specifics.inferredProductType || specifics.productType,
     },
     {
+      // A part-source label sitting in the brand column ("Genuine OEM",
+      // "ORIGINAL") is shown as Part source elsewhere, and must never link to
+      // a brand landing page that does not legitimately exist.
       label: "Brand",
-      value: part.brand,
-      ...(part.brand ? { href: brandPath(part.brand) } : {}),
+      value: meaningfulBrand(part.brand),
+      ...(isMeaningfulBrand(part.brand) ? { href: brandPath(part.brand) } : {}),
     },
     {
       label: "Manufacturer",
