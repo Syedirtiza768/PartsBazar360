@@ -67,11 +67,12 @@ export class SeoController {
   /** Total indexable parts and how many sitemap chunks that needs. */
   @Get('sitemap/summary')
   async sitemapSummary() {
-    const [total, chunks, taxonomy] = await Promise.all([
-      this.catalog.countIndexableParts(),
-      this.catalog.partSitemapChunkCount(),
-      this.catalog.listTaxonomy(),
-    ]);
+    // Sequential: these are the three heaviest queries in the service and
+    // firing them together exhausts the connection pool. They are all cached
+    // (stale-while-revalidate), so the cost is paid once, off the request path.
+    const total = await this.catalog.countIndexableParts();
+    const chunks = await this.catalog.partSitemapChunkCount();
+    const taxonomy = await this.catalog.listTaxonomy();
     const indexableTaxonomy = taxonomy.filter((node) => node.indexable);
     return {
       parts: { total, chunks, pageSize: seoConfig().limits.sitemapPageSize },

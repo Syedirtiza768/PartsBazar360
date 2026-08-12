@@ -13,7 +13,7 @@
  * that is expensive and identical for every caller.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   decideTaxonomyIndexability,
@@ -83,9 +83,11 @@ interface CacheEntry<T> {
 }
 
 @Injectable()
-export class SeoCatalogService {
+export class SeoCatalogService implements OnModuleInit {
   private readonly logger = new Logger(SeoCatalogService.name);
   private readonly cache = new Map<string, CacheEntry<unknown>>();
+  /** Keys currently being refreshed, so a burst triggers one refresh, not N. */
+  private readonly refreshing = new Set<string>();
 
   /**
    * Taxonomy aggregates change on the timescale of an import, not a request.
@@ -96,9 +98,56 @@ export class SeoCatalogService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Warm the caches in the background at boot.
+   *
+   * These aggregates scan the whole catalog and take tens of seconds under
+   * write load, which is longer than the connection-pool acquire timeout. If
+   * the first request after a deploy had to compute them, it would 500 — and
+   * the request that 500s is usually a crawler fetching the sitemap. Priming
+   * off the request path means a crawler only ever sees a cached value.
+   */
+  onModuleInit(): void {
+    if (process.env.SEO_CACHE_PRIME === '0') return;
+    setTimeout(() => {
+      void this.countIndexableParts().catch(() => undefined);
+      void this.listTaxonomy().catch(() => undefined);
+    }, 15_000).unref?.();
+  }
+
+  /**
+   * Stale-while-revalidate.
+   *
+   * A stale value is served immediately and refreshed in the background,
+   * because the alternative — blocking a request on a 20s+ full-catalog
+   * aggregate every time the TTL lapses — exhausts the connection pool and
+   * turns every sitemap fetch after an expiry into a 500. Sitemap counts and
+   * taxonomy totals are perfectly tolerant of being a few minutes old; being
+   * unavailable is not.
+   *
+   * Only the very first call (cold cache) waits.
+   */
   private async cached<T>(key: string, load: () => Promise<T>): Promise<T> {
     const hit = this.cache.get(key);
-    if (hit && hit.expiresAt > Date.now()) return hit.value as T;
+
+    if (hit) {
+      if (hit.expiresAt <= Date.now() && !this.refreshing.has(key)) {
+        this.refreshing.add(key);
+        void load()
+          .then((value) => {
+            this.cache.set(key, { value, expiresAt: Date.now() + this.cacheTtlMs });
+          })
+          .catch((error) => {
+            // Keep serving the stale value; a failed refresh must not evict it.
+            this.logger.warn(
+              `SEO cache refresh failed for ${key}: ${(error as Error).message}`,
+            );
+          })
+          .finally(() => this.refreshing.delete(key));
+      }
+      return hit.value as T;
+    }
+
     const value = await load();
     this.cache.set(key, { value, expiresAt: Date.now() + this.cacheTtlMs });
     return value;
@@ -249,11 +298,13 @@ export class SeoCatalogService {
           GROUP BY cp.${Prisma.raw(`"${column}"`)}
         `);
 
-      const [categories, groups, brands] = await Promise.all([
-        aggregate('category'),
-        aggregate('categoryGroup'),
-        aggregate('brand'),
-      ]);
+      // Sequential, not Promise.all: each of these scans the catalog, and
+      // firing three at once against a 10-connection pool (shared with live
+      // traffic and any running backfill) is what produced
+      // "timeout exceeded when trying to connect".
+      const categories = await aggregate('category');
+      const groups = await aggregate('categoryGroup');
+      const brands = await aggregate('brand');
 
       const build = (
         kind: SeoTaxonomyKind,
@@ -359,15 +410,14 @@ export class SeoCatalogService {
 
   /** Every taxonomy node, flat + vehicle. */
   async listTaxonomy(): Promise<TaxonomyNodeSummary[]> {
-    const [flat, vehicles] = await Promise.all([
-      this.listFlatTaxonomy(),
+    const flat = await this.listFlatTaxonomy();
+    const vehicles = await (async () =>
       this.listVehicleTaxonomy().catch((error) => {
         // A fitment-graph failure must not take the whole sitemap down —
         // category and brand pages are still perfectly serviceable.
         this.logger.error(`Vehicle taxonomy query failed: ${(error as Error).message}`);
         return [] as TaxonomyNodeSummary[];
-      }),
-    ]);
+      }))();
     return [...flat, ...vehicles];
   }
 
