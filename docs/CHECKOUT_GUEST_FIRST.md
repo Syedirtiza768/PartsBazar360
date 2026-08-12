@@ -84,3 +84,49 @@ transactionally before retiring duplicates.
 
 `CheckoutEvent` accepts only an allowlist of funnel events and metadata keys.
 Phone, email, address, name, OTP, token, and provider secrets are prohibited.
+
+## Going live: sandbox → production payments
+
+Both rails read their credentials from `process.env` at request time inside the
+**api** and **worker** containers, so a cutover is an env change plus a
+container *recreate* — no image rebuild, no frontend deploy. Stripe is used via
+hosted Checkout Sessions, so there is no publishable key in the browser bundle
+to rebuild either.
+
+Run on the server and paste each value when prompted (nothing is echoed, and
+shell history is disabled for the session):
+
+```
+bash ~/set-payment-keys.sh
+```
+
+It backs up `.env`, rewrites only the payment keys, flips `TAMARA_API_URL` to
+`https://api.tamara.co`, recreates `api` + `worker` with `--no-deps` (so no
+other container and no standalone job is disturbed), and prints a rollback
+command.
+
+**The one that bites:** `STRIPE_WEBHOOK_SECRET` is *not* transferable from
+test mode. Create a webhook endpoint in Stripe's **live** dashboard pointing at
+`https://partsbazar360.com/api/checkout/webhooks/stripe` and use the
+`whsec_…` it issues. Reusing the sandbox secret makes every live webhook fail
+signature verification — payments succeed at the card network but orders are
+never marked paid, which looks like money vanishing.
+
+Tamara's production notification endpoint is
+`https://partsbazar360.com/api/checkout/webhooks/tamara`.
+
+### Verifying with real money
+
+`payment:test-product` creates a 1 AED purchasable item at
+`/buyer/parts/payment-verification-item/`. It is flagged
+`_hiddenFromCatalog`, so it never appears in browse, search, related products,
+or any sitemap, and is `noindex` — see [[SEO_ARCHITECTURE]] §11c. Buy it with a
+real card and a real Tamara plan to confirm the full round trip: session →
+redirect → webhook → order marked paid. Refund afterwards from the respective
+dashboard.
+
+Take the offer down without deleting the order history:
+
+```
+docker compose exec api node dist/src/payment-test-product.cli.js --deactivate
+```
