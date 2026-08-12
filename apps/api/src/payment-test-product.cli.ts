@@ -174,8 +174,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  // eslint-disable-next-line no-console
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // Nest's `app.close()` does not tear down the BullMQ/Redis connections
+    // this context opens, so the event loop stays alive and the CLI hangs
+    // after its work is done. Exit explicitly rather than leaving a container
+    // running indefinitely.
+    process.exit(0);
+  })
+  .catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error(error);
+    process.exit(1);
+  });

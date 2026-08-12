@@ -72,12 +72,23 @@ async function main(): Promise<void> {
   }
 
   const started = Date.now();
-  const result = await client.updateByQuery({
+
+  /**
+   * Submitted as an asynchronous OpenSearch task, not a blocking request.
+   *
+   * The client's default request timeout is 30s; a synchronous update over
+   * ~100k documents blows through that and the socket closes mid-run, leaving
+   * the index half-populated with no error surfaced. `wait_for_completion:
+   * false` hands the work to OpenSearch, which finishes it regardless of what
+   * this process does, and we poll the task instead.
+   */
+  const submitted = await client.updateByQuery({
     index,
     // Skip documents a concurrent indexer changed underneath us instead of
     // failing the whole run.
     conflicts: 'proceed',
     refresh: true,
+    wait_for_completion: false,
     body: {
       query: { bool: { must_not: [{ exists: { field: 'hasImage' } }] } },
       script: {
@@ -90,7 +101,30 @@ async function main(): Promise<void> {
     },
   });
 
-  const body = (result as any)?.body ?? result;
+  const taskId = String(
+    ((submitted as any)?.body ?? submitted)?.task ?? '',
+  );
+  if (!taskId) throw new Error('OpenSearch did not return a task id');
+  // eslint-disable-next-line no-console
+  console.log(`[has-image] running as task ${taskId}`);
+
+  let body: any = {};
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const task = await client.tasks.get({ task_id: taskId });
+    const payload = (task as any)?.body ?? task;
+    if (payload?.completed) {
+      body = payload?.response ?? {};
+      break;
+    }
+    const status = payload?.task?.status ?? {};
+    const done = Number(status.updated ?? 0) + Number(status.noops ?? 0);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[has-image] ${done.toLocaleString()} / ${Number(status.total ?? 0).toLocaleString()}`,
+    );
+  }
+
   // eslint-disable-next-line no-console
   console.log(
     `[has-image] updated ${Number(body.updated ?? 0).toLocaleString()} documents ` +

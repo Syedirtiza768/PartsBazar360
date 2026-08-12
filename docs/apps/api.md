@@ -167,3 +167,25 @@ and a *future* import path inherits that without knowing SEO exists. This is why
 
 Backfill for the existing catalog: `npm run seo:backfill` (run as a standalone
 container, not `docker exec`).
+
+### Operational CLIs
+
+| Script | Purpose |
+|---|---|
+| `seo:backfill` | Assign canonical slugs to parts that lack one; prints an SEO health report. |
+| `backfill:has-image` | Populate the indexed `hasImage` projection so browse can float imaged listings first. |
+| `payment:test-product` | Create/refresh the hidden 1 AED payment-verification item (`--deactivate` to take it down). |
+
+Two lessons these cost, both worth remembering for any future job of this shape:
+
+- **Bulk OpenSearch writes must be async tasks.** The client's default request
+  timeout is 30s. A synchronous `_update_by_query` over ~100k documents closes
+  the socket mid-run and reports *no error* — the first run left 6,037 of
+  107,543 documents populated and looked like it had succeeded. Submit with
+  `wait_for_completion: false` and poll the task.
+- **Nest CLIs must exit explicitly.** `app.close()` does not tear down the
+  BullMQ/Redis connections an application context opens, so the process hangs
+  after its work is done and a job container never exits.
+
+And, as elsewhere: run long jobs as a standalone `docker run` container, not
+`docker compose exec` — an exec session dies when the container is recreated.
