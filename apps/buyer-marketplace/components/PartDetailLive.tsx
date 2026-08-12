@@ -16,9 +16,11 @@ import type { Part } from "@/lib/types";
  */
 export function PartDetailLive({
   part,
+  imageAlt,
   children,
 }: {
   part: Part;
+  imageAlt?: string;
   children?: ReactNode;
 }) {
   const { shipping, images, refining } = useEnrichmentReconcile(part);
@@ -32,7 +34,7 @@ export function PartDetailLive({
       */}
       <div className="mt-5 grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0">
-          <ImageGallery images={images} title={part.title} />
+          <ImageGallery images={images} title={part.title} imageAlt={imageAlt} />
           {refining ? (
             <p className="mt-2 text-xs text-graphite-600" aria-live="polite">
               Refining shipping weight…

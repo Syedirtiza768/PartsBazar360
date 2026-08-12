@@ -43,7 +43,15 @@ function isSvgUrl(url: string): boolean {
  * Product gallery: main stage with tap-to-zoom lightbox, thumbnail strip,
  * and keyboard navigation (arrows in the lightbox, Escape to close).
  */
-export function ImageGallery({ images, title }: { images: string[]; title: string }) {
+export function ImageGallery({
+  images,
+  title,
+  imageAlt,
+}: {
+  images: string[];
+  title: string;
+  imageAlt?: string;
+}) {
   // Deduplicate by normalized URL ignoring eBay size variants and query-param
   // tracking duplicates (e.g. `?set_id=8800005007`). Also drop SVGs — seller
   // listing images should never be SVGs.
@@ -96,7 +104,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
     <div>
       {/* Main stage */}
       <div className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <PartImage src={active} alt={title} className="object-contain p-4" priority imageSize={1600} />
+        <PartImage src={active} alt={imageAlt || title} className="object-contain p-4" priority imageSize={1600} />
 
         {hasImages && (
           <>
@@ -148,7 +156,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
           {uniqueImages
             .filter((_, i) => i !== clamped)
             .slice(0, 15)
-            .map((img, i) => {
+            .map((img) => {
               // `i` is the filtered index; we need the original index for setIndex.
               const originalIndex = uniqueImages.indexOf(img);
               return (
@@ -206,7 +214,7 @@ export function ImageGallery({ images, title }: { images: string[]; title: strin
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={fullSizeUrl(active)}
-              alt={title}
+              alt={imageAlt || title}
               className="absolute inset-0 h-full w-full object-contain p-4 sm:p-10"
             />
             {uniqueImages.length > 1 && (

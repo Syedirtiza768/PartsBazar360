@@ -107,7 +107,13 @@ export default function OperationsCommandCenterPage() {
       setDashboard(await dashboardRes.json());
       const ordersData = await ordersRes.json();
       const ticketsData = await ticketsRes.json();
-      setOrders(Array.isArray(ordersData) ? ordersData : []);
+      setOrders(
+        Array.isArray(ordersData)
+          ? ordersData
+          : Array.isArray(ordersData.items)
+            ? ordersData.items
+            : [],
+      );
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load operations data.');
@@ -161,11 +167,15 @@ export default function OperationsCommandCenterPage() {
     trackingNumber: string,
     carrier?: string,
   ) => {
-    await apiFetch(token, `${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`, {
+    const res = await apiFetch(token, `${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'SHIPPED', trackingNumber, carrier }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Could not update delivery status.');
+    }
     await loadOperations();
   };
 

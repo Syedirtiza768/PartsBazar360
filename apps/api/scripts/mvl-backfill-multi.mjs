@@ -286,18 +286,16 @@ async function matchOeNumbers(pg, partId) {
 
 // ── Strategy 4: AI resolution ────────────────────────────────────────────────
 
+const AI_MODEL = process.env.AI_MODEL || 'openai/gpt-5.6-luna';
+
 async function aiResolve(title, brand, mpn, oeNumbers) {
   if (!OPENROUTER_KEY) return null;
 
-  const prompt = `Extract the vehicle Year, Make, and Model from this automotive part listing.
-Return ONLY a JSON array of objects with "year", "make", "model" keys.
-If you cannot determine the vehicle, return an empty array [].
-Do NOT guess — only return if you are confident.
+  const prompt = `What vehicle does this auto part fit?
+Reply with ONLY a JSON array. Each element: {"from":2006,"to":2013,"make":"BMW","model":"3 Series"}
+Use year ranges (from/to). One entry per distinct make+model. Max 5 entries. [] if unknown.
 
-Title: ${title}
-Brand: ${brand || 'unknown'}
-Part Number: ${mpn || 'unknown'}
-OE Numbers: ${(oeNumbers || []).join(', ') || 'none'}`;
+${title} | ${brand || ''} | ${mpn || ''}`;
 
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -307,33 +305,42 @@ OE Numbers: ${(oeNumbers || []).join(', ') || 'none'}`;
         'Authorization': `Bearer ${OPENROUTER_KEY}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-4.1-mini',
+        model: AI_MODEL,
         messages: [
-          { role: 'system', content: 'You are an automotive parts expert. Return only valid JSON.' },
+          { role: 'system', content: 'Reply ONLY with a JSON array. No text.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.1,
-        max_tokens: 200,
+        max_tokens: 16384,
+        reasoning: { effort: 'low' },
       }),
     });
 
     const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    let content = data.choices?.[0]?.message?.content || '';
+    if (!content) {
+      const reasoning = data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.message?.reasoning_details?.[0]?.summary || '';
+      const jsonFromReasoning = reasoning.match(/\[[\s\S]*?\]/);
+      if (jsonFromReasoning) content = jsonFromReasoning[0];
+    }
+    const jsonMatch = content.match(/\[[\s\S]*?\]/);
     if (!jsonMatch) return null;
 
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return null;
 
-    return parsed
-      .filter(r => r.year && r.make && r.model && Number.isFinite(Number(r.year)))
-      .map(r => ({
-        y0: Number(r.year),
-        y1: Number(r.year),
-        make: String(r.make),
-        model: String(r.model),
-        source: 'ai',
-      }));
+    const results = [];
+    for (const r of parsed) {
+      if (!r.make || !r.model) continue;
+      const y0 = Number(r.from) || Number(r.year) || Number(r.yearStart) || Number(r.startYear);
+      const y1 = Number(r.to) || Number(r.year) || Number(r.yearEnd) || Number(r.endYear) || y0;
+      if (!Number.isFinite(y0) || y0 < 1960 || y0 > 2030) continue;
+      const endYear = Number.isFinite(y1) && y1 >= y0 ? Math.min(y1, 2030) : y0;
+      for (let y = y0; y <= endYear; y++) {
+        results.push({ y0: y, y1: y, make: String(r.make), model: String(r.model), source: 'ai' });
+      }
+    }
+    return results.length > 0 ? results : null;
   } catch {
     return null;
   }

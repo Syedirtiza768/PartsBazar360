@@ -85,6 +85,14 @@ export interface PartFitment {
 }
 
 export interface ItemSpecifics {
+  _seo?: {
+    source?: string | null;
+    decision?: string | null;
+    identityConfidence?: string | null;
+    imageAssessment?: string | null;
+    imageConfidence?: string | null;
+    imageHealth?: string | null;
+  };
   partType?: string | null;
   placementOnVehicle?: string | null;
   position?: string | null;
@@ -114,6 +122,25 @@ export interface ItemSpecifics {
   searchKeywords?: string | null;
   productType?: string | null;
   systemCategory?: string | null;
+}
+
+/**
+ * Optional media provenance returned by newer catalog responses. Older API
+ * responses can still be rendered from `imageUrls` without this metadata.
+ */
+export interface PartMedia {
+  url: string;
+  sourceUrl?: string | null;
+  altText?: string | null;
+  confidence?: number | null;
+  importStatus?: string | null;
+  isActualItem?: boolean | null;
+}
+
+export interface PartFieldEvidence {
+  source: string;
+  confidence?: number | null;
+  verified?: boolean;
 }
 
 /**
@@ -156,9 +183,13 @@ export interface Part {
   shipping?: PartShipping | null;
   enrichmentStatus?: string | null;
   enrichmentVersion?: number | null;
+  enrichmentSource?: string | null;
+  enrichmentConfidence?: number | null;
+  provenance?: Record<string, PartFieldEvidence>;
   oeNumbers?: string[];
   fitmentFlags?: string[];
   imageUrls?: string[];
+  media?: PartMedia[];
   /**
    * Generated spec card for high-value parts, served as SVG from the API and
    * already hoisted to the front of `imageUrls`. Exposed separately so callers

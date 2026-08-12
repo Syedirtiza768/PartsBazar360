@@ -9,9 +9,10 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { OrderModule } from '../order/order.module';
 import { AuthModule } from '../auth/auth.module';
 import { CheckoutIdentityService } from './checkout-identity.service';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
-  imports: [CartModule, InventoryModule, OrderModule, AuthModule],
+  imports: [CartModule, InventoryModule, OrderModule, AuthModule, SmsModule],
   providers: [
     CheckoutService,
     CheckoutIdentityService,

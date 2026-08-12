@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Controller,
   Post,
   Param,
@@ -10,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
@@ -34,6 +36,22 @@ import {
   REALTRACK_MARKETPLACE_SELLERS,
   resolveRealTrackSyncTarget,
 } from '../seed/marketplace-sellers.config';
+
+class UpdateSellerOrderFulfillmentDto {
+  @IsOptional()
+  @IsEnum(SellerOrderStatus)
+  status?: SellerOrderStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  trackingNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  carrier?: string;
+}
 
 @Controller('operations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -142,11 +160,20 @@ export class OperationsController {
       };
     }
     if (buyerEmail) {
-      const buyers = await this.prisma.user.findMany({
-        where: { email: { contains: buyerEmail, mode: 'insensitive' } },
-        select: { id: true },
-      });
-      where.buyerId = { in: buyers.map((b) => b.id) };
+      const [buyers, customers] = await Promise.all([
+        this.prisma.user.findMany({
+          where: { email: { contains: buyerEmail, mode: 'insensitive' } },
+          select: { id: true },
+        }),
+        this.prisma.customer.findMany({
+          where: { email: { contains: buyerEmail, mode: 'insensitive' } },
+          select: { id: true },
+        }),
+      ]);
+      where.OR = [
+        { buyerId: { in: buyers.map((b) => b.id) } },
+        { customerId: { in: customers.map((c) => c.id) } },
+      ];
     }
 
     const [items, total] = await Promise.all([
@@ -192,15 +219,35 @@ export class OperationsController {
         },
         paymentIntent: true,
         supportTickets: true,
+        customer: {
+          select: { id: true, name: true, email: true, phoneNormalized: true },
+        },
       },
     });
 
-    const buyer = order.buyerId
+    const accountBuyer = order.buyerId
       ? await this.prisma.user.findUnique({
           where: { id: order.buyerId },
           select: { id: true, name: true, email: true, phone: true },
         })
       : null;
+
+    const buyer = accountBuyer ||
+      (order.customer
+        ? {
+            id: order.customer.id,
+            name: order.customer.name,
+            email: order.customer.email,
+            phone: order.customer.phoneNormalized,
+          }
+        : order.verifiedPhone
+          ? {
+              id: `guest:${order.id}`,
+              name: null,
+              email: null,
+              phone: order.verifiedPhone,
+            }
+          : null);
 
     return { ...order, buyer };
   }
@@ -360,51 +407,70 @@ export class OperationsController {
   @Roles('ADMIN', 'FULFILLMENT_OPERATOR')
   async updateSellerOrderFulfillment(
     @Param('sellerOrderId') sellerOrderId: string,
-    @Body()
-    body: {
-      status?: SellerOrderStatus;
-      trackingNumber?: string;
-      carrier?: string;
-    },
+    @Body() body: UpdateSellerOrderFulfillmentDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    let previousStatus: SellerOrderStatus | undefined;
-    if (body.status) {
-      if (!Object.values(SellerOrderStatus).includes(body.status)) {
-        throw new BadRequestException(`Unknown status: ${body.status}`);
-      }
-      const current = await this.prisma.sellerOrder.findUniqueOrThrow({
-        where: { id: sellerOrderId },
-        select: { status: true },
-      });
-      this.orderStatus.assertSellerOrderTransition(current.status, body.status);
-      previousStatus = current.status;
+    if (
+      body.status === undefined &&
+      body.trackingNumber === undefined &&
+      body.carrier === undefined
+    ) {
+      throw new BadRequestException('Provide a delivery status or shipment details');
     }
 
-    const sellerOrder = await this.prisma.sellerOrder.update({
+    const current = await this.prisma.sellerOrder.findUniqueOrThrow({
       where: { id: sellerOrderId },
-      data: {
-        status: body.status || undefined,
-        trackingNumber: body.trackingNumber || undefined,
-        carrier: body.carrier || undefined,
+      select: { status: true },
+    });
+
+    if (body.status) {
+      this.orderStatus.assertSellerOrderTransition(current.status, body.status);
+    }
+
+    const trackingNumber =
+      body.trackingNumber === undefined
+        ? undefined
+        : body.trackingNumber.trim() || null;
+    const carrier =
+      body.carrier === undefined ? undefined : body.carrier.trim() || null;
+    const updated = await this.prisma.sellerOrder.updateMany({
+      where: {
+        id: sellerOrderId,
+        ...(body.status ? { status: current.status } : {}),
       },
+      data: {
+        status: body.status,
+        trackingNumber,
+        carrier,
+      },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException(
+        'This seller order changed while you were editing it. Refresh and try again.',
+      );
+    }
+
+    const sellerOrder = await this.prisma.sellerOrder.findUniqueOrThrow({
+      where: { id: sellerOrderId },
       include: {
         seller: true,
-        parentOrder: true,
+        parentOrder: {
+          include: { customer: { select: { email: true } } },
+        },
         items: {
           include: { sellerOffer: { include: { canonicalPart: true } } },
         },
       },
     });
 
-    if (body.status && previousStatus) {
+    if (body.status && current.status !== body.status) {
       await this.audit.record({
         action: 'SELLER_ORDER_STATUS_CHANGED',
         entityType: 'SellerOrder',
         entityId: sellerOrderId,
         actorType: user.role,
         actorId: user.userId,
-        originalValue: { status: previousStatus },
+        originalValue: { status: current.status },
         normalizedValue: { status: body.status },
         metadata: {
           trackingNumber: body.trackingNumber,
@@ -414,13 +480,28 @@ export class OperationsController {
     }
 
     // Send shipment notification to buyer when tracking number is provided
-    if (body.trackingNumber && sellerOrder.parentOrder?.buyerId) {
-      const buyer = await this.prisma.user.findUnique({
-        where: { id: sellerOrder.parentOrder.buyerId },
-      });
-      if (buyer?.email) {
+    if (
+      body.status === SellerOrderStatus.SHIPPED &&
+      current.status !== SellerOrderStatus.SHIPPED &&
+      sellerOrder.parentOrder
+    ) {
+      const buyer = sellerOrder.parentOrder.buyerId
+        ? await this.prisma.user.findUnique({
+            where: { id: sellerOrder.parentOrder.buyerId },
+            select: { email: true },
+          })
+        : null;
+      const shippingAddress = sellerOrder.parentOrder.shippingAddress as Record<
+        string,
+        string
+      > | null;
+      const buyerEmail =
+        buyer?.email ||
+        sellerOrder.parentOrder.customer?.email ||
+        shippingAddress?.email;
+      if (body.trackingNumber && buyerEmail) {
         void this.emailService
-          .sendShipmentNotification(buyer.email, {
+          .sendShipmentNotification(buyerEmail, {
             orderId: sellerOrder.parentOrderId,
             sellerName: sellerOrder.seller?.name || 'Marketplace seller',
             trackingNumber: body.trackingNumber,

@@ -915,6 +915,7 @@ function CheckoutContent() {
                         required
                         value={form.country}
                         onChange={setField("country")}
+                        hint="Choose the country where this delivery address is located. Shipping is recalculated when it changes."
                         error={errors.country}
                       >
                         <option value="" disabled>

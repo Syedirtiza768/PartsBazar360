@@ -101,7 +101,7 @@ export default function CartPage() {
   const { cart, subtotal, itemCount, loading } = useCart();
   const { format, currency: displayCurrency, settlementCurrency, detectedCountry, ready: currencyReady } =
     useCurrency();
-  const { isAuthenticated, authHeaders, ready: authReady } = useAuth();
+  const { authHeaders } = useAuth();
   const router = useRouter();
   const items = cart.items;
   const currency = items.find((i) => i.sellerOffer.currency)?.sellerOffer.currency ?? null;
@@ -124,7 +124,7 @@ export default function CartPage() {
     cartId: cart.id,
     country: destination,
     currency: displayCurrency,
-    enabled: authReady && isAuthenticated && destinationReady,
+    enabled: destinationReady,
     authHeaders,
   });
 
@@ -153,10 +153,8 @@ export default function CartPage() {
   const commonLeadTime =
     leadTimes.length > 0 && leadTimes.every((t) => t === leadTimes[0]) ? leadTimes[0] : null;
   const shippingLabel = !destination.trim()
-    ? "Add destination to estimate"
-    : !isAuthenticated
-      ? "Sign in to estimate"
-      : shippingLoading
+    ? "Select destination to estimate"
+    : shippingLoading
         ? "Calculating…"
         : quote
           ? format(quote.shippingTotal, quote.currency)
@@ -237,7 +235,7 @@ export default function CartPage() {
                   label="Ship to country"
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  hint="Used to estimate shipping before checkout."
+                  hint="Used for this estimate. Confirm the address country at checkout."
                 >
                   <option value="" disabled>Select country</option>
                   {SHIPPING_COUNTRIES.map((c) => (
@@ -269,7 +267,7 @@ export default function CartPage() {
                   <dd className="price">{format(estimatedTotal, estimatedCurrency)}</dd>
                 </div>
               </dl>
-              {shippingError && destination.trim() && isAuthenticated && (
+              {shippingError && destination.trim() && (
                 <p className="mt-2 text-xs text-amber-700" role="status">
                   {shippingError}
                 </p>

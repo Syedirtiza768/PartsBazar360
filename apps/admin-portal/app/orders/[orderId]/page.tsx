@@ -6,12 +6,33 @@ import { useEffect, useState } from "react";
 import { Badge } from "@repo/ui/badge";
 import { Button } from "@repo/ui/button";
 import { PageBody } from "@repo/ui/container";
+import { Input, Select } from "@repo/ui/field";
 import { PageHeader } from "@repo/ui/page-header";
 import { Skeleton } from "@repo/ui/skeleton";
 import { ArrowLeftIcon } from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { orderStatusTone } from "@/lib/order-status";
+
+const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
+  AWAITING_PAYMENT: "Awaiting payment",
+  PROCESSING: "Processing",
+  SHIPPED: "Shipped",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+};
+
+const NEXT_FULFILLMENT_STATUSES: Record<string, string[]> = {
+  AWAITING_PAYMENT: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["SHIPPED", "CANCELLED"],
+  SHIPPED: ["DELIVERED"],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+
+function fulfillmentStatusLabel(status: string) {
+  return FULFILLMENT_STATUS_LABELS[status] || status.replace(/_/g, " ");
+}
 
 interface OrderDetail {
   id: string;
@@ -54,7 +75,7 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [acting, setActing] = useState<"cancel" | "refund" | null>(null);
+  const [acting, setActing] = useState<"cancel" | "refund" | string | null>(null);
 
   const load = async () => {
     if (!token) return;
@@ -121,6 +142,40 @@ export default function OrderDetailPage() {
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not refund order.");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const updateSellerOrder = async (
+    sellerOrderId: string,
+    status: string,
+    trackingNumber?: string,
+    carrier?: string,
+  ) => {
+    setActing(`fulfillment:${sellerOrderId}`);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status,
+            trackingNumber: trackingNumber || undefined,
+            carrier: carrier || undefined,
+          }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Could not update delivery status.");
+      setMessage(`Delivery status updated to ${fulfillmentStatusLabel(status)}.`);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not update delivery status.");
     } finally {
       setActing(null);
     }
@@ -270,9 +325,96 @@ export default function OrderDetailPage() {
                 </li>
               ))}
             </ul>
+            <SellerOrderFulfillmentEditor
+              sellerOrder={so}
+              saving={acting === `fulfillment:${so.id}`}
+              onSave={updateSellerOrder}
+            />
           </div>
         ))}
       </section>
     </PageBody>
+  );
+}
+
+function SellerOrderFulfillmentEditor({
+  sellerOrder,
+  saving,
+  onSave,
+}: {
+  sellerOrder: OrderDetail["sellerOrders"][number];
+  saving: boolean;
+  onSave: (
+    sellerOrderId: string,
+    status: string,
+    trackingNumber?: string,
+    carrier?: string,
+  ) => Promise<void>;
+}) {
+  const [status, setStatus] = useState(sellerOrder.status);
+  const [trackingNumber, setTrackingNumber] = useState(sellerOrder.trackingNumber || "");
+  const [carrier, setCarrier] = useState(sellerOrder.carrier || "");
+  const nextStatuses = NEXT_FULFILLMENT_STATUSES[sellerOrder.status] || [];
+  const options = [sellerOrder.status, ...nextStatuses.filter((value) => value !== sellerOrder.status)];
+  const dirty =
+    status !== sellerOrder.status ||
+    trackingNumber !== (sellerOrder.trackingNumber || "") ||
+    carrier !== (sellerOrder.carrier || "");
+
+  useEffect(() => {
+    setStatus(sellerOrder.status);
+    setTrackingNumber(sellerOrder.trackingNumber || "");
+    setCarrier(sellerOrder.carrier || "");
+  }, [sellerOrder.id, sellerOrder.status, sellerOrder.trackingNumber, sellerOrder.carrier]);
+
+  if (options.length <= 1 && !sellerOrder.trackingNumber && !sellerOrder.carrier) {
+    return null;
+  }
+
+  return (
+    <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-slate-900">Update delivery</h3>
+        <p className="mt-1 text-xs text-graphite-600">
+          Move this seller shipment through its next valid step. Completed and cancelled shipments are locked.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+        <Select label="Delivery status" value={status} onChange={(event) => setStatus(event.target.value)} disabled={saving}>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {fulfillmentStatusLabel(option)}
+            </option>
+          ))}
+        </Select>
+        <Input
+          label="Tracking number"
+          value={trackingNumber}
+          onChange={(event) => setTrackingNumber(event.target.value)}
+          disabled={saving}
+          autoComplete="off"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <Input
+          label="Carrier"
+          value={carrier}
+          onChange={(event) => setCarrier(event.target.value)}
+          disabled={saving}
+          autoComplete="organization"
+        />
+      </div>
+      <div className="mt-3 flex justify-end">
+        <Button
+          size="sm"
+          loading={saving}
+          disabled={!dirty || saving}
+          onClick={() => onSave(sellerOrder.id, status, trackingNumber.trim(), carrier.trim())}
+        >
+          Save delivery update
+        </Button>
+      </div>
+    </div>
   );
 }

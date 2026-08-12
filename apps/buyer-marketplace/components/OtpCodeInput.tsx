@@ -42,7 +42,7 @@ export function OtpCodeInput({
         Verification code
       </label>
       <div
-        className="flex gap-2"
+        className="grid w-full max-w-[20rem] grid-cols-6 gap-1 sm:gap-2"
         onPaste={(event) => {
           if (applyWholeCode(event.clipboardData.getData("text"))) {
             event.preventDefault();
@@ -80,7 +80,7 @@ export function OtpCodeInput({
                 refs.current[index + 1]?.focus();
             }}
             className={cn(
-              "h-12 min-w-0 flex-1 rounded-lg border bg-white text-center text-xl font-bold text-slate-950 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500",
+              "aspect-square w-full min-w-0 rounded-lg border bg-white text-center text-xl font-bold text-slate-950 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500",
               error ? "border-red-400" : "border-slate-300",
             )}
           />

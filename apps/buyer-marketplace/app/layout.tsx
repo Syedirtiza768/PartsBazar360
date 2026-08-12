@@ -59,6 +59,9 @@ export const metadata: Metadata = {
   description:
     "Search new, used and OEM automotive parts by vehicle, part number or category with visible fitment evidence and seller terms.",
   alternates: { canonical: absoluteUrl("/") },
+  verification: {
+    google: "d6ZMoEJKI-bpEj4mmvDKIGkSi0rVs68Kx-PkpLJHGNk",
+  },
   openGraph: {
     siteName: "PartsBazar360",
     type: "website",
@@ -139,12 +142,31 @@ export default async function RootLayout({
         'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
         })(window,document,'script','dataLayer','GTM-N373KFW3');
       `}</Script>
+      <Script id="meta-pixel" strategy="afterInteractive">{`
+        !function(f,b,e,v,n,t,s)
+        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
+        s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
+        (window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '873024462353915');
+        fbq('track', 'PageView');
+      `}</Script>
       {/* min-h-dvh, not min-h-screen: `100vh` on mobile Safari is the *largest*
           viewport, so a min-h-screen column leaves a scroll gap the height of
           the retracted toolbar under every short page. */}
       <body className="flex min-h-dvh flex-col">
         <noscript>
           <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N373KFW3" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- Meta Pixel requires this exact noscript image. */}
+          <img
+            height="1"
+            width="1"
+            style={{ display: "none" }}
+            src="https://www.facebook.com/tr?id=873024462353915&ev=PageView&noscript=1"
+            alt=""
+          />
         </noscript>
         <script
           type="application/ld+json"

@@ -28,6 +28,7 @@ import {
   type ChargeCurrency,
 } from './currency.util';
 import { EmailService } from '../email/email.service';
+import { SmsGlobalService } from '../sms/smsglobal.service';
 import { CheckoutIdentityService } from './checkout-identity.service';
 import { normalizePhone } from '../auth/phone.util';
 
@@ -45,6 +46,7 @@ export class CheckoutService {
     private tamaraService: TamaraService,
     private prisma: PrismaService,
     private emailService: EmailService,
+    private smsGlobalService: SmsGlobalService,
     private checkoutIdentity: CheckoutIdentityService,
   ) {
     this.buyerAppUrl = process.env.BUYER_APP_URL || 'http://localhost:3000';
@@ -1031,6 +1033,7 @@ export class CheckoutService {
       return payment;
     }
 
+    let paymentStatusClaimed = false;
     const updated = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.paymentIntent.updateMany({
         where: { id: payment.id, status: { not: 'SUCCEEDED' } },
@@ -1044,6 +1047,7 @@ export class CheckoutService {
           where: { id: payment.id },
         });
       }
+      paymentStatusClaimed = true;
       const current = await tx.paymentIntent.findUniqueOrThrow({
         where: { id: payment.id },
       });
@@ -1117,7 +1121,7 @@ export class CheckoutService {
       return current;
     });
 
-    if (status === 'SUCCEEDED') {
+    if (status === 'SUCCEEDED' && paymentStatusClaimed) {
       if (payment.order.checkoutSession?.cartId) {
         for (const sellerOrder of payment.order.sellerOrders) {
           for (const item of sellerOrder.items) {
@@ -1130,8 +1134,8 @@ export class CheckoutService {
           }
         }
       }
-      void this.sendOrderConfirmationEmail(payment.orderId).catch((err) =>
-        this.logger.error(`Order confirmation email failed: ${err}`),
+      void this.sendOrderConfirmationNotifications(payment.orderId).catch(
+        (err) => this.logger.error(`Order confirmation failed: ${err}`),
       );
       void this.sendAdminOrderNotification(payment.orderId).catch((err) =>
         this.logger.error(`Order admin notification failed: ${err}`),
@@ -1270,10 +1274,13 @@ export class CheckoutService {
     });
   }
 
-  private async sendOrderConfirmationEmail(orderId: string): Promise<void> {
+  private async sendOrderConfirmationNotifications(
+    orderId: string,
+  ): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
+        customer: { select: { email: true, phoneNormalized: true } },
         sellerOrders: {
           include: {
             items: {
@@ -1287,12 +1294,14 @@ export class CheckoutService {
         },
       },
     });
-    if (!order?.buyerId) return;
+    if (!order) return;
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: order.buyerId },
-    });
-    if (!user?.email) return;
+    const user = order.buyerId
+      ? await this.prisma.user.findUnique({
+          where: { id: order.buyerId },
+          select: { email: true },
+        })
+      : null;
 
     const items = order.sellerOrders.flatMap((so) =>
       so.items.map((item) => ({
@@ -1311,13 +1320,38 @@ export class CheckoutService {
           .join(', ')
       : undefined;
 
-    await this.emailService.sendOrderConfirmation(user.email, {
-      orderId: order.id,
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-      items,
-      shippingAddress: shippingStr,
-    });
+    const email = user?.email || order.customer?.email || address?.email;
+    const phone =
+      order.verifiedPhone || order.customer?.phoneNormalized || address?.phone;
+    const notifications: Promise<void>[] = [];
+
+    if (email) {
+      notifications.push(
+        this.emailService.sendOrderConfirmation(email, {
+          orderId: order.id,
+          totalAmount: order.totalAmount,
+          currency: order.currency,
+          items,
+          shippingAddress: shippingStr,
+        }),
+      );
+    }
+    if (phone) {
+      notifications.push(
+        this.smsGlobalService.sendOrderConfirmationSms(phone, {
+          orderId: order.id,
+          totalAmount: order.totalAmount,
+          currency: order.currency,
+        }),
+      );
+    }
+
+    const results = await Promise.allSettled(notifications);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.error(`Order confirmation channel failed: ${result.reason}`);
+      }
+    }
   }
 
   private getDestinationCountry(shippingAddress: Record<string, unknown>) {

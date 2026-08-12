@@ -84,6 +84,7 @@ describe('CheckoutService idempotent payment handling', () => {
       { isConfigured: () => true } as any,
       prisma as any,
       {} as any,
+      {} as any,
       { authorize: authorizeCheckout, trackEvent: jest.fn() } as any,
     );
 

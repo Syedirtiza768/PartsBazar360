@@ -61,6 +61,7 @@ async function main() {
     prisma as any,
     null as any,
     null as any,
+    null as any,
   );
 
   // 4. Create Cart and Add Items

@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-07
+**Last reviewed:** 2026-08-12
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -16,8 +16,15 @@ an account login. Buying never requires a password.
    session. A failed payment creates another provider attempt on that order.
 6. The cart remains active through declines/cancellation and is closed only by
    a successful payment webhook.
-7. After payment, a customer without an account may create one with only a
+7. After payment, the customer receives best-effort order confirmation by
+   email and SMS when contact channels are available.
+8. A customer without an account may create one with only a
    password. Existing account holders see that the order is already linked.
+
+The cart's country selector is a guest-accessible shipping estimate. At checkout,
+the shipping-address country is the authoritative destination; changing it
+automatically refreshes the quote before review and payment. This keeps an
+estimate for one country from being used for an address in another country.
 
 ## Identity and authorization boundary
 
@@ -39,7 +46,9 @@ an account login. Buying never requires a password.
 - rolling per-phone and per-IP send limits;
 - generic pre-verification responses that do not reveal account existence;
 - masked destinations and provider errors that preserve all checkout state;
-- no OTP or provider response bodies in logs.
+- no OTPs, credentials, destinations, or authorization data in logs; failed
+  provider response bodies may be logged only after recursive redaction and a
+  4 KB bound for SMS delivery diagnostics.
 
 ## Orders, payments, and inventory
 

@@ -63,6 +63,7 @@ describe('CheckoutService freight gate', () => {
         order: { findFirst: jest.fn().mockResolvedValue(null) },
       } as any,
       { sendOrderConfirmation: jest.fn() } as any,
+      { sendOrderConfirmationSms: jest.fn() } as any,
       { trackEvent: jest.fn() } as any,
     );
 

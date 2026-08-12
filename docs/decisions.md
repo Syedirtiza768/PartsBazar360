@@ -1,6 +1,50 @@
 # Decision log
 
-**Last reviewed:** 2026-08-10
+**Last reviewed:** 2026-08-12
+
+## 2026-08-12 - Treat fulfillment as an audited seller-order workflow
+
+**Decision:** Keep payment status on the parent `Order`, keep delivery status
+on each `SellerOrder`, and expose only validated next-step transitions to the
+admin/fulfillment console. Fulfillment writes use a compare-and-update guard,
+record an audit event, and send shipment email only when a shipment first
+enters `SHIPPED` with tracking information.
+
+**Why:** Multi-seller checkouts can produce separate shipments, so one global
+delivery status would be ambiguous. The compare-and-update guard prevents two
+operators working from stale screens from silently overwriting each other.
+
+**Decision:** Send the paid-order confirmation asynchronously through both
+SendGrid and SMSGlobal when the verified customer has the corresponding
+contact channel. Resolve guest contacts from `Customer`/`Order.verifiedPhone`,
+and claim payment success before dispatching so replayed provider webhooks do
+not duplicate the confirmation.
+
+**Why:** Guest checkout is a first-class purchase path, and notification
+failures must not turn a successfully paid order into a failed payment.
+
+## 2026-08-10 - Log redacted SMSGlobal failure bodies
+
+**Decision:** Failed SMSGlobal sends now log the HTTP status, optional provider
+request ID, and a response body that has been recursively redacted for OTPs,
+phone numbers, destinations, credentials, and authorization fields, with a
+4 KB maximum length.
+**Why:** Production checkout testing showed repeated HTTP 400 responses, but
+the previous log retained only the status code, leaving the SMS provider
+without a useful rejection reason. The diagnostic body must remain safe for
+application logs because it is external, provider-controlled content.
+**Revisit when:** the provider changes its error schema or centralized log
+retention/access controls are introduced.
+
+## 2026-08-10 - Use SMSGlobal as the temporary approved OTP origin
+
+**Decision:** Production checkout uses `SMSGlobal` as the SMS origin while the
+branded `PartsBazar` sender ID is awaiting provider approval.
+**Why:** SMSGlobal confirmed that the API key was reaching the provider, but
+the live request was rejected with HTTP 400 because `PartsBazar` was not yet an
+approved sender ID. The provider supplied `SMSGlobal` as an active test origin.
+**Revisit when:** `PartsBazar` is approved and verified for the target delivery
+region.
 
 ## 2026-08-10 - GEN catalog enhancement uses evidence-only enrichment
 
@@ -17,6 +61,23 @@ Next.js fetch cache; the targeted refresh then completed for all 1,771 active GE
 
 **Revisit when:** the image evidence provider or the MVL source changes, or the GEN catalog is
 re-imported and needs a new campaign version.
+
+## 2026-08-10 - Tavily image enrichment is evidence-first and cluster-targeted
+
+**Decision:** `apps/api/scripts/tavily-image-superior-listings.mjs` enriches only
+active `Superior Auto Parts` listings with no image. Tavily image candidates must
+carry exact brand + MPN evidence, pass image-content validation, avoid placeholder
+or non-product imagery, and survive product-type and conflicting-code checks.
+Existing images are never replaced. The worker supports a brand filter so high-
+probability clusters can be measured and processed independently; `FEBI` was
+selected first after its 100% MPN coverage and a 66-68% clean-match yield in
+production pilots.
+
+**Why:** Search results sometimes repeated the requested MPN while returning a
+different component, technical drawing, or a URL containing another part code.
+Conservative rejection keeps ambiguous listings image-free and prevents weak
+images from going live. Search is refreshed from Postgres after writes because
+buyer search reads OpenSearch.
 
 Running log of non-obvious decisions, workarounds, and their reasons. Newest first. Add an entry whenever a change is driven by something that isn't obvious from the code alone (a past incident, an external constraint, a workaround for a broken dependency).
 
