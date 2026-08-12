@@ -17,9 +17,13 @@ import { resolvePartSegment } from "@/lib/part-resolve";
  * destination rather than through an intermediate URL.
  */
 
-// The id→slug mapping is effectively immutable, so this can cache hard. A
-// slug regeneration purges the `seo:resolve:*` tag.
-export const revalidate = 3600;
+// Must be force-dynamic, NOT ISR. Under `revalidate`, Next renders this route
+// through a static shell and cannot emit an HTTP redirect from it — it returns
+// 200 with a client-side meta-refresh instead, which passes no link equity and
+// leaves two URLs serving 200. Verified against a production build.
+// The underlying id→slug lookup is still cached (see resolvePartSegment), so
+// this costs a cache read, not a database query.
+export const dynamic = "force-dynamic";
 
 interface LegacyPartPageProps {
   params: Promise<{ id: string }>;

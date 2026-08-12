@@ -1,27 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
+import { Suspense } from "react";
 import { CompatibilitySection } from "@/components/CompatibilitySection";
 import { PartDetailLive } from "@/components/PartDetailLive";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
-import { RelatedParts } from "@/components/RelatedParts";
+import {
+  RelatedPartsSection,
+  RelatedPartsSkeleton,
+} from "@/components/RelatedPartsSection";
 import { SeoLinkCloud } from "@/components/SeoLinkCloud";
 import { SalvagePanel } from "@/components/SalvagePanel";
 import { humanize } from "@/lib/format";
-import {
-  partTypeFromLegacy,
-  partPath,
-  relatedLinks,
-  selectRelated,
-} from "@repo/catalog-contracts";
+import { partTypeFromLegacy, partPath } from "@repo/catalog-contracts";
 import { sanitizeProductHtml } from "@/lib/sanitize-html";
-import {
-  getPartById,
-  getRelatedCandidates,
-  resolvePartSegment,
-} from "@/lib/part-resolve";
-import { partSeo, toMetadata, toSeoPart } from "@/lib/seo";
+import { getPartById, resolvePartSegment } from "@/lib/part-resolve";
+import { partSeo, toMetadata } from "@/lib/seo";
 import { productSpecifications } from "@/lib/product-specs";
 import type { Part } from "@/lib/types";
 
@@ -94,29 +89,6 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
   if (!part) {
     notFound();
   }
-
-  // Related products are scored on shared attributes, never picked at random,
-  // and the fetch is best-effort — an empty list is a smaller page, not a
-  // broken one. Taxonomy links below already guarantee the page is not an
-  // orphan, so relatedness is purely additive.
-  const candidates = await getRelatedCandidates(part);
-  const related = selectRelated(
-    toSeoPart(part),
-    candidates.map((candidate) => ({
-      id: candidate.id,
-      slug: candidate.slug ?? null,
-      title: candidate.title,
-      brand: candidate.brand ?? null,
-      category: candidate.category ?? null,
-      categoryGroup: candidate.categoryGroup ?? null,
-      manufacturerPartNumber: candidate.manufacturerPartNumber ?? null,
-      oeNumbers: candidate.oeNumbers ?? [],
-      compatibleVehicles: candidate.compatibleVehicles ?? [],
-      imageUrls: candidate.imageUrls ?? [],
-    })),
-    8,
-  );
-  const relatedById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
 
   const seo = partSeo({ ...part, seo: part.seo ?? null });
   const specifications = productSpecifications(part);
@@ -303,16 +275,15 @@ export default async function ProductDetailsPage({ params }: PartPageProps) {
       {/* Related parts and taxonomy links are rendered as real server-side
           anchors, so a new listing is reachable by a crawler from the moment
           it is published rather than only through search. */}
-      <RelatedParts
-        items={related
-          .map((entry) => relatedById.get(entry.candidate.id))
-          .filter((candidate): candidate is Part => Boolean(candidate))}
-      />
+      {/* Taxonomy links are in the initial HTML — they are what stops a new
+          listing being an orphan. Related products stream in behind Suspense
+          because their extra API call must not delay the page's HTTP status
+          (a status can only be set before the response starts streaming). */}
+      <SeoLinkCloud heading="Browse related categories" links={seo.internalLinks} />
 
-      <SeoLinkCloud
-        heading="Browse related categories"
-        links={[...seo.internalLinks, ...relatedLinks(related).slice(0, 4)]}
-      />
+      <Suspense fallback={<RelatedPartsSkeleton />}>
+        <RelatedPartsSection part={part} />
+      </Suspense>
 
       <div className="mt-14">
         <RecentlyViewed excludeId={part.id} />

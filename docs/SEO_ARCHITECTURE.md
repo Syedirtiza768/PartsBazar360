@@ -305,6 +305,35 @@ stops Google rendering the page at all.
 
 ---
 
+## 11b. HTTP status correctness (Next 16 gotcha)
+
+Two Next 16.2 behaviours bite this app specifically, both verified against a
+production **standalone** build (`next start` does not reproduce them — it
+refuses to run with `output: "standalone"`):
+
+1. **`redirect()` / `permanentRedirect()` from a Server Component do not emit
+   an HTTP redirect.** They return `200` with a client-side meta-refresh, which
+   passes little link equity and leaves two URLs both answering `200`. The
+   legacy `/part/<uuid>` → `/parts/<slug>` migration therefore lives in
+   `proxy.ts` (Next 16's renamed `middleware.ts`), which runs before rendering
+   and always emits a true `301`.
+
+2. **A route-level `loading.tsx` makes `notFound()` return `200`.** It creates a
+   Suspense boundary, so the shell is flushed before the status can be set —
+   every unknown product URL became a soft 404 marked `index, follow`. The app
+   had a *root* `app/loading.tsx` (a homepage-shaped skeleton rendered on every
+   route), so this affected the whole site.
+
+Both `loading.tsx` files were removed. Streaming is preserved where it actually
+helps: the PDP's related-products lookup — an extra API call with no bearing on
+the status — now renders inside `<Suspense>` via `RelatedPartsSection`, which
+also takes it off the critical path for TTFB. Taxonomy links stay in the initial
+HTML, since those are what keep a listing from being an orphan.
+
+**Rule of thumb:** any route whose status depends on data (`notFound()`, a
+redirect) must not have a `loading.tsx` above it, and must decide the status
+before its first `await` inside a Suspense boundary.
+
 ## 12. Admin overrides
 
 Optional, never required. Stored in `CanonicalPart.seo` (JSON, so a new
