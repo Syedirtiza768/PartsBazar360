@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Skeleton } from "@repo/ui/skeleton";
 import { UserIcon, TagIcon, RefreshIcon } from "@repo/ui/icons";
+import { partHref } from "@/lib/seo";
 import { PartImage } from "./PartImage";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
@@ -112,7 +113,7 @@ export function ProductCard({
       onFocus={triggerPrewarm}
       className="group relative flex min-w-0 flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover focus-within:z-10"
     >      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
-        <Link href={`/part/${part.id}`} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
+        <Link href={partHref(part)} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
         <PartImage
           src={image}
           alt={part.title}
@@ -169,7 +170,7 @@ export function ProductCard({
         )}
 
         <h3 className="min-h-10 text-[13px] font-semibold leading-snug text-slate-800 group-hover:text-brand-800 xs:text-sm">
-          <Link href={`/part/${part.id}`} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>
+          <Link href={partHref(part)} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>
         </h3>
 
         <div className="mt-1.5 flex-1 space-y-1">
@@ -198,7 +199,7 @@ export function ProductCard({
 
         <div className="mt-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5 border-t border-stone-200 pt-3">
           <Price amount={price} currency={currency} from={offerCount > 1} />
-          <Link href={`/part/${part.id}`} className="inline-flex min-h-9 items-center whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
+          <Link href={partHref(part)} className="inline-flex min-h-9 items-center whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
         </div>
       </div>
     </article>

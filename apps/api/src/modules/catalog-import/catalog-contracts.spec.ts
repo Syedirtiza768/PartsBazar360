@@ -7,7 +7,10 @@ import {
 
 describe('catalog contracts', () => {
   it('labels controlled part types for buyer/admin UI', () => {
-    expect(partTypeLabel('AFTERMARKET')).toBe('Aftermarket');
+    // 'New Aftermarket' since 67cc2cc. This assertion said 'Aftermarket' and
+    // still passed, because jest resolved @repo/catalog-contracts to a stale
+    // `dist/` build; the suite now maps the package to its source.
+    expect(partTypeLabel('AFTERMARKET')).toBe('New Aftermarket');
     expect(partTypeLabel('SALVAGE_OEM')).toBe('Used Genuine OEM');
     expect(partTypeFromLegacy('AFTERMARKET', null)).toBe('AFTERMARKET');
     expect(partTypeFromLegacy('OEM', 'UNCLASSIFIED')).toBe('UNCLASSIFIED');

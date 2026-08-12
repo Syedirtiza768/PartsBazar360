@@ -11,9 +11,12 @@ import { SearchOutboxService } from './index/search-outbox.service';
 import { SearchOutboxRunner } from './index/search-outbox.runner';
 import { EnrichmentModule } from '../enrichment/enrichment.module';
 import { CheckoutModule } from '../checkout/checkout.module';
+import { SeoModule } from '../seo/seo.module';
 
 @Module({
-  imports: [EnrichmentModule, CheckoutModule],
+  // SeoModule supplies SeoSlugService to SearchIndexerService, so every
+  // indexed part gets a canonical slug regardless of how it was created.
+  imports: [EnrichmentModule, CheckoutModule, SeoModule],
   providers: [
     OpenSearchService,
     FebestWebsiteService,

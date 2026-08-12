@@ -3,8 +3,15 @@ import Link from "next/link";
 import { buttonClasses } from "@repo/ui/button";
 import { EmptyState } from "@repo/ui/empty-state";
 import { SearchIcon, CarIcon } from "@repo/ui/icons";
+import {
+  absoluteUrl,
+  decideFacetIndexability,
+  searchPath,
+  taxonomyPath,
+  type FacetState,
+} from "@repo/catalog-contracts";
 import { INTERNAL_API_URL } from "@/lib/api";
-import { NOINDEX_ROBOTS, searchCanonical } from "@/lib/seo";
+import { NOINDEX_ROBOTS } from "@/lib/seo";
 import { ProductCard } from "@/components/ProductCard";
 import { SortSelect } from "@/components/SortSelect";
 import { PageSizeSelect } from "@/components/PageSizeSelect";
@@ -90,79 +97,57 @@ async function getResults(
   }
 }
 
+/**
+ * Search is a tool, not an SEO surface.
+ *
+ * Every `/search` URL is `noindex, follow`: the indexable equivalents are the
+ * taxonomy landing pages (`/parts/category/…`, `/brands/…`, `/vehicles/…`),
+ * which carry real copy, breadcrumbs, and collection markup. Indexing search
+ * URLs *as well* would put two of our own pages in front of the same query and
+ * expose every filter permutation as a crawlable near-duplicate.
+ *
+ * `follow` matters: the result grid is a legitimate discovery path into deep
+ * inventory, so links from it are still crawled. And when the filter state
+ * corresponds to exactly one taxonomy node, the canonical points at that
+ * node's landing page, consolidating any signals the search URL picks up.
+ */
 export async function generateMetadata({
   searchParams,
 }: SearchPageProps): Promise<Metadata> {
   const params = await searchParams;
-  const parts: string[] = [];
-  if (params.brand) parts.push(params.brand);
-  if (params.category) parts.push(params.category);
-  if (params.q) parts.push(`"${params.q}"`);
+  const decision = decideFacetIndexability(params as FacetState);
 
-  const isHub =
-    Boolean(params.category || params.brand) &&
-    !params.q &&
-    !params.vehicleConfigId;
-  const isAllParts =
-    !params.category && !params.brand && !params.q && !params.vehicleConfigId;
-  const pageNum = Math.max(1, params.page ? parseInt(params.page, 10) || 1 : 1);
-  const isPriceSort =
-    params.sort === "price_asc" || params.sort === "price_desc";
-  const isPageSizeVariant =
-    params.pageSize && resolvePageSize(params.pageSize) !== DEFAULT_PAGE_SIZE;
+  const label = [params.brand, params.category, params.make]
+    .filter(Boolean)
+    .join(" ");
+  const title = params.q
+    ? `Search results for “${params.q}” | PartsBazar360`
+    : label
+      ? `${label} parts — search | PartsBazar360`
+      : "Search auto parts | PartsBazar360";
 
-  // Index category/brand hubs and the main catalog (relevance/newest are the
-  // canonical sorts). Keep vehicle fitment, free-text search, price-sort
-  // variants, multi-filter combos, page-size variants, and deep pagination
-  // out of the index to protect crawl budget.
-  const shouldNoIndex =
-    Boolean(params.vehicleConfigId) ||
-    Boolean(params.q) ||
-    isPriceSort ||
-    Boolean(params.partType) ||
-    Boolean(params.sourceTag) ||
-    Boolean(params.minPrice || params.maxPrice) ||
-    Boolean(params.includeInterchange === "false") ||
-    Boolean(isPageSizeVariant) ||
-    (Boolean(params.category) && Boolean(params.brand)) ||
-    pageNum > 1;
+  const description = params.q
+    ? `Live marketplace results for “${params.q}”. Compare condition, part numbers, seller terms and shipping.`
+    : "Search new, used and OEM automotive parts by vehicle, part number or category with visible fitment evidence and seller terms.";
 
-  const title = isAllParts
-    ? "Shop All Auto Parts | PartsBazar360"
-    : isHub && params.brand && params.category
-      ? `${params.brand} ${params.category} Parts | PartsBazar360`
-      : isHub && params.brand
-        ? `${params.brand} Auto Parts | PartsBazar360`
-        : isHub && params.category
-          ? `${params.category} Parts | PartsBazar360`
-          : parts.length > 0
-            ? `${parts.join(" ")} Parts | PartsBazar360`
-            : "Shop All Auto Parts | PartsBazar360";
-
-  const description = params.vehicleConfigId
-    ? "Browse fitment-verified parts for your exact vehicle configuration."
-    : params.brand && params.category
-      ? `Shop ${params.brand} ${params.category.toLowerCase()} parts with visible fitment evidence, condition, and seller terms on PartsBazar360.`
-      : params.brand
-        ? `Browse ${params.brand} automotive parts from marketplace sellers. Compare condition, OE numbers, and seller shipping before you buy.`
-        : params.category
-          ? `Shop ${params.category.toLowerCase()} parts with fitment evidence and seller-visible terms. New, used, and OEM inventory updated daily.`
-          : params.q
-            ? `Search results for ${params.q} across live marketplace inventory.`
-            : "Browse live used and OEM auto parts from marketplace sellers. Filter by category, brand, or OE number with fitment evidence on every listing.";
-
-  const canonical = searchCanonical({
-    category: params.category,
-    brand: params.brand,
-    // Free-text and vehicle searches canonicalize to the hub without q/vehicle.
-    q: shouldNoIndex ? undefined : params.q,
-  });
+  // A single-facet search consolidates into the landing page that owns that
+  // term; anything else consolidates into the bare search entry point.
+  const canonical =
+    decision.landingFacet && decision.landingValue
+      ? absoluteUrl(
+          taxonomyPath({
+            kind: decision.landingFacet === "categoryGroup" ? "categoryGroup" : decision.landingFacet,
+            name: decision.landingValue,
+            productCount: 0,
+          }),
+        )
+      : absoluteUrl(searchPath({}));
 
   return {
     title,
     description,
     alternates: { canonical },
-    robots: shouldNoIndex ? NOINDEX_ROBOTS : undefined,
+    robots: NOINDEX_ROBOTS,
   };
 }
 

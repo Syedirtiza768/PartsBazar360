@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { brandPath, categoryGroupPath } from "@repo/catalog-contracts";
 import { buttonClasses } from "@repo/ui/button";
 import { Container } from "@repo/ui/container";
 import {
@@ -221,7 +222,7 @@ export default async function Home() {
             {facets.categoryGroups.slice(0, 12).map((category, index) => (
               <Link
                 key={category.name}
-                href={`/search?categoryGroup=${encodeURIComponent(category.name)}`}
+                href={categoryGroupPath(category.name)}
                 className="group flex min-h-32 w-36 shrink-0 snap-start flex-col border border-stone-300 bg-white p-3 transition-colors hover:bg-brand-950 hover:text-white sm:w-40 sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -316,7 +317,7 @@ export default async function Home() {
               {facets.brands.slice(0, 12).map((brand) => (
                 <Link
                   key={brand.name}
-                  href={`/search?brand=${encodeURIComponent(brand.name)}`}
+                  href={brandPath(brand.name)}
                   className="flex min-h-20 min-w-0 items-center justify-between gap-2 border-b border-r border-stone-300 px-3 py-3 text-sm font-black uppercase tracking-wide text-slate-800 hover:bg-stone-100 sm:px-4"
                 >
                   {/* Long marques (MERCEDES-BENZ, LAND ROVER) previously ran

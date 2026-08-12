@@ -342,7 +342,7 @@ function OfferRow({
 /* Buy box                                                             */
 /* ------------------------------------------------------------------ */
 
-export function BuyBox({ part }: { part: Part }) {
+export function BuyBox({ part, heading }: { part: Part; heading?: string }) {
   const offers = useMemo(() => buyerVisibleOffers(part.offers), [part.offers]);
   const best = offers[0];
   const { format, detectedCountry, ready: currencyReady } = useCurrency();
@@ -395,7 +395,7 @@ export function BuyBox({ part }: { part: Part }) {
           {part.category && <Badge tone="neutral">{part.category}</Badge>}
         </div>
         <h1 className="mt-2.5 text-balance text-xl font-bold leading-snug tracking-tight text-slate-900 sm:text-2xl">
-          {part.title}
+          {heading || part.title}
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-graphite-600">
           {part.brand && (

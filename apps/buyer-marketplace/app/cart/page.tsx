@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { partHref } from "@/lib/seo";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button, buttonClasses } from "@repo/ui/button";
@@ -39,7 +40,7 @@ function CartLine({ item }: { item: CartItem }) {
   return (
     <div className="flex gap-3 px-4 py-4 sm:gap-4 sm:px-5">
       <Link
-        href={part ? `/part/${part.id}` : "#"}
+        href={part ? partHref(part) : "#"}
         // A 96px thumbnail left 176px of line at 320px, which squeezed the
         // title to ~80px beside the price. It steps down with the viewport.
         className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 xs:h-24 xs:w-24"
@@ -51,7 +52,7 @@ function CartLine({ item }: { item: CartItem }) {
         <div className="flex flex-col gap-1.5 xs:flex-row xs:items-start xs:justify-between xs:gap-3">
           <div className="min-w-0">
             <Link
-              href={part ? `/part/${part.id}` : "#"}
+              href={part ? partHref(part) : "#"}
               className="line-clamp-2 text-sm font-medium leading-snug text-slate-900 transition-colors hover:text-brand-600"
             >
               {part?.title || "Part"}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { brandPath, categoryPath } from "@repo/catalog-contracts";
 import { CarIcon, MessageIcon, ShieldCheckIcon, StoreIcon, TruckIcon } from "@repo/ui/icons";
 
 const GROUPS: Array<{ title: string; links: Array<[string, string]> }> = [
@@ -6,10 +7,12 @@ const GROUPS: Array<{ title: string; links: Array<[string, string]> }> = [
     title: "Shop",
     links: [
       ["/search", "All parts"],
-      ["/search?category=Suspension", "Suspension"],
-      ["/search?category=Brakes", "Brakes"],
-      ["/search?category=Engine", "Engine"],
-      ["/search?brand=FEBEST", "FEBEST parts"],
+      // Point at indexable landing pages, not filtered search URLs: these
+      // are site-wide links, so they set the crawl depth of the taxonomy.
+      [categoryPath("Suspension"), "Suspension"],
+      [categoryPath("Brakes"), "Brakes"],
+      [categoryPath("Engine"), "Engine"],
+      [brandPath("FEBEST"), "FEBEST parts"],
     ],
   },
   {

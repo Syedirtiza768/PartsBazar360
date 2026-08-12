@@ -1,3 +1,5 @@
+import type { SeoOverrides } from "@repo/catalog-contracts";
+
 export interface Offer {
   id: string;
   price: number;
@@ -135,6 +137,13 @@ export interface PartMedia {
   confidence?: number | null;
   importStatus?: string | null;
   isActualItem?: boolean | null;
+  /**
+   * Ordering signals from ProductMedia. The primary image is the LCP element
+   * and the Open Graph image, so which row it is has to survive the API
+   * boundary rather than defaulting to "whichever URL was written first".
+   */
+  isPrimary?: boolean | null;
+  sortOrder?: number | null;
 }
 
 export interface PartFieldEvidence {
@@ -169,6 +178,14 @@ export interface PartShipping {
 
 export interface Part {
   id: string;
+  /**
+   * Canonical URL segment (`/parts/<slug>`), assigned by the API. Optional
+   * only because search results indexed before the SEO migration may not
+   * carry one yet; `partHref()` falls back to the legacy id URL, which 301s.
+   */
+  slug?: string | null;
+  /** Admin SEO overrides, applied by the shared engine ahead of generation. */
+  seo?: SeoOverrides | null;
   title: string;
   description?: string | null;
   brand?: string | null;

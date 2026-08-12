@@ -2,6 +2,63 @@
 
 **Last reviewed:** 2026-08-12
 
+## 2026-08-12 — SEO lives in the domain, and hangs off the search indexer
+
+**Decision:** The whole programmatic SEO system (slugs, URLs, metadata, JSON-LD,
+breadcrumbs, indexability, internal links, sitemaps) lives in a pure engine at
+`packages/catalog-contracts/src/seo/`, and **slug assignment is triggered from
+`SearchIndexerService.indexPart`** rather than from the individual write paths.
+See [[SEO_ARCHITECTURE]].
+
+**Why:** A listing enters the catalog through at least six paths (listing form,
+CSV/Excel upload, eBay sync, supplier/ERP integrations, seed scripts, direct SQL
++ an outbox row). Hooking each one is a rule a seventh path will silently break.
+Every path already funnels through `SearchOutbox` → `indexPart`, so hanging the
+SEO lifecycle there means a part cannot become buyer-visible without a canonical
+URL, and a future import path inherits it without knowing SEO exists. The engine
+is dependency-free (no Prisma, Next, or React) specifically so the API, the
+storefront, CLI backfills, and Jest all run the identical code — the API and the
+frontend cannot drift about what a canonical or a title is.
+
+**Also decided:**
+- Product URLs moved from `/part/<uuid>` to `/parts/<slug>`. The old route is
+  kept **permanently** as a one-hop 301 — deleting it would 404 the indexed
+  catalog. Slug history points at the *part*, not at the replacing slug, so
+  redirect chains are impossible by construction.
+- Slugs are assigned once and frozen; a title edit does not move a ranked URL.
+  Collisions get a deterministic hash of the part id, not a counter, so a
+  re-run of the backfill is idempotent.
+- `/search` is now **always `noindex, follow`**. Taxonomy landing pages
+  (`/parts/category/…`, `/brands/…`, `/vehicles/…`) are the indexable surfaces;
+  indexing both would put two of our own pages on the same query.
+- Programmatic pages are gated on inventory thresholds that scale with how many
+  URLs the pattern can generate. Below threshold: renders, crawlable,
+  `noindex, follow`, out of sitemaps.
+
+**Revisit when:** the catalog approaches ~1M listings (`SEO_SITEMAP_PAGE_SIZE`
+and the chunk-boundary cache may need tuning), or if `/buyer` is ever dropped
+from the public path — every canonical carries that prefix today.
+
+## 2026-08-12 - Make OE-to-MVL recovery a durable database-backed job
+
+**Decision:** Run compatibility recovery through a resumable Postgres-backed
+job with item-level claims, retries, progress counters, and transactional
+fitment/evidence writes. Use exact bounded You.com vehicle applications only
+as lookup input, then validate every application against the live `MvlVehicle`
+table before attaching rows. The runner uses `FOR UPDATE SKIP LOCKED` so a
+bounded worker pool can process one job concurrently.
+
+**Why:** The production catalog still has a large unmatched active-listing
+queue, and a one-shot script would lose its place during deploys or transient
+lookup failures. At implementation time the connected You.com credential was
+available to the task lookup layer but not configured in the production
+worker, so the job supports both direct Research API mode and an explicit
+export/ingest feed boundary without moving credentials into application logs
+or database rows. Direct mode is now enabled for the active production job.
+
+**Revisit when:** You.com credentials are provisioned in the production
+worker, or the MVL source schema changes.
+
 ## 2026-08-12 - Treat fulfillment as an audited seller-order workflow
 
 **Decision:** Keep payment status on the parent `Order`, keep delivery status

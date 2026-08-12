@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { categoryGroupPath } from "@repo/catalog-contracts";
 import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -786,7 +787,7 @@ export function Header({ categories }: { categories: Facet[] }) {
             {categoryNames.map((category) => (
               <Link
                 key={category}
-                href={`/search?categoryGroup=${encodeURIComponent(category)}`}
+                href={categoryGroupPath(category)}
                 className="flex min-h-11 shrink-0 items-center border-r border-stone-300 px-3.5 text-xs font-bold text-graphite-700 hover:bg-white hover:text-graphite-950 sm:px-4"
               >
                 {category}
@@ -857,7 +858,7 @@ export function Header({ categories }: { categories: Facet[] }) {
             {categoryNames.map((category) => (
               <Link
                 key={category}
-                href={`/search?categoryGroup=${encodeURIComponent(category)}`}
+                href={categoryGroupPath(category)}
                 className="flex min-h-touch items-center border-b border-r border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-graphite-700"
               >
                 {category}

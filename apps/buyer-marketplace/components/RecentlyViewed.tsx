@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ClockIcon } from "@repo/ui/icons";
+import { partHref } from "@/lib/seo";
 import { PartImage } from "./PartImage";
 import { Price } from "./Price";
 import { getRecentlyViewed, setRecentlyViewed, type RecentPart } from "@/lib/recent";
@@ -123,7 +124,7 @@ export function RecentlyViewed({ excludeId }: { excludeId?: string }) {
         {items.map((item) => (
           <Link
             key={item.id}
-            href={`/part/${item.id}`}
+            href={partHref(item)}
             className="w-36 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card-hover sm:w-40"
           >
             <div className="relative aspect-square border-b border-slate-100 bg-slate-50">

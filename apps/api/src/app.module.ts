@@ -18,6 +18,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ListingPipelineModule } from './modules/listing-pipeline/listing-pipeline.module';
 import { EnrichmentModule } from './modules/enrichment/enrichment.module';
 import { EmailModule } from './modules/email/email.module';
+import { SeoModule } from './modules/seo/seo.module';
 import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { SmsModule } from './modules/sms/sms.module';
     AuthModule,
     ListingPipelineModule,
     EnrichmentModule,
+    SeoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

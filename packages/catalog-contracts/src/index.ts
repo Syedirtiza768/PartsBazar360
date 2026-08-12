@@ -1,5 +1,12 @@
 /** Shared catalog vocabulary used by API, seed, buyer, seller, and admin. */
 
+/**
+ * The programmatic SEO engine. Lives here rather than in any one app because
+ * the API (slug assignment, sitemaps, health) and the buyer storefront
+ * (metadata, schema, breadcrumbs) must derive SEO from identical rules.
+ */
+export * from './seo';
+
 export const PART_TYPES = [
   'GENUINE_OEM',
   'OEM_EQUIVALENT',

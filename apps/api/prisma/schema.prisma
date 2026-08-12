@@ -202,6 +202,16 @@ model BrandAlias {
 
 model CanonicalPart {
   id                       String    @id @default(uuid())
+  // SEO slug — the canonical public URL segment (/parts/<slug>). Assigned once
+  // by SeoSlugService and then frozen: editing a title must not move a ranked
+  // URL. Nullable only so existing rows can be backfilled; every part reaching
+  // the storefront is expected to have one. See docs/SEO_ARCHITECTURE.md.
+  slug                     String?   @unique
+  slugAssignedAt           DateTime?
+  // Optional admin overrides (title/description/h1/canonical/robots/og image).
+  // Shape is SeoOverrides in @repo/catalog-contracts. JSON so adding another
+  // overridable field never needs a migration.
+  seo                      Json?
   title                    String
   brand                    String?
   manufacturer             String?
@@ -265,9 +275,33 @@ model CanonicalPart {
   redirectsTo    CanonicalPartRedirect[] @relation("RedirectTo")
   reviewTasks    ReviewTask[]
   auditEvents    AuditEvent[]
+  slugHistory    CanonicalPartSlug[]
 
   @@index([enrichmentStatus])
   @@index([partClassKey])
+  // Sitemap and taxonomy queries page through parts ordered by change time;
+  // without this they degrade to a full scan once the catalog passes ~100k.
+  @@index([updatedAt])
+  @@index([category])
+  @@index([brand])
+}
+
+/// Retired slugs, kept so a URL we once published never 404s.
+///
+/// A slug only lands here when a part's canonical URL changes, which is rare
+/// and deliberate. The resolver serves a single 301 straight to the part's
+/// *current* slug — never to whatever slug superseded this one — so chains
+/// (A → B → C) are impossible by construction rather than by cleanup.
+model CanonicalPartSlug {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  partId    String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  part CanonicalPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@index([partId])
 }
 
 model CatalogPartNumber {

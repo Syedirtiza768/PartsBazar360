@@ -18,6 +18,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
 import { PrismaService } from '../../../prisma.service';
+import { SeoSlugService } from '../../seo/seo-slug.service';
 import { buildSearchDocument } from './search-document.builder';
 import {
   SEARCH_ALIAS,
@@ -33,7 +34,10 @@ export class SearchIndexerService {
   private readonly client: Client;
   private cachedTarget?: string;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly seoSlugs: SeoSlugService,
+  ) {
     this.client = new Client({
       node: process.env.OPENSEARCH_URL || 'http://opensearch:9200',
     });
@@ -84,6 +88,23 @@ export class SearchIndexerService {
    * and lets the outbox row be marked DONE for a write that never happened.
    */
   async indexPart(id: string): Promise<IndexOutcome> {
+    // Slug assignment rides on indexing rather than on the write paths.
+    // Every path that creates or changes a part — listing form, CSV import,
+    // eBay sync, ERP push, bulk SQL + outbox row — reaches this method, so a
+    // part cannot become buyer-visible without a canonical URL, and a future
+    // import path inherits that for free. Assignment is idempotent and a
+    // no-op once the part has a slug.
+    //
+    // A slug failure must not block indexing: a part missing from search is a
+    // worse outcome than a part missing a slug, and the outbox will retry.
+    try {
+      await this.seoSlugs.ensureSlug(id);
+    } catch (error) {
+      this.logger.warn(
+        `Slug assignment failed for ${id}, indexing anyway: ${(error as Error).message}`,
+      );
+    }
+
     const part = await this.loadPart(id);
     if (!part) {
       await this.removePart(id);

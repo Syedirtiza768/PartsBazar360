@@ -17,10 +17,18 @@ import type { Part } from "@/lib/types";
 export function PartDetailLive({
   part,
   imageAlt,
+  heading,
   children,
 }: {
   part: Part;
   imageAlt?: string;
+  /**
+   * The generated H1. Passed down rather than derived here so the visible
+   * heading, the `<title>`, and the Product JSON-LD `name` all come from the
+   * same generator — a page whose H1 disagrees with its title is the most
+   * common on-page SEO defect and this makes it structurally impossible.
+   */
+  heading?: string;
   children?: ReactNode;
 }) {
   const { shipping, images, refining } = useEnrichmentReconcile(part);
@@ -54,7 +62,7 @@ export function PartDetailLive({
           className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-none-y"
           aria-label="Purchase options"
         >
-          <BuyBox part={livePart} />
+          <BuyBox part={livePart} heading={heading} />
         </aside>
 
         {children}

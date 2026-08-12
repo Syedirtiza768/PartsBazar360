@@ -105,10 +105,36 @@ the exact official page; stale catalog claims are corrected when the official
 evidence resolves them, while unresolved contradictions still route to review.
 Set `OFFICIAL_WORKERS` to a bounded value for concurrent Luna/database workers;
 each worker uses its own database client and the row-level image/identity gates
-remain unchanged. The feed is deliberately
-separate from the API container because the connected You.com credential is
-available to the task lookup layer, not currently configured in the production
-container.
+remain unchanged. The feed remains deliberately separate from the API
+container so lookup evidence can be reviewed and replayed without exposing
+provider credentials to application code.
+
+`scripts/mvl-oe-recovery-job.mjs` is the resumable server-side worker for
+vehicle compatibility recovery. `--init` creates a durable Postgres job and
+queues active Superior Auto Parts canonical parts that still have OE/MPN input;
+`--status JOB_ID` reports processed counts, attached MVL rows, heartbeat, rate,
+and ETA; `--export` and `--ingest` provide a feed boundary for the connected
+You.com lookup layer; and `--run --no-research` validates ingested applications
+against exact `MvlVehicle` make/model/year rows before writing fitments and
+evidence transactionally. When `YDC_API_KEY` is configured in the production
+worker, as it is for the current production job, `--run` performs the Research
+API calls directly. If the key is unavailable, the server job remains queued
+while task-side You.com results are ingested. Claims
+use `FOR UPDATE SKIP LOCKED`, so bounded parallel workers can process the same
+job safely and retries survive container replacement.
+
+`scripts/run-superior-official-recovery-job.mjs` is the resumable server-side
+coordinator for this pass. It selects the next active no-image rows by UUID
+cursor, sends one batched discovery query to You.com's MCP `you-search` with
+livecrawl enabled, validates exact first-party pages and MPN-tied images, then
+hands only the accepted evidence to the write-side Luna script. It stores
+`status.json`, `events.ndjson`, and the current feed under
+`OFFICIAL_JOB_STATE_DIR` (the production worker's persistent enrichment volume),
+uses a lock to prevent duplicate runs, and resumes safely after interruption.
+Run it in the worker container with `OFFICIAL_JOB_WORKERS=4` and
+`OFFICIAL_YOU_WORKERS=4`; set `YDC_API_KEY` in the server `.env` for paid MCP
+limits, otherwise it uses You.com's keyless free MCP profile and records that
+mode in the status file. No reseller page or image is accepted as a substitute.
 
 ## Consumers
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
@@ -116,3 +142,28 @@ All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal
 ## Open questions / TODO
 - Document the auth flow end to end (session model, roles per portal).
 - Document how `listing-pipeline` and `ingestion` relate (pipeline stages?).
+
+## SEO module (`src/modules/seo/`)
+
+Owns the SEO *lifecycle* — the [[../SEO_ARCHITECTURE|engine]] itself lives in
+[[../packages/catalog-contracts]].
+
+- `SeoSlugService` — assigns a canonical slug once per part and then freezes it;
+  `regenerateSlug` retires the old slug to `CanonicalPartSlug` so an old URL
+  301s in one hop; `resolve()` maps a current slug, a retired slug, or a legacy
+  UUID to a part plus a redirect instruction.
+- `SeoCatalogService` — sitemap chunks (cached windowed chunk boundaries, so
+  chunk N is one bounded keyset read rather than N queries) and taxonomy
+  aggregation with index-eligibility.
+- `SeoHealthService` — per-listing validation, counters, duplicate detection.
+- `SeoController` — `/seo/*` (resolve, sitemap feeds, taxonomy, health,
+  overrides, regenerate-slug, cache invalidate, config).
+
+**The load-bearing wiring:** `SearchIndexerService.indexPart` calls
+`ensureSlug()` before indexing. Every write path already reaches the indexer via
+`SearchOutbox`, so a part cannot become buyer-visible without a canonical URL —
+and a *future* import path inherits that without knowing SEO exists. This is why
+`SearchModule` imports `SeoModule`.
+
+Backfill for the existing catalog: `npm run seo:backfill` (run as a standalone
+container, not `docker exec`).

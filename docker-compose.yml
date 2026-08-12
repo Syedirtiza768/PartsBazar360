@@ -138,6 +138,10 @@ services:
       # AI enrichment runs here, never in the API process.
       RUN_ENRICHMENT_WORKER: "1"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # The official-brand recovery job uses You.com's MCP search/livecrawl.
+      # The free profile works without a key; set YDC_API_KEY for higher limits.
+      YDC_API_KEY: ${YDC_API_KEY:-}
+      YOU_MCP_URL: ${YOU_MCP_URL:-https://api.you.com/mcp?profile=free}
       ENRICHMENT_ENABLED: ${ENRICHMENT_ENABLED:-0}
       ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-realtrack}
       ENRICHMENT_DAILY_BUDGET_USD: ${ENRICHMENT_DAILY_BUDGET_USD:-5}

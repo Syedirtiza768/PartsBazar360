@@ -16,6 +16,7 @@ import { createReadStream } from 'fs';
 import Redis from 'ioredis';
 import { OpenSearchService, type BrowseSort } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
+import { SeoSlugService } from '../seo/seo-slug.service';
 import { FebestWebsiteService } from './febest-website.service';
 import { MvlOeCatalogService } from './mvl-oe-catalog.service';
 import {
@@ -96,6 +97,7 @@ export class SearchController implements OnModuleDestroy {
     private readonly mvlOeCatalog: MvlOeCatalogService,
     private readonly enrichment: EnrichmentService,
     private readonly shippingService: ShippingService,
+    private readonly seoSlugs: SeoSlugService,
   ) {
     try {
       this.redis = new Redis({
@@ -206,6 +208,9 @@ export class SearchController implements OnModuleDestroy {
         return { total: result.total, totalRelation: 'eq' as const };
       }
       const visible = sanitizeSearchItems(result.items);
+      // Canonical slugs are not in the search index (strict mapping); hydrate
+      // them by primary key so tiles link to /parts/<slug> not /part/<uuid>.
+      await this.seoSlugs.attachSlugs(visible);
       // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
       void this.febestWebsite
         .attachImagesToSearchItems(visible)
@@ -268,6 +273,7 @@ export class SearchController implements OnModuleDestroy {
       minPrice: priceMin,
       maxPrice: priceMax,
     });
+    await this.seoSlugs.attachSlugs(visible);
     result.items = visible;
     // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
     void this.febestWebsite

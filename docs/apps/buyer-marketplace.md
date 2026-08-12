@@ -78,3 +78,24 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
 ## Open questions / TODO
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
+
+## SEO surfaces
+
+Full detail in [[../SEO_ARCHITECTURE]]. What lives in this app:
+
+- `lib/seo.ts` — the *only* adapter: `Part` → engine input, `SeoDocument` →
+  Next `Metadata`. Every page's metadata goes through `toMetadata()`, so no page
+  can ship without a canonical or a robots directive.
+- `app/parts/[slug]/` — the canonical PDP. `app/part/[id]/` is retained
+  permanently as a one-hop 301.
+- `app/parts/category/…`, `app/parts/system/…`, `app/brands/…`,
+  `app/vehicles/…` — programmatic landing pages, all rendered by
+  `components/TaxonomyLanding.tsx` so they inherit identical SEO.
+- `app/sitemap.xml/`, `app/sitemaps/[file]/`, `app/robots.txt/` — runtime
+  routes (a build-time evaluation previously baked `localhost` into production).
+- `lib/product-specs.ts` — the PDP spec table. This is *presentation*; it was
+  split out of the old `lib/product-seo.ts` (now deleted) so a display tweak and
+  a metadata rule no longer share a file.
+
+`lib/part-resolve.ts` degrades safely when the API has no `/seo/resolve` route
+(mid-rollout or rollback): a UUID segment renders directly rather than 404ing.
