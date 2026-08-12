@@ -334,6 +334,48 @@ HTML, since those are what keep a listing from being an orphan.
 redirect) must not have a `loading.tsx` above it, and must decide the status
 before its first `await` inside a Suspense boundary.
 
+## 11c. Catalog-hidden parts
+
+`CanonicalPart.itemSpecifics._hiddenFromCatalog = true` marks a part that must
+exist and be purchasable without ever appearing in the catalog. Today that is
+the 1 AED payment-verification item (`payment:test-product`), which exists so
+live Stripe and Tamara rails can be exercised with real money without listing a
+fake product to buyers.
+
+One flag, consulted everywhere, via `isCatalogHidden()` in
+`packages/catalog-contracts/src/catalog-visibility.ts`:
+
+- both search indexers *delete* rather than write it, so it cannot appear in
+  browse, search, facets, related products, or fitment results;
+- `decidePartIndexability` returns `noindex` and — unlike every other rule —
+  **no admin override can unhide it**;
+- the sitemap SQL predicate excludes it (alongside any admin `noindex`
+  override, which a sitemap must never advertise);
+- its own URL still resolves, so checkout can be driven end to end.
+
+Deactivate the offer without deleting history:
+`node dist/src/payment-test-product.cli.js --deactivate`
+
+## 11d. Image-priority ordering
+
+Listings with a photo come first in every browse ordering. `imageUrls` is
+mapped `index: false` on the legacy `canonical_parts` index, so image
+availability was neither filterable nor sortable; `hasImage` is the indexed
+projection of it, written on every index operation and backfilled for existing
+documents by `backfill:has-image` (an in-place `_update_by_query`, seconds
+rather than a reindex).
+
+- `newest` / `price_asc` / `price_desc`: `hasImage` is the **primary** sort, so
+  the buyer's chosen ordering still holds exactly — within each group.
+- `relevance`: deliberately *not* images-first. On a part-number query an exact
+  match must win even without a photo, or search stops serving the identifier
+  lookups this catalogue exists for. Images get a small score boost (`boost: 2`
+  against an exact-number score of ~60) plus a tiebreak position in the sort.
+
+The boost lives in the **outer** bool's `should`, not inside `buildQClause` —
+that inner bool has `minimum_should_match: 1`, so an image clause there would
+make every imaged listing match every query.
+
 ## 12. Admin overrides
 
 Optional, never required. Stored in `CanonicalPart.seo` (JSON, so a new

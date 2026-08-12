@@ -18,6 +18,7 @@ import {
   decideTaxonomyIndexability,
   findDuplicates,
   imageAlt,
+  isCatalogHidden,
   isMeaningfulBrand,
   partH1,
   partImages,
@@ -786,5 +787,47 @@ describe('non-brand values in the brand column', () => {
     for (const label of ['Genuine OEM', 'ORIGINAL', 'OEM', 'Unbranded', 'N/A', 'generic', '']) {
       expect(isMeaningfulBrand(label)).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Catalog-hidden parts (the 1 AED payment-verification item).
+// ---------------------------------------------------------------------------
+describe('catalog-hidden parts', () => {
+  const hidden = () =>
+    makePart({
+      slug: 'payment-verification-item',
+      itemSpecifics: { _hiddenFromCatalog: true, purpose: 'Internal' },
+    });
+
+  it('is never indexable and never sitemap-eligible', () => {
+    const decision = decidePartIndexability(hidden());
+    expect(decision.robots).toEqual({ index: false, follow: true });
+    expect(decision.reasons).toContain('Hidden from catalog');
+    expect(decision.sitemapEligible).toBe(false);
+  });
+
+  it('cannot be unhidden by an admin force-index override', () => {
+    // The whole point is that it exists without being discoverable; an
+    // accidental override must not publish it.
+    const decision = decidePartIndexability({
+      ...hidden(),
+      seo: { robots: 'index' },
+    });
+    expect(decision.robots.index).toBe(false);
+  });
+
+  it('still produces a complete, renderable document so checkout works', () => {
+    const doc = buildPartSeoDocument(hidden());
+    expect(doc.canonical).toContain('/parts/payment-verification-item/');
+    expect(doc.title).toBeTruthy();
+    expect(doc.robots.index).toBe(false);
+    expect(doc.sitemapEligible).toBe(false);
+  });
+
+  it('leaves ordinary parts alone', () => {
+    expect(isCatalogHidden(makePart())).toBe(false);
+    expect(isCatalogHidden(hidden())).toBe(true);
+    expect(decidePartIndexability(makePart()).robots.index).toBe(true);
   });
 });

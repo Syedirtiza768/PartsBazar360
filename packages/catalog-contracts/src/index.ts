@@ -7,6 +7,10 @@
  */
 export * from './seo';
 
+/** Catalog visibility (hidden-from-catalog parts). Consumed by the search
+ *  indexers and the SEO engine alike, so it lives outside `seo/`. */
+export * from './catalog-visibility';
+
 export const PART_TYPES = [
   'GENUINE_OEM',
   'OEM_EQUIVALENT',

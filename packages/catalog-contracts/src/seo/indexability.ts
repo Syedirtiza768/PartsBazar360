@@ -13,6 +13,7 @@
  * page must not orphan its children.
  */
 
+import { isCatalogHidden } from '../catalog-visibility';
 import { seoConfig } from './config';
 import { stripHtml, text, uniqueStrings } from './text';
 import type { SeoPartInput, SeoRobots, SeoTaxonomyInput } from './types';
@@ -114,6 +115,16 @@ export function contentDepth(part: SeoPartInput): number {
 export function decidePartIndexability(part: SeoPartInput): IndexDecision {
   const reasons: string[] = [];
   const { thresholds } = seoConfig();
+
+  // A hidden part exists only so a live checkout can be exercised against it.
+  // It must never be indexed, and no admin override may unhide it.
+  if (isCatalogHidden(part)) {
+    return {
+      robots: NOINDEX_FOLLOW,
+      reasons: ['Hidden from catalog'],
+      sitemapEligible: false,
+    };
+  }
 
   const status = text(part.status).toUpperCase();
   if (status && NON_INDEXABLE_STATUSES.has(status)) {

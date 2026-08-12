@@ -14,6 +14,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   decideTaxonomyIndexability,
   seoConfig,
@@ -35,9 +36,18 @@ import { PrismaService } from '../../prisma.service';
  * through the engine before emitting it, so the sitemap never advertises a
  * noindex URL; the SQL predicate only has to be a cheap, safe superset.
  */
-const INDEXABLE_PART_WHERE = {
+const INDEXABLE_PART_WHERE: Prisma.CanonicalPartWhereInput = {
   slug: { not: null },
   imageUrls: { isEmpty: false },
+  // An admin `noindex` override, and a catalog-hidden part (the
+  // payment-verification item), must never reach a sitemap — a sitemap that
+  // lists a noindex URL asks Google to crawl something the page then tells it
+  // to drop. Expressed here rather than filtered afterwards so the count and
+  // the chunk boundaries agree with what is actually emitted.
+  NOT: [
+    { seo: { path: ['robots'], equals: 'noindex' } },
+    { itemSpecifics: { path: ['_hiddenFromCatalog'], equals: true } },
+  ],
   offers: {
     some: {
       status: 'ACTIVE',
@@ -45,7 +55,7 @@ const INDEXABLE_PART_WHERE = {
       seller: { onboardingStatus: 'ACTIVE' },
     },
   },
-} as const;
+};
 
 export interface SitemapPartEntry {
   id: string;
@@ -164,6 +174,8 @@ export class SeoCatalogService {
           FROM "CanonicalPart" cp
           WHERE cp."slug" IS NOT NULL
             AND array_length(cp."imageUrls", 1) > 0
+            AND (cp."seo" IS NULL OR cp."seo"->>'robots' IS DISTINCT FROM 'noindex')
+            AND (cp."itemSpecifics" IS NULL OR cp."itemSpecifics"->>'_hiddenFromCatalog' IS DISTINCT FROM 'true')
             AND EXISTS (
               SELECT 1 FROM "SellerOffer" so
               JOIN "Seller" s ON s."id" = so."sellerId"
@@ -312,6 +324,8 @@ export class SeoCatalogService {
         JOIN "VehicleMake" vmk        ON vmk."id" = vm."makeId"
         WHERE cp."slug" IS NOT NULL
           AND array_length(cp."imageUrls", 1) > 0
+          AND (cp."seo" IS NULL OR cp."seo"->>'robots' IS DISTINCT FROM 'noindex')
+          AND (cp."itemSpecifics" IS NULL OR cp."itemSpecifics"->>'_hiddenFromCatalog' IS DISTINCT FROM 'true')
           AND EXISTS (
             SELECT 1 FROM "SellerOffer" so
             JOIN "Seller" s ON s."id" = so."sellerId"

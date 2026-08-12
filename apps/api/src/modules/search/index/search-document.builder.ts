@@ -13,6 +13,7 @@
  * verbatim in `displayNumbers` for display and audit (brief §4).
  */
 
+import { isCatalogHidden } from '@repo/catalog-contracts';
 import { normalizePartNumber } from '../query/part-number.util';
 import { applySuperiorPriority } from '../buyer-visible-offers.util';
 import {
@@ -144,6 +145,11 @@ export function listingQuality(part: any, offers: any[], hasImage: boolean): num
  * offer (in which case the caller should delete it from the index).
  */
 export function buildSearchDocument(part: any): BuiltSearchDocument | null {
+  // A catalog-hidden part (the payment-verification item) must never surface
+  // in browse, search, facets, related products, or fitment results. Returning
+  // null makes the indexer *delete* it, so it cannot linger from a prior run.
+  if (isCatalogHidden(part)) return null;
+
   const offers = buyerVisibleOffers(part);
   if (offers.length === 0) return null;
 

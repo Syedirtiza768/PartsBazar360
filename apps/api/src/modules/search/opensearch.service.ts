@@ -9,6 +9,7 @@ import {
   sanitizeIdentifier,
   sanitizeIdentifierList,
 } from './identifier-sanitize.util';
+import { isCatalogHidden } from '@repo/catalog-contracts';
 import {
   canonicalizeCatalogBrand,
   canonicalizeVehicleMakes,
@@ -186,6 +187,7 @@ export class OpenSearchService implements OnModuleInit {
             fitmentConfidence: { type: 'float' },
             listingUrl: { type: 'keyword', index: false },
             ebayItemId: { type: 'keyword' },
+            hasImage: { type: 'boolean' },
           },
         },
       });
@@ -212,6 +214,11 @@ export class OpenSearchService implements OnModuleInit {
       makes: { type: 'keyword' },
       oeNumbers: { type: 'keyword' },
       imageUrls: { type: 'keyword', index: false },
+      // `imageUrls` is deliberately not indexed, so image availability cannot
+      // be filtered or sorted on directly. This boolean is the queryable
+      // projection of it, and is what lets browse float imaged listings to
+      // the top of every result set.
+      hasImage: { type: 'boolean' },
       listingUrl: { type: 'keyword', index: false },
       ebayItemId: { type: 'keyword' },
       compatibility: { type: 'object', enabled: false },
@@ -243,6 +250,18 @@ export class OpenSearchService implements OnModuleInit {
 
   async indexPart(part: any) {
     try {
+      // Catalog-hidden parts (the payment-verification item) are removed
+      // rather than indexed, so they never appear in any buyer-facing list
+      // while remaining reachable by their own URL for checkout testing.
+      if (isCatalogHidden(part)) {
+        try {
+          await this.client.delete({ index: this.INDEX_NAME, id: part.id });
+        } catch {
+          /* ignore missing */
+        }
+        return;
+      }
+
       const rawOffers = Array.isArray(part.offers) ? part.offers : [];
       const visibleOffers = rawOffers.filter((o: any) => {
         if (!o) return false;
@@ -324,6 +343,7 @@ export class OpenSearchService implements OnModuleInit {
             .map((number: any) => number.normalizedNumber)
             .filter(Boolean),
           imageUrls: part.imageUrls || [],
+          hasImage: Array.isArray(part.imageUrls) && part.imageUrls.length > 0,
           listingUrl: part.listingUrl || null,
           ebayItemId: part.ebayItemId || null,
           compatibility: part.compatibility || null,
@@ -417,7 +437,13 @@ export class OpenSearchService implements OnModuleInit {
               must,
             },
           },
-          sort: [{ minPrice: { order: 'asc', missing: '_last' } }],
+          // Imaged listings first here too: a verified-fit result the buyer
+          // cannot see a photo of is the least useful thing to lead with.
+          // Lowest price still orders within each group.
+          sort: [
+            { hasImage: { order: 'desc', missing: '_last' } },
+            { minPrice: { order: 'asc', missing: '_last' } },
+          ],
         } as any,
       });
 
@@ -592,13 +618,33 @@ export class OpenSearchService implements OnModuleInit {
     // --- sort. Relevance only means something for a keyword; a no-query
     //     browse falls back to newest so the feed is stable, not arbitrary. ---
     const useRelevance = sort === 'relevance' && hasQuery;
+
+    /**
+     * Listings with a photo come first in every browse ordering.
+     *
+     * A tile with no image converts far worse and looks broken, so an
+     * imageless listing should never outrank an imaged one in a browse feed.
+     * `missing: '_last'` matters during rollout: documents indexed before
+     * `hasImage` existed have no value, and treating them as "no image" is
+     * the safe reading — once the backfill lands they sort correctly.
+     *
+     * Within each group the buyer's chosen ordering is preserved exactly, so
+     * a price sort is still a price sort — just imaged-first.
+     */
+    const imagesFirst = { hasImage: { order: 'desc', missing: '_last' } };
+
     const sortClause: any[] = useRelevance
-      ? [{ _score: { order: 'desc' } }, { createdAt: { order: 'desc' } }]
+      ? // Deliberately NOT images-first: on a part-number query an exact
+        // match must win even without a photo, or the search stops being
+        // usable for the identifier lookups this catalogue exists to serve.
+        // Image preference is applied as a score nudge instead (see the
+        // `should` clause below) and as a tiebreaker here.
+        [{ _score: { order: 'desc' } }, imagesFirst, { createdAt: { order: 'desc' } }]
       : sort === 'price_asc'
-        ? [{ minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
+        ? [imagesFirst, { minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
         : sort === 'price_desc'
-          ? [{ minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
-          : [{ createdAt: { order: 'desc' } }];
+          ? [imagesFirst, { minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
+          : [imagesFirst, { createdAt: { order: 'desc' } }];
 
     // --- scoped facets. Each dimension aggregates over every OTHER active
     //     filter (incl. the keyword), so counts answer "if I add this, how
@@ -706,7 +752,23 @@ export class OpenSearchService implements OnModuleInit {
             from,
             size,
             track_total_hits: true,
-            query: { bool: { must, filter: baseFilters } },
+            query: {
+              bool: {
+                must,
+                filter: baseFilters,
+                // Score-only preference for listings with a photo. This sits
+                // in the OUTER bool, where `should` alongside a `must`
+                // contributes to score without widening the match set — the
+                // same clause inside `buildQClause`'s bool would satisfy its
+                // `minimum_should_match: 1` and make every imaged listing
+                // match every query.
+                //
+                // The boost is small on purpose: it separates otherwise
+                // comparable results without ever outranking an exact
+                // part-number hit, which scores ~60.
+                should: [{ term: { hasImage: { value: true, boost: 2 } } }],
+              },
+            },
             sort: sortClause,
             ...(includeFacets ? { aggs: buildAggs() } : {}),
           } as any,

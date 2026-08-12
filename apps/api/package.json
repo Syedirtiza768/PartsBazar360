@@ -34,7 +34,9 @@
     "backfill:compat-mvl": "node scripts/backfill-compat-from-mvl.mjs",
     "enrich:dxb": "node scripts/enrich-dxb-from-partsouq.mjs",
     "enrich:itemspecifics": "node scripts/enrich-itemspecifics.mjs",
-    "seo:backfill": "node dist/src/seo-backfill.cli.js"
+    "seo:backfill": "node dist/src/seo-backfill.cli.js",
+    "backfill:has-image": "node dist/src/backfill-has-image.cli.js",
+    "payment:test-product": "node dist/src/payment-test-product.cli.js"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
