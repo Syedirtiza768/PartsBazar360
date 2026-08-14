@@ -194,6 +194,9 @@ Owns the SEO _lifecycle_ — the [[../SEO_ARCHITECTURE|engine]] itself lives in
 - The API worker and standalone `seo-backfill` CLI set `SEO_CACHE_PRIME=0`.
   Only the request-serving API primes the SEO cache; otherwise each process
   would independently scan the fitment graph at startup.
+- `VehicleService.getMakes()` reads the small make table directly so the
+  vehicle picker can open without a cold full-fitment scan. Model, generation,
+  and configuration results still require search-grade fitments.
 - `SeoHealthService` — per-listing validation, counters, duplicate detection.
 - `SeoController` — `/seo/*` (resolve, sitemap feeds, taxonomy, health,
   overrides, regenerate-slug, cache invalidate, config).

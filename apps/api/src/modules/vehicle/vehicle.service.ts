@@ -59,24 +59,12 @@ export class VehicleService {
     if (cached) return cached;
     if (this.makesLoading) return this.makesLoading;
 
-    // The make list is an expensive fitment-graph query on a cold process.
-    // Share it across SSR, browser, and crawler callers so a burst cannot
-    // create one full scan per request.
+    // The make table is tiny, while checking every fitment graph edge is a
+    // million-row cold scan. Load makes directly; the dependent model,
+    // generation, and configuration lookups still enforce SEARCH_GRADE_FITMENT.
+    // Share this request across SSR, browser, and crawler callers as well.
     const pending = this.prisma.vehicleMake
       .findMany({
-        where: {
-          models: {
-            some: {
-              generations: {
-                some: {
-                  configurations: {
-                    some: { fitments: { some: SEARCH_GRADE_FITMENT } },
-                  },
-                },
-              },
-            },
-          },
-        },
         select: { id: true, name: true },
         orderBy: { name: 'asc' },
       })
