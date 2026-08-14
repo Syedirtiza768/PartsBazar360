@@ -361,8 +361,15 @@ function CheckoutContent() {
     let cancelled = false;
     const saved = loadCheckoutState(cart.id);
     if (saved) {
-      setForm(saved.draft);
-      setPaymentProvider(saved.draft.paymentProvider);
+      // The cart selector is the latest explicit destination choice. A saved
+      // checkout draft may belong to an earlier cart visit, so it must not
+      // silently override the current shipping country.
+      const savedCountry = getShippingCountry();
+      const draft = savedCountry
+        ? { ...saved.draft, country: savedCountry }
+        : saved.draft;
+      setForm(draft);
+      setPaymentProvider(draft.paymentProvider);
       setCheckoutSessionId(saved.checkoutSessionId);
       setIdempotencyKey(saved.idempotencyKey);
       setMaskedPhone(saved.maskedPhone ?? null);
@@ -463,6 +470,7 @@ function CheckoutContent() {
     (field: keyof FormState) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const value = e.target.value;
+      if (field === "country") setShippingCountry(value);
       setForm((prev) => ({ ...prev, [field]: value }));
       if (field === "phone" && phoneVerified) {
         setPhoneVerified(false);

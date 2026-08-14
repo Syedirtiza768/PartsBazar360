@@ -1,6 +1,95 @@
 # Decision log
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-14
+
+## 2026-08-14 — Keep payment-verification shipping free
+
+**Decision:** The fixed hidden payment-verification part is excluded from
+chargeable shipping weight. A cart containing only that part gets a zero
+shipping quote; mixed carts still calculate shipping from their normal items.
+
+**Why:** The listing exists only to verify live payment rails. Its placeholder
+catalog row has no physical package dimensions, so generic shipping estimates
+made the 2 AED test charge misleadingly expensive.
+
+**Revisit when:** The payment-verification item is removed or replaced by a
+real, physically shippable test product.
+
+## 2026-08-14 — Repair brand-blind MPN redirects in place
+
+**Decision:** The 2026-08-01 MPN-only redirect batch is repaired by removing
+redirects with a structured identity conflict (brand namespace, source/type,
+or position), restoring mapped offers and brand-scoped part numbers to their
+source canonical parts, recording `REPAIR_MPN_DEDUP` audit events, and queuing
+both sides for search reindexing. The repair is transaction-scoped per
+redirect and remains dry-run by default.
+
+**Why:** Matching only on a normalized number caused different aftermarket
+brands and source/condition variants to appear as multiple offers on one
+listing. Offer ownership is restored from retained upload candidate IDs or a
+unique seller-title match; ambiguous mappings are left untouched for review.
+Future exact MPN matching must require the same trusted brand namespace and
+must not treat OEM/cross-reference numbers as brand MPNs.
+
+**Revisit when:** The repair report's held-back cases are manually resolved or
+the catalog identity model gains a stronger authoritative cross-reference
+source.
+
+## 2026-08-14 — Superior enrichment stays local and exports approved deltas
+
+**Decision:** The Superior Auto Parts enrichment workflow is a standalone local
+Next.js workspace. Source exports remain immutable; local drafts are stored
+separately and only fully validated, explicitly approved listing deltas can be
+exported. Existing compatibility is stored in a byte-offset side index and
+loaded on demand rather than held in the in-memory catalogue.
+
+**Why:** The workflow must cover all 60,923 active Superior listings and retain
+large compatibility sets without risking accidental production writes or
+loading a roughly 1 GB compatibility archive into application memory.
+
+**Revisit when:** A production enrichment API supports optimistic concurrency,
+audited approvals, image provenance, and structured compatibility upserts. At
+that point the CSV handoff may be replaced with a controlled push step.
+
+---
+
+## 2026-08-12 — FEBI image repair uses strict parallel Luna review
+
+**Decision:** Active FEBI image URLs are reviewed through
+`apps/api/scripts/rectify-febi-images-luna.mjs` with bounded parallel workers.
+Only a HIGH-confidence `WRONG_PART`, `UNRELATED`, `NON_PRODUCT`, or
+`PLACEHOLDER` result is removable automatically; uncertain results remain in
+place. Writes update both `CanonicalPart.imageUrls` and matching `ProductMedia`
+rows in one transaction, enqueue a `SearchOutbox` UPSERT, and preserve a JSONL
+backup/report.
+
+**Why:** The FEBI catalog contained a mixture of valid Bilstein product images
+and contaminated URLs from unrelated government, news, social, and media sites.
+Domain-only filtering would risk deleting legitimate third-party product photos,
+while removing only the obvious model-confirmed mismatches protects catalog
+coverage and keeps buyer search consistent with Postgres.
+
+**Revisit when:** FEBI imagery is re-imported or the image-evidence provider or
+model contract changes.
+
+## 2026-08-12 — Re-review non-approved Superior image proposals by candidate ID
+
+**Decision:** Superior Auto Parts listings whose prior Luna proposal was not
+fully approved are re-reviewed by `rectify-febi-images-luna.mjs` through a
+deduplicated candidate-ID file. The worker sends the image plus current catalog,
+offer, compatibility, and listing metadata to GPT-5.6 Luna, removes only
+HIGH-confidence wrong-part/unrelated/non-product/placeholder images, and keeps
+uncertain images unchanged. Every committed cleanup updates `ProductMedia` and
+`CanonicalPart.imageUrls` transactionally and queues one `SearchOutbox` UPSERT.
+
+**Why:** The first Superior pass produced review and content-updated/image-review
+proposals across bounded report windows. Candidate-ID targeting lets the repair
+cover exactly those image-bearing, non-approved proposals without re-spending
+on already approved listings or silently expanding into unrelated Superior
+inventory.
+
+**Revisit when:** a new Superior proposal campaign creates a later report set,
+or the image-review gate changes.
 
 ## 2026-08-12 — A part-source label in `brand` is not a brand
 
@@ -288,6 +377,14 @@ this reasoning, no code change needed (they'll just start matching `rowsByCountr
 ## Long-running jobs need a standalone container, not `docker exec`
 **Decision:** Run long jobs (e.g. reindex) via `docker run` on the app network, not `docker exec` into an existing container.
 **Why:** `docker exec` jobs get killed if the container is recreated mid-job (e.g. by a deploy), silently losing progress.
+
+## 2026-08-12 — PostgreSQL needs explicit shared memory for concurrent workloads
+**Decision:** The Compose Postgres service uses `shm_size: 1gb`.
+**Why:** The deployed container inherited Docker's 64 MiB `/dev/shm` default. Under
+concurrent checkout and worker queries, PostgreSQL could not resize transient shared
+memory segments and returned `No space left on device` despite the host having ample
+disk space. This interrupted API requests, including payment processing.
+**Revisit when:** Container resource limits or query/worker concurrency changes materially.
 
 ---
 

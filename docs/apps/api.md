@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-14
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -10,6 +10,11 @@ NestJS backend for the whole marketplace. Lives at `apps/api`.
 - OpenSearch (`@opensearch-project/opensearch`) for search
 - Redis + BullMQ for background jobs (`@nestjs/bullmq`, `bullmq`, `ioredis`)
 - Shared types from [[../packages/catalog-contracts]]
+
+The Compose Postgres service is given a 1 GiB `/dev/shm` allocation. The
+default 64 MiB Docker mount is insufficient for concurrent Prisma/Postgres
+queries and reports as `No space left on device` even when the host disk has
+free capacity.
 
 Run modes: `start:dev` (web process, watch), `start:worker` (background job worker — separate process, see `src/worker.js`).
 
@@ -65,6 +70,11 @@ account data. OTP challenges are hashed, rate limited, attempt limited, and
 consumed once. Order creation is idempotent and payment retries create
 `PaymentAttempt` audit rows on the same order. See [[../CHECKOUT_GUEST_FIRST]].
 
+The hidden payment-verification part is a deliberate checkout-only exception:
+`PAYMENT_TEST_PART_ID` contributes zero chargeable shipping weight, so its
+shipping quote is free. If it is combined with normal items from the same
+seller, only those normal items contribute to the seller shipment quote.
+
 *(This list is mechanically generated from the folder structure — module responsibilities beyond the name are TODO. Fill in as you touch each one.)*
 
 ## Seed / import / enrichment CLIs
@@ -89,6 +99,17 @@ until the image gate passes. The worker persists an `_seo` evidence block inside
 SKU-specific descriptions only from supplied evidence; it does not invent fitment,
 OE references, dimensions, or axle/set language. Review rows are reported without
 catalog writes. Run bounded windows and preserve the backup/report paths.
+
+`scripts/rectify-febi-images-luna.mjs` is the evidence-first repair worker for
+active listing images. It can target a brand or a deduplicated `IDS_PATH` of
+candidate parts (used for Superior proposals that were not fully approved),
+reviews every distinct URL from both `imageUrls` and `ProductMedia` in parallel,
+and sends current catalog metadata, offer metadata, and compatibility evidence
+with each image. It removes only a high-confidence Luna mismatch or unusable
+image, leaves REVIEW results untouched, writes a JSONL backup/report, and
+enqueues changed parts through `SearchOutbox` so buyer search is refreshed.
+Run a small `DRY_RUN=1` pilot before the live pass; use bounded `WORKERS` and
+keep the backup/report files with the operational record.
 
 `scripts/apply-superior-official-recovery.mjs` is the write-side of the
 no-image official-brand recovery pass. The connected You.com lookup layer must
@@ -137,6 +158,14 @@ limits, otherwise it uses You.com's keyless free MCP profile and records that
 mode in the status file. No reseller page or image is accepted as a substitute.
 
 ## Consumers
+
+`scripts/repair-mpn-dedup-merges.mjs` repairs the historical brand-blind MPN
+merge batch. It is dry-run by default; `APPLY=1` applies only redirects with a
+structured identity blocker and no ambiguous offer mapping. It restores offers
+using upload candidate IDs or unique seller-title evidence, moves brand-scoped
+part numbers where evidence exists, writes `REPAIR_MPN_DEDUP` audit events, and
+queues source and target parts for search indexing. Review the generated report
+before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
 
 ## Open questions / TODO

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PAYMENT_TEST_PART_ID } from '@repo/catalog-contracts';
 import { EMX_RATE_BANDS, EMX_RATE_SHEET } from './emx-rate-sheet';
 import {
   estimateMarginPctFromEnv,
@@ -65,6 +66,8 @@ const AVERAGE_LEAD_TIME = '08 to 14 Business Days';
 
 export interface ShippingQuoteItem {
   quantity: number;
+  /** Canonical part id, used for tightly scoped shipping exceptions. */
+  canonicalPartId?: string | null;
   /** Actual unit weight in kg. */
   weightKg?: number | null;
   /** Legacy field name, still accepted so older callers keep working. */
@@ -118,8 +121,11 @@ export class ShippingService {
     items: ShippingQuoteItem[],
     destinationCountry: string,
   ): ShippingQuote {
-    const resolved = this.resolveWeights(items);
     const countryKey = this.normalizeCountry(destinationCountry);
+    const chargeableItems = items.filter(
+      (item) => item.canonicalPartId !== PAYMENT_TEST_PART_ID,
+    );
+    const resolved = this.resolveWeights(chargeableItems);
 
     const maxParcelGrams = maxParcelKgFromEnv() * 1000;
     const requiresFreightQuote = resolved.chargeableGrams > maxParcelGrams;
@@ -140,6 +146,20 @@ export class ShippingService {
       requiresFreightQuote,
       quotedWeightKg: this.round(pricedGrams / 1000),
     };
+
+    if (chargeableItems.length === 0) {
+      const row = this.rowsByCountry.get(countryKey);
+      return {
+        ...common,
+        serviceType: 'FREE',
+        leadTime: this.isUae(countryKey)
+          ? '01 to 02 Business Days'
+          : (row?.leadTime ?? AVERAGE_LEAD_TIME),
+        matchedCountry: this.isUae(countryKey) || Boolean(row),
+        billableWeightGrams: 0,
+        amount: 0,
+      };
+    }
 
     if (this.isUae(countryKey)) {
       const tier = this.uaeFlatTier(pricedGrams);

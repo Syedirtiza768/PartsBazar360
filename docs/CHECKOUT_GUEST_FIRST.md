@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-14
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -21,9 +21,11 @@ an account login. Buying never requires a password.
 8. A customer without an account may create one with only a
    password. Existing account holders see that the order is already linked.
 
-The cart's country selector is a guest-accessible shipping estimate. At checkout,
-the shipping-address country is the authoritative destination; changing it
-automatically refreshes the quote before review and payment. This keeps an
+The cart's country selector is a guest-accessible shipping estimate. Its choice
+is persisted immediately and carried into checkout, including when checkout is
+restored from an earlier draft. At checkout, the shipping-address country is
+the authoritative destination; changing it invalidates the previous quote and
+automatically refreshes the new one before review and payment. This keeps an
 estimate for one country from being used for an address in another country.
 
 ## Identity and authorization boundary
@@ -68,6 +70,11 @@ the server. Redis reservations account for other carts. A successful webhook
 claims the payment transition atomically, decrements inventory once, advances
 seller orders, closes the cart, and tolerates webhook replay.
 
+The hidden payment-verification listing is excluded from chargeable shipping
+weight and therefore receives a zero shipping quote. This exception is keyed
+to its fixed canonical part id; other cart lines retain the normal seller
+shipping calculation.
+
 ## Migration and duplicate safety
 
 The migration is additive and backfills only already-verified E.164 phones.
@@ -111,6 +118,10 @@ test mode. Create a webhook endpoint in Stripe's **live** dashboard pointing at
 `whsec_…` it issues. Reusing the sandbox secret makes every live webhook fail
 signature verification — payments succeed at the card network but orders are
 never marked paid, which looks like money vanishing.
+
+Keep the endpoint on the canonical `partsbazar360.com` hostname: the legacy
+`partsbazar360.realtrackapp.com` hostname redirects, and Stripe does not treat
+that redirect as a successful webhook delivery.
 
 Tamara's production notification endpoint is
 `https://partsbazar360.com/api/checkout/webhooks/tamara`.

@@ -1,5 +1,6 @@
 import { ShippingService } from './shipping.service';
 import { getPartClassProfile } from './part-class-weights';
+import { PAYMENT_TEST_PART_ID } from '@repo/catalog-contracts';
 
 describe('ShippingService', () => {
   const service = new ShippingService();
@@ -119,6 +120,37 @@ describe('ShippingService', () => {
       expect(
         service.quoteSellerShipping([dense(40)], 'Emirates'),
       ).toMatchObject({ serviceType: 'UAE FLAT (heavy)', amount: 150 });
+    });
+  });
+
+  describe('payment-verification item', () => {
+    it('waives shipping for the hidden payment-verification item only', () => {
+      const quote = service.quoteSellerShipping(
+        [{ quantity: 1, canonicalPartId: PAYMENT_TEST_PART_ID }],
+        'United Arab Emirates',
+      );
+
+      expect(quote).toMatchObject({
+        serviceType: 'FREE',
+        amount: 0,
+        totalWeightGrams: 0,
+        billableWeightGrams: 0,
+        quotedWeightKg: 0,
+        requiresFreightQuote: false,
+      });
+    });
+
+    it('still charges normal shipping for other items in a mixed cart', () => {
+      const quote = service.quoteSellerShipping(
+        [
+          { quantity: 1, canonicalPartId: PAYMENT_TEST_PART_ID },
+          dense(1),
+        ],
+        'United Arab Emirates',
+      );
+
+      expect(quote.amount).toBe(20);
+      expect(quote.totalWeightGrams).toBe(1000);
     });
   });
 

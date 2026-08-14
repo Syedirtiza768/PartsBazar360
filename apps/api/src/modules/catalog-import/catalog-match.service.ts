@@ -50,7 +50,14 @@ export class CatalogMatchService {
       const blockers: string[] = [];
       let score = 0.7;
 
-      if (input.brandId && row.brandId && input.brandId === row.brandId) {
+      // An OEM/cross-reference number is not a trusted manufacturer-number
+      // namespace. It may be shared by several aftermarket brands, so it
+      // must never become an exact brand-MPN match merely because a brand ID
+      // happens to be present on the row.
+      if (row.numberType !== 'BRAND_MPN') {
+        blockers.push('Number is not a trusted brand MPN namespace');
+        score = 0.35;
+      } else if (input.brandId && row.brandId && input.brandId === row.brandId) {
         score = 1;
         features.push('Exact brand namespace + MPN');
       } else if (

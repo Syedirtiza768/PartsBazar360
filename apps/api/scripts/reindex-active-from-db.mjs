@@ -283,6 +283,7 @@ function toDoc(part) {
       .map((n) => n.normalizedNumber)
       .filter(Boolean),
     imageUrls: part.imageUrls || [],
+    hasImage: Array.isArray(part.imageUrls) && part.imageUrls.length > 0,
     listingUrl: part.listingUrl || null,
     ebayItemId: part.ebayItemId || null,
     // Do NOT index raw compatibility JSON: dynamic mapping breaks when
@@ -375,7 +376,63 @@ async function main() {
       } catch {}
       console.log(`Deleting index ${deleteTarget}...`);
       await os(`/${deleteTarget}`, { method: 'DELETE' });
-      console.log('Index deleted (will auto-create on first bulk index).');
+      console.log('Index deleted.');
+      // Re-create with explicit mapping so fields like hasImage get proper types
+      // instead of dynamic mapping guesses.
+      await os(`/${INDEX}`, {
+        method: 'PUT',
+        body: {
+          settings: {
+            number_of_shards: 1,
+            number_of_replicas: 0,
+            max_result_window: 50000,
+          },
+          mappings: {
+            properties: {
+              id: { type: 'keyword' },
+              title: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
+              partType: { type: 'keyword' },
+              brand: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+              manufacturerPartNumber: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
+              partNumbers: { type: 'object', enabled: false },
+              normalizedPartNumbers: { type: 'keyword' },
+              interchangePartNumbers: { type: 'keyword' },
+              category: { type: 'keyword' },
+              categoryGroup: { type: 'keyword' },
+              makes: { type: 'keyword' },
+              oeNumbers: { type: 'keyword' },
+              imageUrls: { type: 'keyword', index: false },
+              hasImage: { type: 'boolean' },
+              listingUrl: { type: 'keyword', index: false },
+              ebayItemId: { type: 'keyword' },
+              partSource: { type: 'keyword' },
+              qualityTier: { type: 'keyword' },
+              fitmentStatus: { type: 'keyword' },
+              fitmentConfidence: { type: 'float' },
+              createdAt: { type: 'date' },
+              minPrice: { type: 'float' },
+              fitments: { type: 'keyword' },
+              offers: {
+                type: 'nested',
+                properties: {
+                  id: { type: 'keyword' },
+                  price: { type: 'float' },
+                  currency: { type: 'keyword' },
+                  condition: { type: 'keyword' },
+                  partSource: { type: 'keyword' },
+                  qualityTier: { type: 'keyword' },
+                  sellerId: { type: 'keyword' },
+                  sellerName: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+                  sourceTag: { type: 'keyword' },
+                },
+              },
+              sourceTags: { type: 'keyword' },
+              conditions: { type: 'keyword' },
+            },
+          },
+        },
+      });
+      console.log('Index recreated with explicit mapping.');
     }
 
     let indexed = 0;

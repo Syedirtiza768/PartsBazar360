@@ -1,6 +1,6 @@
 # PartsBazar360 — Map of Content
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-14
 
 Entry point for the vault. This is a monorepo (Turborepo + npm workspaces) for an auto-parts marketplace: buyers, sellers, workshops, and an admin console sit on top of one shared catalog and API.
 
@@ -12,6 +12,7 @@ Open this vault in Obsidian at the repo root (`F:\apps\PartsBazar360`) — the g
 - [[apps/seller-portal]] — seller-facing listing/inventory management (Next.js)
 - [[apps/admin-portal]] — internal admin console (Next.js)
 - [[apps/workshop-portal]] — workshop/garage-facing app (Next.js)
+- [[apps/enrichment-workbench]] — local Superior listing title/image/fitment review and approved export (Next.js)
 
 ## Shared packages
 - [[packages/catalog-contracts]] — shared types/schemas between api and frontends

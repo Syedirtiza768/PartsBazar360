@@ -235,7 +235,13 @@ export default function CartPage() {
                 <Select
                   label="Ship to country"
                   value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
+                  onChange={(e) => {
+                    const nextCountry = e.target.value;
+                    // Persist before navigation so checkout cannot restore a
+                    // previous draft country if the buyer clicks immediately.
+                    setShippingCountry(nextCountry);
+                    setDestination(nextCountry);
+                  }}
                   hint="Used for this estimate. Confirm the address country at checkout."
                 >
                   <option value="" disabled>Select country</option>
@@ -283,7 +289,12 @@ export default function CartPage() {
                 fullWidth
                 size="lg"
                 className="mt-4"
-                onClick={() => router.push("/checkout")}
+                onClick={() => {
+                  // Keep the hand-off deterministic even if the selection was
+                  // made immediately before this button was pressed.
+                  setShippingCountry(destination);
+                  router.push("/checkout");
+                }}
                 disabled={loading}
               >
                 Continue to checkout

@@ -67,3 +67,58 @@ describe('CatalogMatchService.pickAutoMatch', () => {
     ).toBeNull();
   });
 });
+
+describe('CatalogMatchService.findCandidates', () => {
+  it('blocks an MPN match across brand namespaces and OEM-number rows', async () => {
+    const prisma = {
+      catalogPartNumber: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            canonicalPartId: 'different-brand',
+            numberType: 'BRAND_MPN',
+            brandId: 'brand-brembo',
+            brand: { displayName: 'BREMBO' },
+            canonicalPart: {
+              id: 'different-brand',
+              title: 'BREMBO sensor',
+              brand: 'BREMBO',
+              manufacturerPartNumber: '7L0907637C',
+              partType: 'AFTERMARKET',
+              position: null,
+            },
+          },
+          {
+            canonicalPartId: 'same-brand-oem-number',
+            numberType: 'OEM',
+            brandId: 'brand-schnieder',
+            brand: { displayName: 'SCHNIEDER' },
+            canonicalPart: {
+              id: 'same-brand-oem-number',
+              title: 'SCHNIEDER sensor',
+              brand: 'SCHNIEDER',
+              manufacturerPartNumber: '7L0907637C',
+              partType: 'AFTERMARKET',
+              position: null,
+            },
+          },
+        ]),
+      },
+    };
+    const service = new CatalogMatchService(prisma as any);
+
+    const candidates = await service.findCandidates({
+      brandId: 'brand-schnieder',
+      brandName: 'SCHNIEDER',
+      manufacturerPartNumber: '7L0 907 637 C',
+    });
+
+    expect(candidates.every((candidate) => candidate.band !== 'EXACT')).toBe(true);
+    expect(service.pickAutoMatch(candidates)).toBeNull();
+    expect(candidates[0].blockers).toContain(
+      'Same normalized number under a different brand namespace',
+    );
+    expect(candidates[1].blockers).toContain(
+      'Number is not a trusted brand MPN namespace',
+    );
+  });
+});

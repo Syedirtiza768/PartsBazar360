@@ -1443,6 +1443,7 @@ export class CheckoutService {
     quantity: number;
     sellerOffer: {
       canonicalPart?: {
+        id?: string | null;
         weight?: number | null;
         weightSource?: string | null;
         partClassKey?: string | null;
@@ -1455,6 +1456,7 @@ export class CheckoutService {
     const part = item.sellerOffer.canonicalPart;
     return {
       quantity: item.quantity,
+      canonicalPartId: part?.id ?? null,
       weightKg: part?.weight ?? null,
       weightSource: part?.weightSource ?? null,
       dimensionsCm: parseDimensionsJson(part?.dimensions),

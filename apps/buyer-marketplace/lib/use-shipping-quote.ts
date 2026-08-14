@@ -66,10 +66,12 @@ export function useShippingQuote(options: {
     }
 
     let cancelled = false;
+    // A quote belongs to both the destination and the charge currency. Do not
+    // keep displaying the previous quote while the new request is pending.
+    setQuote(null);
+    setError(null);
+    setLoading(true);
     const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError(null);
-
       fetch(`${API_BASE_URL}/checkout/${cartId}/shipping-quote`, {
         method: "POST",
         headers: {

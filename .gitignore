@@ -47,6 +47,9 @@ certbot/
 # ~500 MB of working files, some containing database credentials.
 tmp/
 
+# Local-only Superior listing enrichment state and generated catalogue index.
+tmp/superior-enrichment-workbench/
+
 # Obsidian: keep shared vault config (app.json, appearance.json, core-plugins.json)
 # tracked so the vault setup travels with the repo; window/pane layout is per-machine.
 .obsidian/workspace.json

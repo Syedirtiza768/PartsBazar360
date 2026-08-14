@@ -2,6 +2,11 @@ services:
   # ── Infrastructure ──────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
+    # Prisma's PostgreSQL adapter can use several transient shared-memory
+    # segments during concurrent checkout and worker queries. Docker's 64 MiB
+    # default is too small for the deployed workload and surfaces as the
+    # misleading "No space left on device" database error.
+    shm_size: 1gb
     environment:
       POSTGRES_USER: partsbazar_user
       POSTGRES_PASSWORD: partsbazar_password
