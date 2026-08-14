@@ -2,6 +2,28 @@
 
 **Last reviewed:** 2026-08-14
 
+
+## 2026-08-14 — Sort tiebreaks must use `id.keyword` on the legacy index
+
+**Decision:** Browse/fitment sort tiebreakers use `id.keyword`, never plain `id`.
+
+**Why:** Deploying the QA-07 fix with `sort: { id: asc }` took buyer search
+down within minutes — the legacy `canonical_parts` index maps `id` as `text`
+(dynamic mapping with a `keyword` sub-field), and sorting a text field throws
+`search_phase_execution_exception`, which `browseParts`' catch turned into
+`total: 0` for every query. The `id: { type: 'keyword' }` in
+`opensearch.service.ts`'s `ensureIndex` only applies when the service creates
+the index itself; production's index predates it. Lesson locked into the
+regression test comment: sort/agg fields must be verified against the LIVE
+mapping (`GET /canonical_parts/_mapping/field/<field>`), not the create-time
+mapping in code.
+
+**Revisit when:** QA-02 converges search onto the v3 explicit-mapping index —
+there `id` really is a top-level keyword, so the tiebreak field should be
+re-checked at cutover.
+
+---
+
 ## 2026-08-14 — QA Phase-1 pagination correctness fixes
 
 **Decision:** Four search-pagination defects from [[QA_AUDIT_2026-08-14]]
@@ -428,3 +450,8 @@ disk space. This interrupted API requests, including payment processing.
 ---
 
 *(These four entries were backfilled from Claude's memory store and recent commit history when this log was created. Keep adding to it going forward — don't let it go stale.)*
+## 2026-08-14 — Bound OpenSearch memory and restart it automatically
+
+**Decision:** Set OpenSearch's JVM heap to 512 MiB and add `restart: unless-stopped` in the shared Compose deployment.
+
+**Why:** On 2026-08-14 the production OpenSearch container was OOM-killed (exit 137), leaving the API container technically healthy while search requests returned Nginx 502/504 errors. The smaller heap keeps the single EC2 host within its memory budget, and the restart policy restores the search dependency after a transient process failure.
