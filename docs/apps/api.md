@@ -5,6 +5,7 @@
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
 ## Stack
+
 - NestJS (`@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`)
 - Prisma 7 + Postgres (`@prisma/client`, `@prisma/adapter-pg`)
 - OpenSearch (`@opensearch-project/opensearch`) for search
@@ -19,6 +20,7 @@ free capacity.
 Run modes: `start:dev` (web process, watch), `start:worker` (background job worker — separate process, see `src/worker.js`).
 
 ## Modules (`src/modules/*`)
+
 - `auth` — authentication (see [[../decisions]] re: email vs SMS OTP)
 - `cart`
 - `catalog-import` — bulk catalog import pipeline
@@ -75,9 +77,10 @@ The hidden payment-verification part is a deliberate checkout-only exception:
 shipping quote is free. If it is combined with normal items from the same
 seller, only those normal items contribute to the seller shipment quote.
 
-*(This list is mechanically generated from the folder structure — module responsibilities beyond the name are TODO. Fill in as you touch each one.)*
+_(This list is mechanically generated from the folder structure — module responsibilities beyond the name are TODO. Fill in as you touch each one.)_
 
 ## Seed / import / enrichment CLIs
+
 A large surface of one-off `npm run` scripts lives here for populating data from external sources: `seed:realtrack-dynatrade`, `seed:salvagea`, `seed:blackline`, `enrich:febest`, `enrich:dxb`, `import:mvl`, `backfill:compat-mvl`, `enrich:itemspecifics`, `cleanup:ebay-feed`, `export:salvage`. See `apps/api/package.json` for the full, current list — supplier integrations churn, so treat that file as the source of truth over this note.
 
 `scripts/tavily-image-superior-listings.mjs` is a conservative production utility
@@ -169,12 +172,13 @@ before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
 
 ## Open questions / TODO
+
 - Document the auth flow end to end (session model, roles per portal).
 - Document how `listing-pipeline` and `ingestion` relate (pipeline stages?).
 
 ## SEO module (`src/modules/seo/`)
 
-Owns the SEO *lifecycle* — the [[../SEO_ARCHITECTURE|engine]] itself lives in
+Owns the SEO _lifecycle_ — the [[../SEO_ARCHITECTURE|engine]] itself lives in
 [[../packages/catalog-contracts]].
 
 - `SeoSlugService` — assigns a canonical slug once per part and then freezes it;
@@ -183,7 +187,10 @@ Owns the SEO *lifecycle* — the [[../SEO_ARCHITECTURE|engine]] itself lives in
   UUID to a part plus a redirect instruction.
 - `SeoCatalogService` — sitemap chunks (cached windowed chunk boundaries, so
   chunk N is one bounded keyset read rather than N queries) and taxonomy
-  aggregation with index-eligibility.
+  aggregation with index-eligibility. Cold-cache callers share one in-flight
+  aggregate, and expired entries use stale-while-revalidate; this prevents a
+  crawler burst from running duplicate full-catalog scans and starving the
+  vehicle picker of database connections.
 - `SeoHealthService` — per-listing validation, counters, duplicate detection.
 - `SeoController` — `/seo/*` (resolve, sitemap feeds, taxonomy, health,
   overrides, regenerate-slug, cache invalidate, config).
@@ -191,7 +198,7 @@ Owns the SEO *lifecycle* — the [[../SEO_ARCHITECTURE|engine]] itself lives in
 **The load-bearing wiring:** `SearchIndexerService.indexPart` calls
 `ensureSlug()` before indexing. Every write path already reaches the indexer via
 `SearchOutbox`, so a part cannot become buyer-visible without a canonical URL —
-and a *future* import path inherits that without knowing SEO exists. This is why
+and a _future_ import path inherits that without knowing SEO exists. This is why
 `SearchModule` imports `SeoModule`.
 
 Backfill for the existing catalog: `npm run seo:backfill` (run as a standalone
@@ -199,17 +206,17 @@ container, not `docker exec`).
 
 ### Operational CLIs
 
-| Script | Purpose |
-|---|---|
-| `seo:backfill` | Assign canonical slugs to parts that lack one; prints an SEO health report. |
-| `backfill:has-image` | Populate the indexed `hasImage` projection so browse can float imaged listings first. |
+| Script                 | Purpose                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `seo:backfill`         | Assign canonical slugs to parts that lack one; prints an SEO health report.                 |
+| `backfill:has-image`   | Populate the indexed `hasImage` projection so browse can float imaged listings first.       |
 | `payment:test-product` | Create/refresh the hidden 1 AED payment-verification item (`--deactivate` to take it down). |
 
 Two lessons these cost, both worth remembering for any future job of this shape:
 
 - **Bulk OpenSearch writes must be async tasks.** The client's default request
   timeout is 30s. A synchronous `_update_by_query` over ~100k documents closes
-  the socket mid-run and reports *no error* — the first run left 6,037 of
+  the socket mid-run and reports _no error_ — the first run left 6,037 of
   107,543 documents populated and looked like it had succeeded. Submit with
   `wait_for_completion: false` and poll the task.
 - **Nest CLIs must exit explicitly.** `app.close()` does not tear down the

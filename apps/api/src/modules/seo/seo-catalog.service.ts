@@ -86,6 +86,8 @@ interface CacheEntry<T> {
 export class SeoCatalogService implements OnModuleInit {
   private readonly logger = new Logger(SeoCatalogService.name);
   private readonly cache = new Map<string, CacheEntry<unknown>>();
+  /** Cold-cache callers must share one aggregate, just like stale refreshes. */
+  private readonly loading = new Map<string, Promise<unknown>>();
   /** Keys currently being refreshed, so a burst triggers one refresh, not N. */
   private readonly refreshing = new Set<string>();
 
@@ -148,9 +150,18 @@ export class SeoCatalogService implements OnModuleInit {
       return hit.value as T;
     }
 
-    const value = await load();
-    this.cache.set(key, { value, expiresAt: Date.now() + this.cacheTtlMs });
-    return value;
+    const inFlight = this.loading.get(key);
+    if (inFlight) return inFlight as Promise<T>;
+
+    const pending = Promise.resolve()
+      .then(load)
+      .then((value) => {
+        this.cache.set(key, { value, expiresAt: Date.now() + this.cacheTtlMs });
+        return value;
+      })
+      .finally(() => this.loading.delete(key));
+    this.loading.set(key, pending);
+    return pending;
   }
 
   /** Drop cached aggregates — called after a bulk import or a backfill. */
