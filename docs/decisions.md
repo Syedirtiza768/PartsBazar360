@@ -2,6 +2,19 @@
 
 **Last reviewed:** 2026-08-14
 
+## 2026-08-14 — Keep DealSEAL routing in the shared nginx deployment
+
+**Decision:** The `dealseal.realtrackapp.com` HTTP and HTTPS virtual hosts live
+in the repository's shared nginx configuration. HTTP serves ACME challenges and
+redirects other requests to HTTPS; HTTPS proxies to the `dealseal-app:3050`
+container on the shared Docker network.
+
+**Why:** Keeping the route in version control prevents a server-only nginx
+change from being lost on the next `docker compose` recreate and ensures the
+hostname's certificate and upstream behavior are deployed together.
+
+---
+
 ## 2026-08-14 — Keep payment-verification shipping free
 
 **Decision:** The fixed hidden payment-verification part is excluded from
