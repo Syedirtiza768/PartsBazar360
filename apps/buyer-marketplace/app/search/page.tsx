@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonClasses } from "@repo/ui/button";
 import { EmptyState } from "@repo/ui/empty-state";
 import { SearchIcon, CarIcon } from "@repo/ui/icons";
@@ -183,6 +184,39 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     // Never link pages beyond the OpenSearch result window — they would load
     // empty. For catalogs under the window this is a no-op.
     totalPages = Math.max(1, Math.min(raw, results.maxPage || raw));
+  }
+
+  // A page beyond the result set (stale bookmark, hand-edited URL, or a filter
+  // change that shrank the catalog while a deep page was shared) must recover
+  // to the last valid page — not render "No parts match" over a query that
+  // DID match (the API now reports the true total + pageOutOfRange for
+  // beyond-window pages instead of a fake 0).
+  if (
+    results &&
+    results.total > 0 &&
+    results.items.length === 0 &&
+    page > totalPages
+  ) {
+    redirect(
+      buildHref(
+        {
+          vehicleConfigId: params.vehicleConfigId,
+          q: params.q,
+          category: params.category,
+          categoryGroup: params.categoryGroup,
+          brand: params.brand,
+          make: params.make,
+          partType: params.partType,
+          sourceTag: params.sourceTag,
+          minPrice: params.minPrice,
+          maxPrice: params.maxPrice,
+          sort: params.sort,
+          includeInterchange: params.includeInterchange,
+          pageSize: params.pageSize,
+        },
+        { page: String(totalPages) },
+      ),
+    );
   }
 
   const paramsShape: SearchParamsShape = {

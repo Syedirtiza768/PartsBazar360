@@ -306,6 +306,11 @@ export interface BrowseResponse {
    * rather than letting the buyer read them as exact hits.
    */
   relaxed?: boolean;
+  /**
+   * True when the requested page is beyond the offset result window. The API
+   * still returns the true total; the page redirects to the last valid page.
+   */
+  pageOutOfRange?: boolean;
 }
 
 export interface Facet {

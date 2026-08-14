@@ -2,6 +2,32 @@
 
 **Last reviewed:** 2026-08-14
 
+## 2026-08-14 — QA Phase-1 pagination correctness fixes
+
+**Decision:** Four search-pagination defects from [[QA_AUDIT_2026-08-14]]
+(QA-01/04/05/06/07) were fixed in one pass:
+
+1. **Relaxed matching applies on every page, not just page 1.** Page 1 used to
+   report the relaxed total while page 2+ re-ran the strict query and returned
+   `total: 0` ("No matching parts" one click after thousands of related parts).
+2. **Beyond-window pages report the true total** via a `size: 0` count (with
+   the same relaxation rule) plus a `pageOutOfRange` flag — never a fake `0`.
+3. **Every browse/fitment sort ends with an `id` tiebreak** so ties at a page
+   boundary cannot swap order across segment merges.
+4. **The fitment branch honors `pageSize`** (alias of `limit`), matching the
+   browse branch; the UI's 75-per-page ranges now match reality.
+5. **`/search` redirects out-of-range pages to the last valid page** instead of
+   rendering the zero-result empty state over a query that did match.
+
+**Why:** the audit verified each live (e.g. `q=xyzzy+brake+pad`: page 1 total
+7,917 → page 2 total 0; browse-all 107,565 > 100,000 window with page 1,400
+claiming an empty catalog). Regression tests lock all five behaviors in
+`opensearch.browse-query.spec.ts` (14 passing).
+
+**Revisit when:** cursor/`search_after` pagination replaces offset for deep
+pages (QA-04 long-term path), or the QA-02 dual-stack convergence changes
+which service owns `/search/parts`.
+
 ## 2026-08-14 — Keep DealSEAL routing in the shared nginx deployment
 
 **Decision:** The `dealseal.realtrackapp.com` HTTP and HTTPS virtual hosts live

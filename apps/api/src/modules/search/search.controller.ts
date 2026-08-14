@@ -190,9 +190,18 @@ export class SearchController implements OnModuleDestroy {
   ) {
     if (vehicleConfigId) {
       const pageNum = page ? parseInt(page, 10) : 1;
-      const limitNum = limit ? Math.min(parseInt(limit, 10), 200) : 24;
+      // `pageSize` (the buyer UI's selector) and `limit` (programmatic) are
+      // aliases here too. Ignoring pageSize paginated fitment results at 24
+      // while the UI displayed ranges computed at 75 ("Showing 1–75 of 98"
+      // above 24 cards).
+      const rawLimit = pageSize ?? limit;
+      const limitNum = rawLimit
+        ? Math.min(parseInt(rawLimit, 10), 200)
+        : 24;
+      const resolvedFitmentLimit =
+        Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
 
-      const cacheK = this.cacheKey('fitment', { vehicleConfigId, q, page: pageNum, limit: limitNum });
+      const cacheK = this.cacheKey('fitment', { vehicleConfigId, q, page: pageNum, limit: resolvedFitmentLimit });
       const cached = await this.cacheGet<any>(cacheK);
       if (cached) return cached;
 
@@ -201,7 +210,7 @@ export class SearchController implements OnModuleDestroy {
         q,
         {
           page: pageNum,
-          limit: limitNum,
+          limit: resolvedFitmentLimit,
         },
       );
       if (countOnly === 'true') {

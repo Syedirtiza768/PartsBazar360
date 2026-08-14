@@ -55,6 +55,12 @@ export interface BrowseResult {
    * buyer UI should say so rather than presenting them as matches.
    */
   relaxed?: boolean;
+  /**
+   * True when the requested page sits beyond the offset result window. The
+   * response still carries the TRUE total (never a fake 0) so the UI can
+   * recover to the last valid page instead of claiming the catalog is empty.
+   */
+  pageOutOfRange?: boolean;
 }
 
 /** Coerce a query param (string | string[] | comma-list) into a de-duplicated string[]. */
@@ -439,10 +445,14 @@ export class OpenSearchService implements OnModuleInit {
           },
           // Imaged listings first here too: a verified-fit result the buyer
           // cannot see a photo of is the least useful thing to lead with.
-          // Lowest price still orders within each group.
+          // Lowest price still orders within each group. The trailing id
+          // tiebreak keeps ties (same image flag + same price) in a stable
+          // order across index refreshes, so items cannot duplicate or vanish
+          // between pages.
           sort: [
             { hasImage: { order: 'desc', missing: '_last' } },
             { minPrice: { order: 'asc', missing: '_last' } },
+            { id: { order: 'asc' } },
           ],
         } as any,
       });
@@ -633,18 +643,23 @@ export class OpenSearchService implements OnModuleInit {
      */
     const imagesFirst = { hasImage: { order: 'desc', missing: '_last' } };
 
+    // Final unique tiebreak on the indexed keyword `id`: without it, results
+    // tied on score / price / createdAt at a page boundary can swap order
+    // across segment merges, duplicating or dropping items between pages.
+    const idTiebreak = { id: { order: 'asc' } };
+
     const sortClause: any[] = useRelevance
       ? // Deliberately NOT images-first: on a part-number query an exact
         // match must win even without a photo, or the search stops being
         // usable for the identifier lookups this catalogue exists to serve.
         // Image preference is applied as a score nudge instead (see the
         // `should` clause below) and as a tiebreaker here.
-        [{ _score: { order: 'desc' } }, imagesFirst, { createdAt: { order: 'desc' } }]
+        [{ _score: { order: 'desc' } }, imagesFirst, { createdAt: { order: 'desc' } }, idTiebreak]
       : sort === 'price_asc'
-        ? [imagesFirst, { minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
+        ? [imagesFirst, { minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }, idTiebreak]
         : sort === 'price_desc'
-          ? [imagesFirst, { minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }]
-          : [imagesFirst, { createdAt: { order: 'desc' } }];
+          ? [imagesFirst, { minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }, idTiebreak]
+          : [imagesFirst, { createdAt: { order: 'desc' } }, idTiebreak];
 
     // --- scoped facets. Each dimension aggregates over every OTHER active
     //     filter (incl. the keyword), so counts answer "if I add this, how
@@ -728,20 +743,67 @@ export class OpenSearchService implements OnModuleInit {
     });
 
     // Deep-page guard: from + size must stay inside max_result_window or
-    // OpenSearch throws. Pages beyond the window return empty gracefully
-    // (the frontend caps visible page count to total/size, so this is a
-    // safety net against hand-edited URLs, not a normal path).
+    // OpenSearch throws. Pages beyond the window return no items — but they
+    // must still report the TRUE total (a cheap size:0 count) plus a
+    // pageOutOfRange flag. Returning a fake total: 0 here made a hand-edited
+    // or stale URL claim the whole catalog was empty ("No parts match").
     const from = (pageNum - 1) * size;
     if (from + size > this.maxResultWindow) {
-      return {
-        items: [],
-        total: 0,
-        totalRelation: 'eq',
-        page: pageNum,
-        limit: size,
-        maxPage,
-        facets: emptyFacets(),
-      };
+      try {
+        const countQuery = (clause: any | null) =>
+          this.client.search({
+            index: this.INDEX_NAME,
+            body: {
+              size: 0,
+              track_total_hits: true,
+              query: {
+                bool: {
+                  must: clause ? [clause] : [{ match_all: {} }],
+                  filter: baseFilters,
+                },
+              },
+            } as any,
+          });
+        const totalOf = (res: any) => {
+          const t = res.body.hits.total;
+          return typeof t === 'number' ? t : Number(t?.value || 0);
+        };
+        let countRes = await countQuery(qClause);
+        let total = totalOf(countRes);
+        let relaxed = false;
+        // Same relaxation rule as in-window pages: a query whose strict set is
+        // empty reports its relaxed total, so a deep relaxed URL agrees with
+        // page 1 instead of contradicting it.
+        if (hasQuery && total === 0) {
+          const relaxedClause = buildQClause('relaxed');
+          countRes = await countQuery(relaxedClause);
+          total = totalOf(countRes);
+          relaxed = true;
+        }
+        return {
+          items: [],
+          total,
+          totalRelation: 'eq',
+          page: pageNum,
+          limit: size,
+          maxPage,
+          facets: emptyFacets(),
+          ...(relaxed ? { relaxed } : {}),
+          pageOutOfRange: true,
+        };
+      } catch (error) {
+        this.logger.error('browseParts out-of-range count failed', error.stack);
+        return {
+          items: [],
+          total: 0,
+          totalRelation: 'eq',
+          page: pageNum,
+          limit: size,
+          maxPage,
+          facets: emptyFacets(),
+          pageOutOfRange: true,
+        };
+      }
     }
 
     try {
@@ -779,15 +841,19 @@ export class OpenSearchService implements OnModuleInit {
 
       // Strict matching is right when the catalogue has the part and wrong when
       // it does not — "front bumper for 2018 Audi Q7" would return an empty
-      // page rather than close alternatives. An empty first page is retried
-      // relaxed; deeper pages keep the strict query so pagination stays
-      // consistent with the page-1 total the buyer was shown.
+      // page rather than close alternatives. An empty strict result set is
+      // retried relaxed on EVERY page: relaxing only page 1 made page 1 report
+      // the relaxed total while page 2+ re-ran the strict query, returned
+      // total 0, and rendered "No matching parts" one click after showing
+      // thousands of related parts.
       //
       // Only a genuinely empty result set triggers the retry. Padding a thin
       // one is worse than leaving it thin: a pasted part number legitimately
       // returns a single hit, and treating that as "no exact matches, showing
-      // related parts" mislabels a perfect match as a failure.
-      if (hasQuery && pageNum === 1) {
+      // related parts" mislabels a perfect match as a failure. `hits.total` is
+      // page-independent, so the strict check is just as accurate on deep
+      // pages as on page 1.
+      if (hasQuery) {
         const strictTotalRaw = response.body.hits.total;
         const strictTotal =
           typeof strictTotalRaw === 'number'

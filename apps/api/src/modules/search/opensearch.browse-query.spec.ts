@@ -99,12 +99,62 @@ describe('browseParts query construction', () => {
     expect(result.total).toBe(40);
   });
 
-  it('does not retry on deep pages, so pagination stays consistent', async () => {
+  it('relaxes on deep pages too, so page 2 agrees with page 1', async () => {
+    // Regression: relaxation used to run only on page 1. Page 1 reported the
+    // relaxed total (e.g. 7,917 "related parts") while page 2 re-ran the
+    // strict query, returned total 0, and rendered "No matching parts".
     const { service, calls } = stubService([0, 40]);
+    const result = await service.browseParts({ q: 'xyzzy brake pad', page: 2 });
+
+    expect(calls).toHaveLength(2);
+    expect(multiMatchOf(calls[0].body).minimum_should_match).toBe('3<75%');
+    expect(multiMatchOf(calls[1].body).minimum_should_match).toBe('2<50%');
+    expect(result.relaxed).toBe(true);
+    expect(result.total).toBe(40);
+  });
+
+  it('keeps strict matching on deep pages when strict results exist', async () => {
+    const { service, calls } = stubService([500]);
     const result = await service.browseParts({ q: 'Audi bumper', page: 3 });
 
     expect(calls).toHaveLength(1);
     expect(result.relaxed).toBe(false);
+  });
+
+  it('appends a unique id tiebreak to every sort order', async () => {
+    // Without a unique final tiebreak, ties at a page boundary can swap order
+    // across segment merges — duplicating or dropping items between pages.
+    for (const sort of ['relevance', 'newest', 'price_asc', 'price_desc'] as const) {
+      const { service, calls } = stubService([100]);
+      await service.browseParts({ q: 'brake pad', sort });
+      const clause = calls[0].body.sort;
+      expect(clause[clause.length - 1]).toEqual({ id: { order: 'asc' } });
+    }
+  });
+
+  it('reports the true total — never a fake 0 — beyond the result window', async () => {
+    // Regression: pages past max_result_window used to return total 0, making
+    // a stale/hand-edited deep URL claim the whole catalog was empty.
+    const { service, calls } = stubService([107565]);
+    const result = await service.browseParts({ page: 5000, limit: 24 });
+
+    // One cheap size:0 count query, no hits requested.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body.size).toBe(0);
+    expect(calls[0].body.from).toBeUndefined();
+    expect(result.items).toEqual([]);
+    expect(result.total).toBe(107565);
+    expect(result.pageOutOfRange).toBe(true);
+  });
+
+  it('reports the relaxed total beyond the result window for no-match queries', async () => {
+    const { service, calls } = stubService([0, 40]);
+    const result = await service.browseParts({ q: 'xyzzy brake pad', page: 5000, limit: 24 });
+
+    expect(calls).toHaveLength(2);
+    expect(result.total).toBe(40);
+    expect(result.relaxed).toBe(true);
+    expect(result.pageOutOfRange).toBe(true);
   });
 
   it('emits no query clause for a filter-only browse', async () => {
