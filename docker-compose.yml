@@ -136,6 +136,9 @@ services:
       RUN_INGESTION_WORKER: "1"
       SKIP_OS_INDEX_ON_INGEST: "1"
       DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-8}
+      # SEO taxonomy caches belong to the request-serving API. Priming from
+      # this separate process duplicates full-catalog scans against Postgres.
+      SEO_CACHE_PRIME: "0"
       REALTRACK_API_URL: https://mhn.realtrackapp.com/api
       REALTRACK_API_EMAIL: api-published-listings@realtrack.local
       REALTRACK_API_PASSWORD: Ebay$321

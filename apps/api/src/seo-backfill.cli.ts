@@ -38,6 +38,9 @@ function option(name: string, fallback: number): number {
 
 async function main(): Promise<void> {
   const logger = new Logger('SeoBackfill');
+  // This standalone job must not prime the request-serving SEO cache. Its
+  // aggregate scans would compete with live vehicle and catalog traffic.
+  process.env.SEO_CACHE_PRIME = '0';
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });

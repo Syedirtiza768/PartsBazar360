@@ -37,9 +37,12 @@ interface CacheEntry<T> {
   expires: number;
 }
 
+type VehicleOption = { id: string; name: string };
+
 @Injectable()
 export class VehicleService {
   private makesCache: CacheEntry<unknown[]> | null = null;
+  private makesLoading: Promise<VehicleOption[]> | null = null;
   private modelsCache = new Map<string, CacheEntry<unknown[]>>();
   private gensCache = new Map<string, CacheEntry<unknown[]>>();
   private configsCache = new Map<string, CacheEntry<unknown[]>>();
@@ -54,26 +57,38 @@ export class VehicleService {
   async getMakes() {
     const cached = this.getCached(this.makesCache);
     if (cached) return cached;
+    if (this.makesLoading) return this.makesLoading;
 
-    const data = await this.prisma.vehicleMake.findMany({
-      where: {
-        models: {
-          some: {
-            generations: {
-              some: {
-                configurations: {
-                  some: { fitments: { some: SEARCH_GRADE_FITMENT } },
+    // The make list is an expensive fitment-graph query on a cold process.
+    // Share it across SSR, browser, and crawler callers so a burst cannot
+    // create one full scan per request.
+    const pending = this.prisma.vehicleMake
+      .findMany({
+        where: {
+          models: {
+            some: {
+              generations: {
+                some: {
+                  configurations: {
+                    some: { fitments: { some: SEARCH_GRADE_FITMENT } },
+                  },
                 },
               },
             },
           },
         },
-      },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      })
+      .then((data) => {
+        this.makesCache = { data, expires: Date.now() + CACHE_TTL_MS };
+        return data;
+      });
+    const shared = pending.finally(() => {
+      this.makesLoading = null;
     });
-    this.makesCache = { data, expires: Date.now() + CACHE_TTL_MS };
-    return data;
+    this.makesLoading = shared;
+    return shared;
   }
 
   async getModelsByMake(makeId: string) {

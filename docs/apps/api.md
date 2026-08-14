@@ -191,6 +191,9 @@ Owns the SEO _lifecycle_ — the [[../SEO_ARCHITECTURE|engine]] itself lives in
   aggregate, and expired entries use stale-while-revalidate; this prevents a
   crawler burst from running duplicate full-catalog scans and starving the
   vehicle picker of database connections.
+- The API worker and standalone `seo-backfill` CLI set `SEO_CACHE_PRIME=0`.
+  Only the request-serving API primes the SEO cache; otherwise each process
+  would independently scan the fitment graph at startup.
 - `SeoHealthService` — per-listing validation, counters, duplicate detection.
 - `SeoController` — `/seo/*` (resolve, sitemap feeds, taxonomy, health,
   overrides, regenerate-slug, cache invalidate, config).
