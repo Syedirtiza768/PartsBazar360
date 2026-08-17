@@ -39,9 +39,14 @@ services:
     environment:
       - discovery.type=single-node
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=ComplexAdminPassword123!
+      # Keep the search JVM within the EC2 instance's memory budget. The
+      # default 1 GiB heap previously let OpenSearch grow to an OOM kill,
+      # taking search-backed API requests down with it.
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
       # Security plugin disabled for local/MVP use so the API can talk to
       # OpenSearch over plain HTTP without managing TLS certs.
       - plugins.security.disabled=true
+    restart: unless-stopped
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     healthcheck:
@@ -68,6 +73,13 @@ services:
       REALTRACK_API_URL: https://mhn.realtrackapp.com/api
       REALTRACK_API_EMAIL: api-published-listings@realtrack.local
       REALTRACK_API_PASSWORD: Ebay$321
+      # Optional bridge overrides. If blank, the bridge reuses the existing
+      # REALTRACK_API_EMAIL / REALTRACK_API_PASSWORD values above.
+      REALTRACK_BRIDGE_API_URL: ${REALTRACK_BRIDGE_API_URL:-https://mhn.realtrackapp.com/api}
+      REALTRACK_BRIDGE_EMAIL: ${REALTRACK_BRIDGE_EMAIL:-}
+      REALTRACK_BRIDGE_PASSWORD: ${REALTRACK_BRIDGE_PASSWORD:-}
+      REALTRACK_BRIDGE_SOURCE_CURRENCY: ${REALTRACK_BRIDGE_SOURCE_CURRENCY:-USD}
+      REALTRACK_BRIDGE_TARGET_CURRENCY: ${REALTRACK_BRIDGE_TARGET_CURRENCY:-USD}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
       BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.com/buyer}

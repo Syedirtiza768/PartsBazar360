@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Support", href: "/support", icon: MessageIcon, matchPrefix: true },
   { label: "Catalog queues", href: "/catalog", icon: ClipboardIcon, matchPrefix: true },
   { label: "Operations", href: "/operations", icon: GridIcon, matchPrefix: true },
+  { label: "RealTrack bridge", href: "/realtrack-bridge", icon: GridIcon, matchPrefix: true },
   { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
 ];
 
