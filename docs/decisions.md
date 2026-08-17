@@ -3,6 +3,22 @@
 **Last reviewed:** 2026-08-14
 
 
+## 2026-08-17 — Reuse the existing RealTrack reader credentials for the bridge
+
+**Decision:** The bridge falls back to the existing `REALTRACK_API_EMAIL` and
+`REALTRACK_API_PASSWORD` values when dedicated `REALTRACK_BRIDGE_*` overrides
+are absent. RealTrack remains authoritative for permission checks; a reader-
+only account can browse existing data but will fail bridge writes until its
+permissions are expanded.
+
+**Why:** The requested deployment already has the RealTrack account configured,
+and duplicating the same secret into a second environment variable adds secret
+drift without adding capability.
+
+**Revisit when:** the existing account must remain strictly read-only or a
+separate least-privilege write account is provisioned.
+
+
 ## 2026-08-14 — Sort tiebreaks must use `id.keyword` on the legacy index
 
 **Decision:** Browse/fitment sort tiebreakers use `id.keyword`, never plain `id`.
@@ -316,6 +332,25 @@ Format:
 ```
 
 ---
+
+## 2026-08-17 — Use an explicit, dry-run-first RealTrack listing bridge
+
+**Decision:** PartsBazar360 owns the admin-facing selection and pricing step
+through `realtrack-bridge`; it creates or updates RealTrack listing records by
+deterministic SKU and delegates optional eBay publishing to RealTrack's
+existing publisher. The bridge uses `SellerOffer.sellerBasePrice` as cost,
+falls back to `price`, requires an explicit source currency, skips costs below
+$5, and defaults live transfer to an explicit opt-in from the admin screen.
+
+**Why:** RealTrack already has the authoritative listing/eBay workflow and
+seller OAuth state, while PartsBazar owns the source offers. Keeping the
+boundary at RealTrack's existing API avoids duplicating eBay publishing logic
+or storing seller OAuth tokens in PartsBazar. Currency matching and dry-run
+defaults prevent an AED/ USD mix-up or accidental bulk publish.
+
+**Revisit when:** the bridge needs to transfer structured compatibility or
+item-specific data that RealTrack's create-listing contract does not currently
+accept; that would require a deliberate cross-application contract change.
 
 ## 2026-08-10 — Product image deduplication, SVG filtering, and description HTML entity decoding
 

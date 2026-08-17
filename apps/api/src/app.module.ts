@@ -20,6 +20,7 @@ import { EnrichmentModule } from './modules/enrichment/enrichment.module';
 import { EmailModule } from './modules/email/email.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { RealtrackBridgeModule } from './modules/realtrack-bridge/realtrack-bridge.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { SmsModule } from './modules/sms/sms.module';
     ListingPipelineModule,
     EnrichmentModule,
     SeoModule,
+    RealtrackBridgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

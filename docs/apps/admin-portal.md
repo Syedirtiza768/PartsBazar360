@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-17
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -24,3 +24,11 @@ validation and audit logging, so the UI cannot bypass the workflow.
   dashboard data.
 - `auth` for admin and fulfillment-operator sessions.
 - `catalog-import` for catalog governance queues.
+
+## RealTrack bridge
+
+`/realtrack-bridge` lets an admin search and select individual active
+PartsBazar seller offers, inspect the formula result and skip reason, then
+transfer the selected records into RealTrack. It defaults to transfer-only;
+the optional eBay publish checkbox requires RealTrack store IDs and a bridge
+write account with eBay publish permission.

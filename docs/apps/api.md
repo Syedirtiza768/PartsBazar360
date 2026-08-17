@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-17
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -36,6 +36,7 @@ Run modes: `start:dev` (web process, watch), `start:worker` (background job work
 - `operations`
 - `order`
 - `pricing`
+- `realtrack-bridge` — admin-only selection, pricing preview, and transfer of PartsBazar offers into the existing RealTrack listing API
 - `search` — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[../SEARCH_PHASE1_AUDIT]], [[../SEARCH_PHASE2_RESULTS]]
 - `seed` — marketplace seeding, see [[../SEEDING_AND_IMPORTS]]
 - `sms` — SMSGlobal REST API (see [[../decisions]])
@@ -171,6 +172,33 @@ queues source and target parts for search indexing. Review the generated report
 before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
 
+## RealTrack listing bridge
+
+`realtrack-bridge` exposes `GET /admin/realtrack-bridge/offers` plus admin-only
+`POST /admin/realtrack-bridge/preview` and `/transfer` routes. The admin portal
+uses these routes from `/realtrack-bridge` to select individual active seller
+offers and review the calculated price before writing to RealTrack.
+
+The bridge uses `SellerOffer.sellerBasePrice` as cost, falling back to
+`SellerOffer.price` when no base cost is stored. It applies the following
+inclusive bands: 5–15 → 38.00, 16–21 → 45.99, 22–25 → 49.99, and above 25 →
+cost × 2; costs below 5 are skipped. Source and target currencies are explicit
+(`REALTRACK_BRIDGE_SOURCE_CURRENCY` / `REALTRACK_BRIDGE_TARGET_CURRENCY`, both
+defaulting to USD), so an AED offer is not silently treated as a USD cost.
+Inactive, currency-mismatched, and zero-available-inventory offers are skipped
+by default. Transfer defaults to dry-run at the API boundary; the UI sends an
+explicit live transfer only after selection. Optional eBay publishing delegates
+to RealTrack's existing `channels/ebay/publish-batch` route, passing the
+selected target currency, and requires store IDs plus a RealTrack account with
+the relevant write permissions.
+
+The bridge uses `REALTRACK_BRIDGE_*` credentials when supplied, otherwise it
+reuses the existing `REALTRACK_API_EMAIL` / `REALTRACK_API_PASSWORD` values.
+Those credentials must have `listings.create` for transfer and `ebay.publish`
+for optional eBay publishing; a reader-only account will receive a permission
+error. Credentials remain environment-only and are never placed in source
+control.
+
 ## Open questions / TODO
 
 - Document the auth flow end to end (session model, roles per portal).
@@ -231,3 +259,45 @@ Two lessons these cost, both worth remembering for any future job of this shape:
 
 And, as elsewhere: run long jobs as a standalone `docker run` container, not
 `docker compose exec` — an exec session dies when the container is recreated.
+
+## Lemforder controlled production import
+
+The approved Lemforder production path is intentionally separate from the
+ordinary generic MVL backfill. The enrichment-workbench builds a deduplicated
+payload from the FCPEuro Luna evidence and application compatibility sidecar;
+`apply-lemforder-production-replacement.mjs` validates the exact active
+Superior scope, writes a rollback snapshot, replaces canonical/offer content
+and media transactionally, and queues `SearchOutbox` entries.
+
+`backfill-lemforder-compat-from-mvl.mjs` stages application and FCPEuro vehicle
+text against `MvlVehicle`, deduplicates at market/year/make/model granularity,
+bulk-upserts the vehicle hierarchy and verified `Fitment`/`FitmentEvidence`
+rows, and marks only matched parts `MVL_VERIFIED`. It is dry-run by default;
+`--apply` is required. `backfill-lemforder-url-compatibility.mjs` is the
+narrow fallback for verified FCPEuro vehicle text that has no MVL match. It
+writes `FCPEURO_URL_DECLARED` compatibility for source traceability, never creates
+an unverified year/configuration fitment, and also requires `--apply`.
+
+The 2026-08-15 run updated 1,430 canonical parts and 1,431 active offers, created
+95,799 MVL-backed `Fitment` rows across 910 parts, and added 15 confirmed
+FCPEuro product-title/application compatibility rows across four parts. Final
+production verification is 938 `CONFIRMED`, 492 with source enrichment still pending, 495 empty
+compatibility arrays, zero prohibited fitment-warning titles, and 934 parts with
+relational `Fitment` rows. The targeted 499-request FCPEuro gap refresh cost
+$0.15614822; four product URLs were verified and the remaining requests were
+blocked or returned 404/429, so no compatibility was invented from an MPN alone.
+The gap-refresh and prior MVL rollback backups remain in the enrichment-workbench
+temporary area. Buyer search uses the `parts_search` alias (`canonical_parts_v3`).
+
+The live buyer marketplace no longer renders the `unknown` fitment badge, so the
+warning pill is removed altogether; compatibility tables remain
+available as the evidence view. The schema-compatible reindex worker processed all
+1,430 active Lemforder parts through `parts_search` with eight parallel workers,
+400-row batches, and zero OpenSearch failures after refresh.
+## 2026-08-15 active-catalog reindex and facet mapping
+
+The active-catalog rebuild deletes and recreates `canonical_parts` with text fields carrying the
+`.keyword` subfields consumed by browse/facet queries (`category`, `categoryGroup`, `partType`,
+`makes`, `conditions`, and `sourceTags`). It reads only canonical parts with an ACTIVE offer from
+an ACTIVE seller, indexes bounded batches with `WORKERS`/`REINDEX_WORKERS` (capped at 16), refreshes
+once, and compares the final OpenSearch count to the Postgres eligible count.
