@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-17
+**Last reviewed:** 2026-08-20
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -115,6 +115,15 @@ enqueues changed parts through `SearchOutbox` so buyer search is refreshed.
 Run a small `DRY_RUN=1` pilot before the live pass; use bounded `WORKERS` and
 keep the backup/report files with the operational record.
 
+### Image URL safety
+
+The API rejects legacy `/api/search/parts/:id/catalog-image/:index` values at
+both search-index and PDP response boundaries. Those paths were written by an
+older Parts Finder import, but no serving route exists for them. Production
+repair must replace them with validated absolute URLs already present in
+`ProductMedia`; the filter remains in place so stale search documents cannot
+reintroduce a dead image as the primary card image.
+
 `scripts/apply-superior-official-recovery.mjs` is the write-side of the
 no-image official-brand recovery pass. The connected You.com lookup layer must
 first return an official manufacturer page, an exact brand + manufacturer-part-
@@ -148,6 +157,21 @@ while task-side You.com results are ingested. Claims
 use `FOR UPDATE SKIP LOCKED`, so bounded parallel workers can process the same
 job safely and retries survive container replacement.
 
+`modules/vehicle/vehicle-config-identity.util.ts` (`resolveVehicleConfiguration`)
+is the single get-or-create path for `VehicleConfiguration` rows (QA-03,
+2026-08-20). Identity is the generation plus case-insensitive, NULL/''-normalized
+display fields (trim, engine, transmission, drivetrain, fuel); `market` and
+`epid` are provenance only. It replaces the three old findFirst-then-create
+sites (merchant uploads, ingestion processor, MVL fitment service) that raced
+under parallel workers and produced buyer-indistinguishable duplicate configs
+with fitments split across the twins. The
+`VehicleConfiguration_display_identity_key` expression index makes a lost
+create race raise P2002, which the resolver converts into returning the
+winner's row; `scripts/dedupe-vehicle-configs.mjs` (dry-run default, `APPLY=1`)
+collapses pre-existing duplicate groups before the migration can be applied.
+Run order on the server: dedupe script → `prisma migrate deploy` → API/worker
+deploy.
+
 `scripts/run-superior-official-recovery-job.mjs` is the resumable server-side
 coordinator for this pass. It selects the next active no-image rows by UUID
 cursor, sends one batched discovery query to You.com's MCP `you-search` with
@@ -176,21 +200,42 @@ All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal
 
 `realtrack-bridge` exposes `GET /admin/realtrack-bridge/offers` plus admin-only
 `POST /admin/realtrack-bridge/preview` and `/transfer` routes. The admin portal
-uses these routes from `/realtrack-bridge` to select individual active seller
-offers and review the calculated price before writing to RealTrack.
+uses these routes from `/realtrack-bridge` to select active seller offers and
+review the calculated price before writing to RealTrack. The offers list is
+pageable with `page` and `limit` and accepts `search`, `brand`, `sourceTag`,
+`sellerId`, `status`, `sourceCurrency`, `targetCurrency`, and
+`includeOutOfStock`; the admin UI surfaces these filters.
 
 The bridge uses `SellerOffer.sellerBasePrice` as cost, falling back to
-`SellerOffer.price` when no base cost is stored. It applies the following
-inclusive bands: 5–15 → 38.00, 16–21 → 45.99, 22–25 → 49.99, and above 25 →
-cost × 2; costs below 5 are skipped. Source and target currencies are explicit
-(`REALTRACK_BRIDGE_SOURCE_CURRENCY` / `REALTRACK_BRIDGE_TARGET_CURRENCY`, both
-defaulting to USD), so an AED offer is not silently treated as a USD cost.
-Inactive, currency-mismatched, and zero-available-inventory offers are skipped
-by default. Transfer defaults to dry-run at the API boundary; the UI sends an
-explicit live transfer only after selection. Optional eBay publishing delegates
-to RealTrack's existing `channels/ebay/publish-batch` route, passing the
-selected target currency, and requires store IDs plus a RealTrack account with
-the relevant write permissions.
+`SellerOffer.price` when no base cost is stored. Each offer's actual currency
+is converted to USD before applying the inclusive bands: 5–15 → 38.00,
+16–21 → 45.99, 22–25 → 49.99, and above 25 → cost × 2; converted costs below
+5 USD are skipped. USD output is enforced at the API boundary. Rates use the
+configured `REALTRACK_BRIDGE_FX_RATES` map when present, otherwise the
+ExchangeRate-API open-access USD table, cached in-process. Missing rates are
+skipped safely as `currency_conversion_unavailable`. The source-currency UI
+field is an optional list filter, not a conversion requirement.
+
+The bridge loads the complete canonical image gallery, stored item details,
+stored compatibility JSON, and every relational fitment row with vehicle
+configuration details. The RealTrack listing-create contract accepts the full
+gallery (`imageUrls`, mirrored to `itemPhotoUrl`) and raw `fitmentData` /
+`fitmentRows`; the listing write also upserts the matching
+`catalog_products` row, which is the canonical source used by eBay publishing.
+When eBay publishing is enabled, raw PartsBazar fitment rows are additionally
+normalized to RealTrack's accepted `compatibility.compatibleProducts` shape and
+sent through `publish-batch`.
+Transfer defaults to dry-run at the API boundary;
+the UI sends an explicit live transfer only after selection. A filtered
+transfer can set `selectAll: true` with `maxItems` up to 5,000, so it resolves
+the complete server-side result rather than only the visible page. Live
+transfers are queued on BullMQ and processed by the dedicated worker at one
+remote write at a time; the RealTrack client spaces requests and retries 429
+responses using `Retry-After` and exponential backoff. Optional eBay
+publishing delegates to RealTrack's existing `channels/ebay/publish-batch`
+route and requires store IDs plus a RealTrack account with the relevant write
+permissions. `GET /admin/realtrack-bridge/transfer/:jobId` reports progress and
+the completed transfer result.
 
 The bridge uses `REALTRACK_BRIDGE_*` credentials when supplied, otherwise it
 reuses the existing `REALTRACK_API_EMAIL` / `REALTRACK_API_PASSWORD` values.
@@ -294,6 +339,33 @@ warning pill is removed altogether; compatibility tables remain
 available as the evidence view. The schema-compatible reindex worker processed all
 1,430 active Lemforder parts through `parts_search` with eight parallel workers,
 400-row batches, and zero OpenSearch failures after refresh.
+
+## RealTrack server-side migration bundles
+
+`migration:realtrack` exports a filtered, self-contained migration bundle from
+the source database. The exporter reuses the bridge's ACTIVE-offer eligibility,
+available-inventory check, USD conversion, tiered pricing, image mapping, and
+fitment-row mapping. It does not call the RealTrack HTTP API.
+
+The destination-side runner is deliberately separate from the API route. It
+boots the RealTrack application context and calls the same `ListingsService`
+create transaction used by the listing business rules, so catalog-product
+upserts, image galleries, fitment JSON, revisions, and database triggers remain
+consistent while the HTTP throttler is bypassed. Bundles are capped at 5,000,
+validated for the USD pricing rule, and imported idempotently by target SKU with
+an audit mapping table. The runner is dry-run by default; `--commit` is required
+to write listings.
+
+The live FEBI repair also uses `backend/src/scripts/realtrack-media-backfill.cli.ts`.
+It resolves source article-page URLs to actual image files, mirrors those files
+through `StorageService.mirrorRemoteImages()` into the configured S3 bucket,
+updates both `catalog_products.image_urls` and listing `itemPhotoUrl`, and queues
+the normal responsive variants. The catalog detail UI renders `fitmentRows` with
+`fitmentData` fallback in both the full-page detail and inventory modal; a
+partial source response is never allowed to replace a product gallery. The
+frontend nginx image-proxy location uses `^~` so its S3-backed `.jpg`/`.png`
+requests are not captured by the generic static-file regex and returned as 404.
+
 ## 2026-08-15 active-catalog reindex and facet mapping
 
 The active-catalog rebuild deletes and recreates `canonical_parts` with text fields carrying the

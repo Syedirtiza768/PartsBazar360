@@ -7,6 +7,7 @@ import {
   normalizeMvlToken,
   type MvlYmmCandidate,
 } from './mvl-match.util';
+import { resolveVehicleConfiguration } from '../vehicle/vehicle-config-identity.util';
 
 export type VerifiedCompatRow = {
   year: number;
@@ -234,23 +235,15 @@ export class MvlFitmentService {
       });
     }
 
-    let config = await this.prisma.vehicleConfiguration.findFirst({
-      where: {
-        generationId: generation.id,
-        market,
-      },
+    // QA-03: identity includes the display fields (trim/engine/...); the old
+    // findFirst({ generationId, market }) ignored them, so every trim of a
+    // generation collapsed onto whichever config row won the race.
+    return resolveVehicleConfiguration(this.prisma, {
+      generationId: generation.id,
+      trim: input.trim,
+      engine: input.engine,
+      market,
     });
-    if (!config) {
-      config = await this.prisma.vehicleConfiguration.create({
-        data: {
-          generationId: generation.id,
-          trim: input.trim || null,
-          engine: input.engine || null,
-          market,
-        },
-      });
-    }
-    return config;
   }
 
   async upsertVerifiedFitments(input: {

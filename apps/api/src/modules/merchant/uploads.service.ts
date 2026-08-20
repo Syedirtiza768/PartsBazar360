@@ -36,6 +36,7 @@ import {
   resolveItemWeight,
 } from '../checkout/billable-weight.util';
 import { partTypeFromLegacy } from '@repo/catalog-contracts';
+import { resolveVehicleConfiguration } from '../vehicle/vehicle-config-identity.util';
 
 interface ParsedUploadRow {
   rowNumber: number;
@@ -1916,14 +1917,10 @@ export class MerchantUploadsService {
       });
     }
 
-    let config = await this.prisma.vehicleConfiguration.findFirst({
-      where: { generationId: generation.id },
+    // QA-03: single canonical config per vehicle identity (race-safe).
+    return resolveVehicleConfiguration(this.prisma, {
+      generationId: generation.id,
+      market: 'GLOBAL',
     });
-    if (!config) {
-      config = await this.prisma.vehicleConfiguration.create({
-        data: { generationId: generation.id, market: 'GLOBAL' },
-      });
-    }
-    return config;
   }
 }

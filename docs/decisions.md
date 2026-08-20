@@ -1,6 +1,6 @@
 # Decision log
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-18
 
 
 ## 2026-08-17 — Reuse the existing RealTrack reader credentials for the bridge
@@ -348,9 +348,81 @@ boundary at RealTrack's existing API avoids duplicating eBay publishing logic
 or storing seller OAuth tokens in PartsBazar. Currency matching and dry-run
 defaults prevent an AED/ USD mix-up or accidental bulk publish.
 
-**Revisit when:** the bridge needs to transfer structured compatibility or
-item-specific data that RealTrack's create-listing contract does not currently
-accept; that would require a deliberate cross-application contract change.
+**Revisit when:** the bridge needs a versioned RealTrack bulk-write endpoint or
+the source-of-truth ownership moves away from RealTrack.
+
+## 2026-08-18 — Convert bridge costs to USD and preserve listing detail
+
+**Decision:** The RealTrack bridge converts each offer's actual source currency
+to USD before applying its pricing bands and always sends USD output. It uses a
+configured direct `REALTRACK_BRIDGE_FX_RATES` map when supplied, otherwise the
+open-access ExchangeRate-API USD table with an in-process cache. Offers without
+an available rate are skipped. The bridge also sends the complete stored image
+gallery, item details, compatibility JSON, and all relational fitment rows.
+
+**Why:** RealTrack listings must be priced consistently in USD, while silently
+dropping source-currency offers or losing fitment and gallery data creates
+incorrect or incomplete destination listings. The bridge therefore sends all
+source detail, uses the accepted `itemPhotoUrl` gallery field, and normalizes
+compatibility for RealTrack's publish contract.
+
+**Revisit when:** RealTrack publishes a typed listing contract for compatibility,
+images, or FX conversion that should replace the bridge's compatibility fields
+or provider configuration.
+
+## 2026-08-18 — Persist bridge galleries and fitments in RealTrack's catalog
+
+**Decision:** The RealTrack `/listings` create contract accepts the bridge's
+`imageUrls`, `fitmentData`, and `fitmentRows` fields. Listing creation upserts
+the SKU-linked `catalog_products` row, preserving the full gallery and raw
+fitment rows for the existing eBay publisher; eBay publish still receives the
+normalized `compatibility.compatibleProducts` payload.
+
+**Why:** The listing-record table mirrors eBay File Exchange columns and has no
+JSON columns for structured compatibility. Sending those fields only on the
+PartsBazar side could not make them durable. Reusing the existing catalog
+product as the canonical store fixes transfer-only drafts without a migration
+or a second bridge write.
+
+**Revisit when:** RealTrack publishes a versioned bulk-write contract or moves
+gallery/fitment ownership to a different entity.
+
+## 2026-08-18 — Queue filtered bridge transfers and select across pages
+
+**Decision:** The RealTrack bridge treats pagination as a browsing concern, not
+the selection boundary. The admin page can send the active filters with
+`selectAll: true` and a maximum of 5,000 offers; the API resolves that filtered
+set from Postgres and loads the full canonical media/fitment graph before
+transferring. Live writes run through a single-concurrency BullMQ worker. The
+client paces requests and retries HTTP 429 responses using `Retry-After` plus
+bounded exponential backoff, while the admin page polls the job status.
+
+**Why:** Selecting only visible row IDs silently omitted filtered results such
+as a complete brand catalog, and keeping thousands of remote writes inside one
+HTTP request would make the operation vulnerable to proxy timeouts. Serial,
+rate-aware background work lets the user start a 5,000-item transfer while
+preserving the existing deterministic listing payload, including all images,
+compatibility JSON, and relational fitment rows.
+
+**Revisit when:** RealTrack provides a documented bulk-write endpoint or a
+published request quota that supports a faster safe concurrency level.
+
+## 2026-08-18 — Mirror bridge media into RealTrack S3 and render compatibility rows
+
+**Decision:** Destination media repair resolves PartsFinder article pages to
+actual image URLs, uploads them through RealTrack's existing S3 mirroring
+service, and updates both catalog and listing gallery references. The full
+catalog detail page renders the durable `fitmentRows` payload, falling back to
+`fitmentData` for older records; the inventory modal uses the same fallback.
+
+**Why:** The migration preserved image and fitment fields, but PartsFinder URLs
+were HTML article pages rather than image files, and the full detail page had no
+compatibility-row section. The repair must use the established S3 path and must
+not replace a gallery with a partial result when the source returns HTTP 429.
+
+**Revisit when:** The source provides a stable image API or RealTrack exposes a
+first-class catalog media import endpoint with equivalent S3 and variant
+processing guarantees.
 
 ## 2026-08-10 — Product image deduplication, SVG filtering, and description HTML entity decoding
 
@@ -490,3 +562,21 @@ disk space. This interrupted API requests, including payment processing.
 **Decision:** Set OpenSearch's JVM heap to 512 MiB and add `restart: unless-stopped` in the shared Compose deployment.
 
 **Why:** On 2026-08-14 the production OpenSearch container was OOM-killed (exit 137), leaving the API container technically healthy while search requests returned Nginx 502/504 errors. The smaller heap keeps the single EC2 host within its memory budget, and the restart policy restores the search dependency after a transient process failure.
+
+## 2026-08-18 — Use a validated server-side bundle for large RealTrack imports
+
+**Decision:** Large filtered RealTrack imports may use a two-stage migration bundle: PartsBazar exports the selected offers and canonical DTOs, then a destination-side CLI applies each DTO through RealTrack's existing `ListingsService.create` transaction rather than through the throttled HTTP endpoint.
+
+**Why:** The bridge's 5,000-item selection and USD pricing rules already produce the required business payload, but RealTrack's generic `/listings` route limits requests to 1,000 per hour. A raw SQL copy would bypass catalog-product upserts, revisions, triggers, and validation. The destination runner therefore validates ACTIVE status, available inventory, USD conversion, tiered pricing, images, and fitment counts before calling the existing transaction. It is dry-run by default, requires `--commit`, and records source-to-target mappings idempotently by SKU.
+
+**Revisit when:** RealTrack provides a first-class bulk import endpoint with equivalent transactional and audit guarantees; then the migration CLI can become a compatibility fallback.
+
+## 2026-08-20 — Vehicle configurations get a display-identity unique index (QA-03)
+
+**Decision:** The canonical identity of a `VehicleConfiguration` is its generation plus the five buyer-visible display fields (`trim`, `engine`, `transmission`, `drivetrain`, `fuel`), compared case-insensitively with NULL/'' normalization. `market` and `epid` are provenance, not identity. Enforced by the `VehicleConfiguration_display_identity_key` expression index; all creation goes through `resolveVehicleConfiguration` (`vehicle-config-identity.util.ts`), which turns a lost create race (P2002) into "return the winner's row".
+
+**Why:** Three creation sites (merchant uploads, ingestion processor, MVL fitment service) each did findFirst-then-create with no unique constraint. Under the parallel MVL workers that raced: 66 generations had ≥2 all-NULL-trim configs, and fitments split across the twins — one live Corolla generation returned 52 vs 162 vs 165 parts depending on which duplicate row the picker resolved. The MVL site additionally matched only `(generationId, market)`, collapsing every trim of a generation onto one row.
+
+**Run order matters:** (1) `node scripts/dedupe-vehicle-configs.mjs` then `APPLY=1` (dry-run default; merges each duplicate group into the config with the most fitments, re-points `UserVehicle`, re-points or evidence-merges `Fitment` rows, writes AuditEvents and SearchOutbox reindex rows), (2) `prisma migrate deploy` for the unique index — it fails while duplicates remain, (3) deploy the API/worker with the resolver. The resolver degrades gracefully pre-migration, so code-first is safe but index-last is not.
+
+**Revisit when:** MVL ingestion starts writing trim/engine consistently — the dedupe report's `droppedEpids` entries show which provenance links were sacrificed and could be re-attached as aliases.
