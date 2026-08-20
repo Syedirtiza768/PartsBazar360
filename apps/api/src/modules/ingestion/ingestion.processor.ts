@@ -49,6 +49,7 @@ import {
   resolveRealTrackSyncTarget,
 } from '../seed/marketplace-sellers.config';
 import { tagFromStoreId } from '../catalog-import/source-tag.util';
+import { resolveVehicleConfiguration } from '../vehicle/vehicle-config-identity.util';
 
 @Processor('ingestion', {
   concurrency: 2,
@@ -1096,16 +1097,11 @@ export class IngestionProcessor extends WorkerHost {
       });
     }
 
-    let config = await this.prisma.vehicleConfiguration.findFirst({
-      where: { generationId: generation.id },
+    // QA-03: single canonical config per vehicle identity (race-safe).
+    return resolveVehicleConfiguration(this.prisma, {
+      generationId: generation.id,
+      market: 'GLOBAL',
     });
-    if (!config) {
-      config = await this.prisma.vehicleConfiguration.create({
-        data: { generationId: generation.id, market: 'GLOBAL' },
-      });
-    }
-
-    return config;
   }
 
   /** Hide any existing buyer offer for a non-US-Motors RealTrack listing. */

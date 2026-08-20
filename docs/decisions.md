@@ -455,3 +455,13 @@ disk space. This interrupted API requests, including payment processing.
 **Decision:** Set OpenSearch's JVM heap to 512 MiB and add `restart: unless-stopped` in the shared Compose deployment.
 
 **Why:** On 2026-08-14 the production OpenSearch container was OOM-killed (exit 137), leaving the API container technically healthy while search requests returned Nginx 502/504 errors. The smaller heap keeps the single EC2 host within its memory budget, and the restart policy restores the search dependency after a transient process failure.
+
+## 2026-08-20 — Vehicle configurations get a display-identity unique index (QA-03)
+
+**Decision:** The canonical identity of a `VehicleConfiguration` is its generation plus the five buyer-visible display fields (`trim`, `engine`, `transmission`, `drivetrain`, `fuel`), compared case-insensitively with NULL/'' normalization. `market` and `epid` are provenance, not identity. Enforced by the `VehicleConfiguration_display_identity_key` expression index; all creation goes through `resolveVehicleConfiguration` (`vehicle-config-identity.util.ts`), which turns a lost create race (P2002) into "return the winner's row".
+
+**Why:** Three creation sites (merchant uploads, ingestion processor, MVL fitment service) each did findFirst-then-create with no unique constraint. Under the parallel MVL workers that raced: 66 generations had ≥2 all-NULL-trim configs, and fitments split across the twins — one live Corolla generation returned 52 vs 162 vs 165 parts depending on which duplicate row the picker resolved. The MVL site additionally matched only `(generationId, market)`, collapsing every trim of a generation onto one row.
+
+**Run order matters:** (1) `node scripts/dedupe-vehicle-configs.mjs` then `APPLY=1` (dry-run default; merges each duplicate group into the config with the most fitments, re-points `UserVehicle`, re-points or evidence-merges `Fitment` rows, writes AuditEvents and SearchOutbox reindex rows), (2) `prisma migrate deploy` for the unique index — it fails while duplicates remain, (3) deploy the API/worker with the resolver. The resolver degrades gracefully pre-migration, so code-first is safe but index-last is not.
+
+**Revisit when:** MVL ingestion starts writing trim/engine consistently — the dedupe report's `droppedEpids` entries show which provenance links were sacrificed and could be re-attached as aliases.

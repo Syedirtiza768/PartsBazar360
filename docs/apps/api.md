@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-20
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -146,6 +146,21 @@ API calls directly. If the key is unavailable, the server job remains queued
 while task-side You.com results are ingested. Claims
 use `FOR UPDATE SKIP LOCKED`, so bounded parallel workers can process the same
 job safely and retries survive container replacement.
+
+`modules/vehicle/vehicle-config-identity.util.ts` (`resolveVehicleConfiguration`)
+is the single get-or-create path for `VehicleConfiguration` rows (QA-03,
+2026-08-20). Identity is the generation plus case-insensitive, NULL/''-normalized
+display fields (trim, engine, transmission, drivetrain, fuel); `market` and
+`epid` are provenance only. It replaces the three old findFirst-then-create
+sites (merchant uploads, ingestion processor, MVL fitment service) that raced
+under parallel workers and produced buyer-indistinguishable duplicate configs
+with fitments split across the twins. The
+`VehicleConfiguration_display_identity_key` expression index makes a lost
+create race raise P2002, which the resolver converts into returning the
+winner's row; `scripts/dedupe-vehicle-configs.mjs` (dry-run default, `APPLY=1`)
+collapses pre-existing duplicate groups before the migration can be applied.
+Run order on the server: dedupe script → `prisma migrate deploy` → API/worker
+deploy.
 
 `scripts/run-superior-official-recovery-job.mjs` is the resumable server-side
 coordinator for this pass. It selects the next active no-image rows by UUID
