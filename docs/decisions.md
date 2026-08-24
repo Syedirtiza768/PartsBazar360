@@ -37,24 +37,20 @@ drift without adding capability.
 separate least-privilege write account is provisioned.
 
 
-## 2026-08-14 — Sort tiebreaks must use `id.keyword` on the legacy index
+## 2026-08-24 — Sort tiebreaks must match the live keyword mapping
 
-**Decision:** Browse/fitment sort tiebreakers use `id.keyword`, never plain `id`.
+**Decision:** Browse/fitment sort tiebreakers use the keyword field exposed by
+the live `canonical_parts` mapping. Production currently maps `id` as a
+top-level keyword, so queries sort by `id`; they must not assume an `id.keyword`
+child field.
 
-**Why:** Deploying the QA-07 fix with `sort: { id: asc }` took buyer search
-down within minutes — the legacy `canonical_parts` index maps `id` as `text`
-(dynamic mapping with a `keyword` sub-field), and sorting a text field throws
-`search_phase_execution_exception`, which `browseParts`' catch turned into
-`total: 0` for every query. The `id: { type: 'keyword' }` in
-`opensearch.service.ts`'s `ensureIndex` only applies when the service creates
-the index itself; production's index predates it. Lesson locked into the
-regression test comment: sort/agg fields must be verified against the LIVE
-mapping (`GET /canonical_parts/_mapping/field/<field>`), not the create-time
-mapping in code.
+**Why:** The earlier legacy mapping was observed with `id` as text and an
+`id.keyword` child, but the current production mapping has since changed. The
+deployed `id.keyword` assumption caused `search_phase_execution_exception` and
+made the API return zero results until the field was verified directly.
 
-**Revisit when:** QA-02 converges search onto the v3 explicit-mapping index —
-there `id` really is a top-level keyword, so the tiebreak field should be
-re-checked at cutover.
+**Revisit when:** the index is recreated or the QA-02 versioned mapping becomes
+the production index; inspect the live mapping before changing the tiebreak.
 
 ---
 

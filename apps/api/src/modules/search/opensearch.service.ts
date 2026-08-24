@@ -489,14 +489,14 @@ export class OpenSearchService implements OnModuleInit {
           // Imaged listings first here too: a verified-fit result the buyer
           // cannot see a photo of is the least useful thing to lead with.
           // Lowest price still orders within each group. The trailing
-          // id.keyword tiebreak keeps ties (same image flag + same price) in a
+          // id tiebreak keeps ties (same image flag + same price) in a
           // stable order across index refreshes, so items cannot duplicate or
-          // vanish between pages. The deployed legacy index maps id as text
-          // with this keyword sub-field.
+          // vanish between pages. The live index maps id as a top-level
+          // keyword.
           sort: [
             { hasImage: { order: 'desc', missing: '_last' } },
             { minPrice: { order: 'asc', missing: '_last' } },
-            { 'id.keyword': { order: 'asc' } },
+            { id: { order: 'asc' } },
           ],
         } as any,
       });
@@ -695,8 +695,9 @@ export class OpenSearchService implements OnModuleInit {
     // Final unique tiebreak on the document id: without it, results tied on
     // score / price / createdAt at a page boundary can swap order across
     // segment merges, duplicating or dropping items between pages. The
-    // deployed legacy index maps id as text, so use its keyword sub-field.
-    const idTiebreak = { 'id.keyword': { order: 'asc' } };
+    // The live canonical_parts index maps id as a top-level keyword. Keep
+    // this tied to the live mapping rather than assuming a .keyword child.
+    const idTiebreak = { id: { order: 'asc' } };
 
     const offerPriceSort = (order: 'asc' | 'desc') => ({
       'offers.price': {

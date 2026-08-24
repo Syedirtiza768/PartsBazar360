@@ -121,12 +121,11 @@ describe('browseParts query construction', () => {
     expect(result.relaxed).toBe(false);
   });
 
-  it('appends a unique id.keyword tiebreak to every sort order', async () => {
+  it('appends a unique keyword id tiebreak to every sort order', async () => {
     // Without a unique final tiebreak, ties at a page boundary can swap order
     // across segment merges — duplicating or dropping items between pages.
-    // Must be id.keyword: the legacy index maps id as text, and sorting a
-    // text field throws search_phase_execution_exception (verified live
-    // 2026-08-14 — "brake pad" returned 0 results until this was fixed).
+    // Must match the live canonical_parts mapping, where id is a top-level
+    // keyword (verified live 2026-08-24).
     for (const sort of [
       'relevance',
       'newest',
@@ -137,7 +136,7 @@ describe('browseParts query construction', () => {
       await service.browseParts({ q: 'brake pad', sort });
       const clause = calls[0].body.sort;
       expect(clause[clause.length - 1]).toEqual({
-        'id.keyword': { order: 'asc' },
+        id: { order: 'asc' },
       });
     }
   });
