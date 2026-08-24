@@ -1,6 +1,24 @@
 # Decision log
 
-**Last reviewed:** 2026-08-18
+**Last reviewed:** 2026-08-24
+
+## 2026-08-24 — Keep filter counts and explicit sort order on one eligibility set
+
+**Decision:** The buyer browse path uses one shared staged filter state across
+quick filters and the full filter sheet. Source-tag and price refinements are
+applied to nested offers, and price sorting uses the same matching offers that
+the card displays. Explicit newest and price sorts take precedence over image
+availability.
+
+**Why:** A part-level price/source rollup can disagree with the offer shown on
+the card when a part has several offers. Separately staged desktop controls can
+discard un-applied multi-selections when the buyer moves between surfaces.
+Both behaviors make counts and high/low ordering appear anomalous even when the
+URL looks valid.
+
+**Revisit when:** the buyer switches from `canonical_parts` to the versioned
+search index; re-check the live nested-offer mapping and the final sort
+tiebreak field at that cutover.
 
 
 ## 2026-08-17 — Reuse the existing RealTrack reader credentials for the bridge

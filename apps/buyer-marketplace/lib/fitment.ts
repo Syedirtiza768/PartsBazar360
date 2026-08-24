@@ -153,7 +153,7 @@ export const FITMENT_COPY: Record<
       "Compatibility evidence exists for this configuration but hasn't reached verified confidence. Confirm engine and trim before ordering.",
   },
   check: {
-    label: "Check fitment",
+    label: "Fitment",
     withVehicle: (name) => `Not verified for your ${name}`,
     explainer:
       "This part has verified fitment for other vehicles, but not for this configuration. Match the OE number or ask us to verify.",
@@ -170,7 +170,7 @@ export const FITMENT_COPY: Record<
       "Designed to fit a wide range of vehicles. Check dimensions and connectors before ordering.",
   },
   unknown: {
-    label: "Fitment not verified",
+    label: "Compatibility information",
     explainer:
       "No structured compatibility data is available yet. Match the OE number or ask support to verify before ordering.",
   },

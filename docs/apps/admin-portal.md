@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-17
+**Last reviewed:** 2026-08-18
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -32,3 +32,19 @@ PartsBazar seller offers, inspect the formula result and skip reason, then
 transfer the selected records into RealTrack. It defaults to transfer-only;
 the optional eBay publish checkbox requires RealTrack store IDs and a bridge
 write account with eBay publish permission.
+
+The offer list is fully pageable and supports brand, source, seller,
+offer-status, keyword, and optional source-currency filters. Source costs are
+converted to USD automatically; the target currency is fixed to USD. Each row
+reports the original cost, converted USD cost, image count, fitment count, and
+any skip reason. “Select all” resolves the complete filtered result on the API,
+up to 5,000 offers, rather than selecting only visible rows. The transfer
+payload includes the complete image gallery, stored item details, and all
+available compatibility/fitment rows. RealTrack persists the gallery and raw
+fitment rows on the canonical catalog product during listing creation, and the
+optional eBay publish step also sends normalized compatibility. Large transfers
+run in the background;
+the page polls the job and shows transferred/failed progress while the API
+paces and retries rate-limited RealTrack writes. Seller choices come from the
+admin seller directory; the API remains authoritative for the default ACTIVE
+status and all transfer eligibility checks.

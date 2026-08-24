@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-const SIZES = [75, 150, 300];
+const SIZES = [75, 150, 200];
 
 export function PageSizeSelect({ current }: { current: number }) {
   const router = useRouter();

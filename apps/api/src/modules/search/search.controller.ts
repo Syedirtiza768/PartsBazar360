@@ -41,6 +41,7 @@ import {
   modelLookupVariants,
 } from '../ingestion/mvl-match.util';
 import { canonicalizeCatalogBrand } from '../catalog-import/catalog-identity.util';
+import { isDeadCatalogImagePath } from './image-url.util';
 
 type CompatRow = {
   year: number | string;
@@ -63,22 +64,22 @@ function parsePriceParam(value: string | undefined): number | undefined {
 
 /** Maps human-readable listing-pipeline field names → camelCase keys. */
 const FIELD_TO_KEY: Record<string, string> = {
-  'Brand': 'brandType',
-  'MPN': 'mpn',
+  Brand: 'brandType',
+  MPN: 'mpn',
   'OE Number': 'oeNumber',
   'OE Numbers': 'OE_numbers',
-  'Condition': 'condition',
+  Condition: 'condition',
   'Brand Type': 'brandType',
-  'Warranty': 'warranty',
-  'Placement': 'placementOnVehicle',
-  'Position': 'position',
-  'Material': 'material',
-  'Color': 'color',
+  Warranty: 'warranty',
+  Placement: 'placementOnVehicle',
+  Position: 'position',
+  Material: 'material',
+  Color: 'color',
   'Part Type': 'partType',
   'Surface Finish': 'surfaceFinish',
   'Country of Origin': 'countryOfOrigin',
   'Category Type': 'categoryType',
-  'Features': 'features',
+  Features: 'features',
   'Fitment Type': 'fitmentType',
   'Compatible Vehicles': 'compatibleVehicles',
   'Vehicle System': 'vehicleSystem',
@@ -195,13 +196,16 @@ export class SearchController implements OnModuleDestroy {
       // while the UI displayed ranges computed at 75 ("Showing 1–75 of 98"
       // above 24 cards).
       const rawLimit = pageSize ?? limit;
-      const limitNum = rawLimit
-        ? Math.min(parseInt(rawLimit, 10), 200)
-        : 24;
+      const limitNum = rawLimit ? Math.min(parseInt(rawLimit, 10), 200) : 24;
       const resolvedFitmentLimit =
         Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
 
-      const cacheK = this.cacheKey('fitment', { vehicleConfigId, q, page: pageNum, limit: resolvedFitmentLimit });
+      const cacheK = this.cacheKey('fitment', {
+        vehicleConfigId,
+        q,
+        page: pageNum,
+        limit: resolvedFitmentLimit,
+      });
       const cached = await this.cacheGet<any>(cacheK);
       if (cached) return cached;
 
@@ -246,11 +250,27 @@ export class SearchController implements OnModuleDestroy {
         : 24;
 
     const pageNum = page ? parseInt(page, 10) : 1;
-    const resolvedLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
+    const resolvedLimit =
+      Number.isFinite(limitNum) && limitNum > 0 ? limitNum : 24;
     const priceMin = parsePriceParam(minPrice);
     const priceMax = parsePriceParam(maxPrice);
     const isCountOnly = countOnly === 'true';
-    const cacheK = this.cacheKey('browse', { q, category, categoryGroup, brand, make, partType, condition, sourceTag, minPrice: priceMin, maxPrice: priceMax, sort, page: pageNum, limit: resolvedLimit, includeInterchange });
+    const cacheK = this.cacheKey('browse', {
+      q,
+      category,
+      categoryGroup,
+      brand,
+      make,
+      partType,
+      condition,
+      sourceTag,
+      minPrice: priceMin,
+      maxPrice: priceMax,
+      sort,
+      page: pageNum,
+      limit: resolvedLimit,
+      includeInterchange,
+    });
     if (!isCountOnly) {
       const cached = await this.cacheGet<any>(cacheK);
       if (cached) return cached;
@@ -278,22 +298,27 @@ export class SearchController implements OnModuleDestroy {
       return { total: result.total, totalRelation: result.totalRelation };
     }
     const visible = sanitizeSearchItems(result.items || [], {
-      sourceTags: sourceTag ? String(sourceTag).split(',').map((v) => v.trim()).filter(Boolean) : [],
+      sourceTags: sourceTag
+        ? String(sourceTag)
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : [],
       minPrice: priceMin,
       maxPrice: priceMax,
     });
     await this.seoSlugs.attachSlugs(visible);
     result.items = visible;
     // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
-    void this.febestWebsite
-      .attachImagesToSearchItems(visible)
-      .catch(() => {});
+    void this.febestWebsite.attachImagesToSearchItems(visible).catch(() => {});
     void this.enrichment.requestEnrichmentByIds(
       (result.items || []).map((item: { id?: string }) => item.id || ''),
       { reason: 'search_results', priority: 50, limit: 3 },
     );
     if (Date.now() - t0 > 500) {
-      this.logger.warn(`Slow browse: ${Date.now() - t0}ms q=${q || '-'} cat=${category || '-'} page=${pageNum}`);
+      this.logger.warn(
+        `Slow browse: ${Date.now() - t0}ms q=${q || '-'} cat=${category || '-'} page=${pageNum}`,
+      );
     }
     this.cacheSet(cacheK, result, q ? 30 : 45);
     return result;
@@ -579,7 +604,8 @@ export class SearchController implements OnModuleDestroy {
     const mediaUrls = (partWithOffers.media || [])
       .map((m) => m.url)
       .filter(Boolean);
-    const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean);
+    const storedUrls = (partWithOffers.imageUrls || [])
+      .filter(Boolean);
     const normalizeUrl = (u: string) => {
       try {
         const parsed = new URL(u);
@@ -987,7 +1013,10 @@ export class SearchController implements OnModuleDestroy {
       throw new BadRequestException('country is required');
     }
 
-    const cacheK = this.cacheKey('shipping-quote', { id, country: destination });
+    const cacheK = this.cacheKey('shipping-quote', {
+      id,
+      country: destination,
+    });
     const cached = await this.cacheGet<any>(cacheK);
     if (cached) return cached;
 
@@ -1033,7 +1062,9 @@ export class SearchController implements OnModuleDestroy {
   @Post('enrichment/prewarm')
   async prewarmEnrichment(@Body() body: { partIds?: string[] }) {
     const partIds = Array.isArray(body?.partIds)
-      ? body.partIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      ? body.partIds.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        )
       : [];
     // Cap hard: a scraped results page must not enqueue the whole catalogue.
     const capped = [...new Set(partIds)].slice(0, 12);
@@ -1112,7 +1143,8 @@ export class SearchController implements OnModuleDestroy {
         // Override baked-in Condition with live qualityTier from DB so the
         // card always reflects the current value, not whatever the LLM wrote
         // at enrichment time.
-        const cond = part.qualityTier.charAt(0) + part.qualityTier.slice(1).toLowerCase();
+        const cond =
+          part.qualityTier.charAt(0) + part.qualityTier.slice(1).toLowerCase();
         const row = spec.specs.find((s) => s.label === 'Condition');
         if (row) {
           row.value = cond;
@@ -1142,10 +1174,7 @@ export class SearchController implements OnModuleDestroy {
    */
   @Get('parts/:id/location-diagram.png')
   @Header('Content-Type', 'image/png')
-  @Header(
-    'Cache-Control',
-    'public, max-age=600, stale-while-revalidate=604800',
-  )
+  @Header('Cache-Control', 'public, max-age=600, stale-while-revalidate=604800')
   async getPartLocationDiagram(@Param('id') id: string) {
     if (!(await locationDiagramExists(id))) {
       throw new NotFoundException(`No location diagram for part ${id}`);
@@ -1161,7 +1190,10 @@ export class SearchController implements OnModuleDestroy {
    */
   @Get('parts/:id/placeholder.svg')
   @Header('Content-Type', 'image/svg+xml; charset=utf-8')
-  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600, must-revalidate')
+  @Header(
+    'Cache-Control',
+    'public, max-age=300, stale-while-revalidate=600, must-revalidate',
+  )
   async getPartPlaceholder(@Param('id') id: string) {
     const part = await this.prisma.canonicalPart.findUnique({
       where: { id },
@@ -1181,9 +1213,11 @@ export class SearchController implements OnModuleDestroy {
     // Suppress condition for GENUINE_OEM — "Genuine OEM" type badge is sufficient
     const isGenuineOem = part.partType === 'GENUINE_OEM';
     const rawCondition = part.qualityTier || null;
-    const condition = (!isGenuineOem && rawCondition)
-      ? rawCondition.charAt(0).toUpperCase() + rawCondition.slice(1).toLowerCase()
-      : null;
+    const condition =
+      !isGenuineOem && rawCondition
+        ? rawCondition.charAt(0).toUpperCase() +
+          rawCondition.slice(1).toLowerCase()
+        : null;
     return renderPlaceholderSvg({
       title: part.title,
       brand: part.brand,

@@ -18,14 +18,23 @@ export const revalidate = 900;
 
 interface PageProps {
   params: Promise<{ slug: string; page: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug, page } = await params;
   return taxonomyMetadata({ kind: "brand", slug, page: parsePageParam(page) });
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
   const { slug, page } = await params;
-  return renderTaxonomy({ kind: "brand", slug, page: parsePageParam(page) });
+  const query = await searchParams;
+  return renderTaxonomy({
+    kind: "brand",
+    slug,
+    page: parsePageParam(page),
+    searchParams: query,
+  });
 }

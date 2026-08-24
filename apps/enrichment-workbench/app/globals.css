@@ -139,6 +139,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .filter-row button:hover { color: var(--ink); background: var(--soft); }
 .filter-row button.active { border-color: #b9d2c6; color: var(--green-dark); background: var(--green-soft); }
 
+.advanced-filters { border-bottom: 1px solid var(--line); background: #fafcf9; }
+.advanced-filters > summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1.15rem; color: var(--green-dark); font-size: .74rem; font-weight: 900; cursor: pointer; list-style: none; }
+.advanced-filters > summary::-webkit-details-marker { display: none; }
+.advanced-filters > summary::after { content: "＋"; color: var(--muted); font-size: 1rem; }
+.advanced-filters[open] > summary::after { content: "−"; }
+.advanced-filters > summary small { margin-left: auto; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.advanced-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; padding: 0 1.15rem 1rem; }
+.advanced-filter-grid label { min-width: 0; color: var(--muted); font-size: .65rem; font-weight: 800; }
+.advanced-filter-grid select { display: block; width: 100%; min-height: 38px; margin-top: .3rem; overflow: hidden; border: 1px solid #cfd6d2; border-radius: 8px; padding: .45rem .5rem; color: var(--ink); background: white; font-size: .72rem; text-overflow: ellipsis; }
+.advanced-filter-grid select:focus { border-color: #72a38e; outline: 0; }
+.clear-filters { margin: 0 1.15rem 1rem; border: 0; color: var(--green-dark); background: transparent; font-size: .68rem; font-weight: 900; text-decoration: underline; cursor: pointer; }
 .listing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); transition: opacity .15s ease; }
 .listing-grid.is-refreshing { opacity: .55; }
 .listing-card { display: flex; flex-direction: column; min-width: 0; border: 0; padding: 0; background: var(--paper); text-align: left; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
@@ -241,6 +252,11 @@ textarea:focus, input:focus { border-color: #72a38e; }
 .candidate-box strong, .candidate-box p { display: block; margin: 0; }
 .candidate-box strong { font-size: .73rem; }
 .candidate-box p { margin-top: .2rem; color: #896236; font-size: .65rem; }
+.item-specifics-list { display: grid; gap: .45rem; }
+.item-specific-row { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); gap: .75rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.item-specific-row strong { color: var(--muted); font-size: .66rem; }
+.item-specific-row span { color: var(--ink); font-size: .7rem; line-height: 1.35; overflow-wrap: anywhere; }
+.evidence-link { display: inline-block; margin: .7rem .8rem 0 0; color: var(--green-dark); font-size: .68rem; font-weight: 800; text-decoration: none; }
 .universal-toggle { display: flex; align-items: flex-start; gap: .7rem; padding: .8rem; border: 1px solid var(--line); border-radius: 10px; background: white; cursor: pointer; }
 .universal-toggle input { width: 17px; height: 17px; accent-color: var(--green); }
 .universal-toggle strong, .universal-toggle small { display: block; }
@@ -348,6 +364,7 @@ textarea:focus, input:focus { border-color: #72a38e; }
   .metrics button:nth-child(3), .metrics button:nth-child(4) { border-bottom: 0; }
   .listing-grid, .loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .toolbar { align-items: stretch; flex-direction: column; }
+  .advanced-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .result-count { padding-left: .2rem; }
   .drawer { width: 100%; }
   .fitment-fields { grid-template-columns: repeat(2, 1fr); }
@@ -375,6 +392,7 @@ textarea:focus, input:focus { border-color: #72a38e; }
   .drawer-header, .edit-section, .review-checks, .drawer-footer { padding-left: 1rem; padding-right: 1rem; }
   .section-heading { align-items: flex-start; }
   .section-heading small { display: none; }
+  .advanced-filter-grid { grid-template-columns: 1fr; }
   .source-comparison, .candidate-box { align-items: stretch; flex-direction: column; }
   .source-comparison button, .candidate-box button { align-self: flex-start; }
   .selected-image { grid-template-columns: 54px minmax(0, 1fr); }

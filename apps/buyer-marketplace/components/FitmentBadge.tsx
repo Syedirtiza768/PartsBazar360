@@ -30,6 +30,10 @@ export function FitmentBadge({
   size?: "sm" | "md";
   className?: string;
 }) {
+  // Compatibility rows are already shown in the listing/PDP table. Do not
+  // add a warning-style badge for a vehicle mismatch when evidence exists.
+  if (state === "check" || state === "unknown") return null;
+
   const visuals = STATE_VISUALS[state];
   const copy = FITMENT_COPY[state];
   const label =

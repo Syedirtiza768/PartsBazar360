@@ -170,7 +170,12 @@ export function ProductCard({
         )}
 
         <h3 className="min-h-10 text-[13px] font-semibold leading-snug text-slate-800 group-hover:text-brand-800 xs:text-sm">
-          <Link href={partHref(part)} className="line-clamp-2 focus-visible:outline-none focus-visible:underline">{part.title}</Link>
+          <Link
+            href={partHref(part)}
+            className="break-words focus-visible:outline-none focus-visible:underline"
+          >
+            {part.title}
+          </Link>
         </h3>
 
         <div className="mt-1.5 flex-1 space-y-1">

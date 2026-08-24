@@ -37,6 +37,8 @@ import { useCurrency } from "@/lib/currency-context";
 import { CurrencySwitcher } from "@/components/CurrencySwitcher";
 import type { Facet } from "@/lib/types";
 
+type HeaderFacet = Facet & { href?: string };
+
 const IMG_PROXY = process.env.NEXT_PUBLIC_IMG_PROXY_BASE || "/img-proxy/";
 
 function thumbUrl(src: string): string {
@@ -661,7 +663,7 @@ function ActionLink({
   );
 }
 
-export function Header({ categories }: { categories: Facet[] }) {
+export function Header({ categories }: { categories: HeaderFacet[] }) {
   const pathname = usePathname();
   const { itemCount } = useCart();
   const { activeVehicle } = useGarage();
@@ -671,9 +673,15 @@ export function Header({ categories }: { categories: Facet[] }) {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  const categoryNames = categories.length
-    ? categories.slice(0, 12).map((item) => item.name)
-    : ["Engine", "Transmission", "Brakes", "Suspension", "Electrical", "Cooling", "Body", "Lighting"];
+  const categoryLinks = categories.length
+    ? categories.slice(0, 12).map((item) => ({
+        name: item.name,
+        href: item.href ?? categoryGroupPath(item.name),
+      }))
+    : ["Engine", "Transmission", "Brakes", "Suspension", "Electrical", "Cooling", "Body", "Lighting"].map((name) => ({
+        name,
+        href: categoryGroupPath(name),
+      }));
   const mobileLinks: Array<[string, string]> = [
     ["/", "Home"],
     ["/search", "Shop all parts"],
@@ -784,13 +792,13 @@ export function Header({ categories }: { categories: Facet[] }) {
             </span>
           </Link>
           <nav aria-label="Parts categories" className="scroll-rail min-w-0 flex-1">
-            {categoryNames.map((category) => (
+            {categoryLinks.map((category) => (
               <Link
-                key={category}
-                href={categoryGroupPath(category)}
+                key={category.name}
+                href={category.href}
                 className="flex min-h-11 shrink-0 items-center border-r border-stone-300 px-3.5 text-xs font-bold text-graphite-700 hover:bg-white hover:text-graphite-950 sm:px-4"
               >
-                {category}
+                {category.name}
               </Link>
             ))}
             <Link
@@ -855,13 +863,13 @@ export function Header({ categories }: { categories: Facet[] }) {
 
           <p className="eyebrow mb-2 mt-7">Parts systems</p>
           <div className="grid grid-cols-2 border-l border-t border-stone-300">
-            {categoryNames.map((category) => (
+            {categoryLinks.map((category) => (
               <Link
-                key={category}
-                href={categoryGroupPath(category)}
+                key={category.name}
+                href={category.href}
                 className="flex min-h-touch items-center border-b border-r border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-graphite-700"
               >
-                {category}
+                {category.name}
               </Link>
             ))}
           </div>

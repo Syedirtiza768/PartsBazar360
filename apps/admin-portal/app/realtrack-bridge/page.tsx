@@ -5,7 +5,7 @@ import { Badge } from "@repo/ui/badge";
 import { Button } from "@repo/ui/button";
 import { PageBody } from "@repo/ui/container";
 import { EmptyState } from "@repo/ui/empty-state";
-import { Input } from "@repo/ui/field";
+import { Input, Select } from "@repo/ui/field";
 import { PageHeader, StatCard, StatGrid } from "@repo/ui/page-header";
 import { useAdminAuth } from "@/lib/auth-context";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
@@ -19,16 +19,22 @@ interface BridgeItem {
   sourceTag?: string | null;
   cost: number;
   currency: string;
+  convertedCostUsd?: number | null;
+  conversionRateToUsd?: number | null;
   targetCurrency: string;
   sellingPrice: number | null;
   quantity: number;
   imageCount: number;
+  fitmentCount: number;
   skipReason: string | null;
   skipDetail: string | null;
 }
 
 interface BridgeListResponse {
   total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
   sourceCurrency: string;
   targetCurrency: string;
   items: BridgeItem[];
@@ -36,6 +42,19 @@ interface BridgeListResponse {
 
 interface TransferResponse {
   dryRun: boolean;
+  status?: string;
+  jobId?: string;
+  message?: string;
+  error?: string;
+  progress?: {
+    phase?: string;
+    total?: number;
+    eligible?: number;
+    processed?: number;
+    transferred?: number;
+    failed?: number;
+    skipped?: number;
+  };
   counts?: {
     selected: number;
     eligible: number;
@@ -58,19 +77,35 @@ interface TransferResponse {
 const skipLabels: Record<string, string> = {
   below_minimum: "Below $5",
   currency_mismatch: "Currency mismatch",
+  currency_conversion_unavailable: "FX unavailable",
   no_inventory: "No inventory",
   inactive_offer: "Inactive",
   invalid_cost: "Invalid cost",
 };
 
+const SOURCE_TAGS = ["AAP", "BLK", "BST", "GEN", "PSRC", "SAL", "TNRU", "YNTD"];
+
+type SellerOption = {
+  id: string;
+  name: string;
+};
+
 export default function RealtrackBridgePage() {
   const { token } = useAdminAuth();
-  const [sourceCurrency, setSourceCurrency] = useState("USD");
-  const [targetCurrency, setTargetCurrency] = useState("USD");
+  const [sourceCurrency, setSourceCurrency] = useState("");
+  const targetCurrency = "USD";
   const [search, setSearch] = useState("");
+  const [brand, setBrand] = useState("");
+  const [sourceTag, setSourceTag] = useState("");
+  const [sellerId, setSellerId] = useState("");
+  const [status, setStatus] = useState("ACTIVE");
+  const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [items, setItems] = useState<BridgeItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [publishToEbay, setPublishToEbay] = useState(false);
   const [storeIds, setStoreIds] = useState("");
@@ -78,18 +113,28 @@ export default function RealtrackBridgePage() {
   const [transferring, setTransferring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TransferResponse | null>(null);
+  const [transferProgress, setTransferProgress] = useState<
+    TransferResponse["progress"] | null
+  >(null);
 
-  const load = async () => {
+  const load = async (pageToLoad = page, resetSelection = false) => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
         limit: "100",
-        sourceCurrency: sourceCurrency.trim().toUpperCase(),
-        targetCurrency: targetCurrency.trim().toUpperCase(),
+        page: String(pageToLoad),
+        targetCurrency,
       });
+      if (sourceCurrency.trim()) {
+        params.set("sourceCurrency", sourceCurrency.trim().toUpperCase());
+      }
       if (search.trim()) params.set("search", search.trim());
+      if (brand.trim()) params.set("brand", brand.trim());
+      if (sourceTag) params.set("sourceTag", sourceTag);
+      if (sellerId) params.set("sellerId", sellerId);
+      if (status) params.set("status", status);
       const response = await apiFetch(
         token,
         `${API_BASE_URL}/admin/realtrack-bridge/offers?${params}`,
@@ -100,7 +145,12 @@ export default function RealtrackBridgePage() {
       const data = body as BridgeListResponse;
       setItems(Array.isArray(data.items) ? data.items : []);
       setTotal(data.total || 0);
-      setSelected(new Set());
+      setPage(data.page || pageToLoad);
+      setHasMore(Boolean(data.hasMore));
+      if (resetSelection) {
+        setSelected(new Set());
+        setSelectAllMatching(false);
+      }
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Could not load bridge offers.",
@@ -110,8 +160,41 @@ export default function RealtrackBridgePage() {
     }
   };
 
+  const applyFilters = () => {
+    void load(1, true);
+  };
+
+  const loadSellers = async () => {
+    if (!token) return;
+    try {
+      const response = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/sellers/onboarding`,
+      );
+      if (!response.ok) return;
+      const body = await response.json().catch(() => []);
+      setSellers(
+        Array.isArray(body)
+          ? body
+              .filter(
+                (seller): seller is { id: string; name?: string | null } =>
+                  Boolean(seller && typeof seller.id === "string"),
+              )
+              .map((seller) => ({
+                id: seller.id,
+                name: seller.name?.trim() || seller.id,
+              }))
+          : [],
+      );
+    } catch {
+      // Seller filtering remains available as a blank state if the optional
+      // seller directory request is unavailable.
+    }
+  };
+
   useEffect(() => {
     load();
+    loadSellers();
     // Loading on first authenticated render is intentional; the controls use Refresh for subsequent changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -122,20 +205,77 @@ export default function RealtrackBridgePage() {
   );
 
   const toggleSelected = (offerId: string) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelected(new Set([offerId]));
+      return;
+    }
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(offerId)) next.delete(offerId);
-      else next.add(offerId);
+      if (next.has(offerId)) {
+        next.delete(offerId);
+      } else if (next.size < 5000) {
+        next.add(offerId);
+      } else {
+        setError("A transfer can contain at most 5,000 offers.");
+      }
       return next;
     });
   };
 
   const selectEligible = () => {
-    setSelected(new Set(eligibleItems.map((item) => item.offerId)));
+    setSelected(
+      (current) =>
+        new Set(
+          [...current, ...eligibleItems.map((item) => item.offerId)].slice(
+            0,
+            5000,
+          ),
+        ),
+    );
+    setSelectAllMatching(false);
+  };
+
+  const selectAllFiltered = () => {
+    setSelected(new Set());
+    setSelectAllMatching(true);
+  };
+
+  const filterPayload = () => ({
+    ...(sourceCurrency.trim()
+      ? { sourceCurrency: sourceCurrency.trim().toUpperCase() }
+      : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
+    ...(brand.trim() ? { brand: brand.trim() } : {}),
+    ...(sourceTag ? { sourceTag } : {}),
+    ...(sellerId ? { sellerId } : {}),
+    ...(status ? { status } : {}),
+  });
+
+  const waitForTransfer = async (jobId: string) => {
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      const response = await apiFetch(
+        token!,
+        `${API_BASE_URL}/admin/realtrack-bridge/transfer/${encodeURIComponent(jobId)}`,
+      );
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as TransferResponse;
+      if (!response.ok)
+        throw new Error(body.message || "Could not read transfer progress.");
+      if (body.progress) setTransferProgress(body.progress);
+      if (body.status === "completed") return body;
+      if (body.status === "failed") {
+        throw new Error(
+          body.error || "RealTrack transfer failed in the background.",
+        );
+      }
+    }
   };
 
   const transfer = async () => {
-    if (!token || selected.size === 0) {
+    if (!token || (!selectAllMatching && selected.size === 0)) {
       setError("Select at least one offer to transfer.");
       return;
     }
@@ -149,6 +289,7 @@ export default function RealtrackBridgePage() {
     setTransferring(true);
     setError(null);
     setResult(null);
+    setTransferProgress(null);
     try {
       const response = await apiFetch(
         token,
@@ -157,9 +298,11 @@ export default function RealtrackBridgePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            offerIds: Array.from(selected),
-            sourceCurrency: sourceCurrency.trim().toUpperCase(),
-            targetCurrency: targetCurrency.trim().toUpperCase(),
+            ...(selectAllMatching
+              ? { selectAll: true, maxItems: 5000 }
+              : { offerIds: Array.from(selected) }),
+            ...filterPayload(),
+            targetCurrency,
             includeOutOfStock,
             dryRun: false,
             publishToEbay,
@@ -173,9 +316,14 @@ export default function RealtrackBridgePage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(body.message || "RealTrack transfer failed.");
-      setResult(body as TransferResponse);
+      const queued = body as TransferResponse;
+      const completed = queued.jobId
+        ? await waitForTransfer(queued.jobId)
+        : queued;
+      setResult(completed);
       setSelected(new Set());
-      await load();
+      setSelectAllMatching(false);
+      await load(page);
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "RealTrack transfer failed.",
@@ -185,7 +333,9 @@ export default function RealtrackBridgePage() {
     }
   };
 
-  const selectedCount = selected.size;
+  const selectedCount = selectAllMatching
+    ? Math.min(total, 5000)
+    : selected.size;
   const skippedCount = items.filter((item) => item.skipReason).length;
 
   return (
@@ -195,7 +345,11 @@ export default function RealtrackBridgePage() {
         title="RealTrack listing bridge"
         description="Choose active PartsBazar offers, review the calculated selling price, and transfer the selected records into RealTrack."
         actions={
-          <Button variant="outline" onClick={load} loading={loading}>
+          <Button
+            variant="outline"
+            onClick={() => void load()}
+            loading={loading}
+          >
             Refresh offers
           </Button>
         }
@@ -211,7 +365,7 @@ export default function RealtrackBridgePage() {
       )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_140px_140px_auto] md:items-end">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)_140px_140px_auto] xl:items-end">
           <Input
             label="Search offers"
             value={search}
@@ -219,9 +373,50 @@ export default function RealtrackBridgePage() {
             placeholder="Title, MPN, SKU, or brand"
           />
           <Input
-            label="Cost currency"
+            label="Brand filter"
+            value={brand}
+            onChange={(event) => setBrand(event.target.value)}
+            placeholder="e.g. FEBI"
+          />
+          <Select
+            label="Source"
+            value={sourceTag}
+            onChange={(event) => setSourceTag(event.target.value)}
+          >
+            <option value="">All sources</option>
+            {SOURCE_TAGS.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Seller"
+            value={sellerId}
+            onChange={(event) => setSellerId(event.target.value)}
+          >
+            <option value="">All sellers</option>
+            {sellers.map((seller) => (
+              <option key={seller.id} value={seller.id}>
+                {seller.name}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Offer status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          >
+            <option value="ACTIVE">Active</option>
+            <option value="">All statuses</option>
+            <option value="INACTIVE">Inactive</option>
+          </Select>
+          <Input
+            label="Source currency filter"
             value={sourceCurrency}
             maxLength={3}
+            placeholder="ALL"
+            hint="Leave blank to convert every source currency to USD."
             onChange={(event) =>
               setSourceCurrency(event.target.value.toUpperCase())
             }
@@ -229,12 +424,10 @@ export default function RealtrackBridgePage() {
           <Input
             label="Target currency"
             value={targetCurrency}
-            maxLength={3}
-            onChange={(event) =>
-              setTargetCurrency(event.target.value.toUpperCase())
-            }
+            readOnly
+            hint="The bridge always sends USD to RealTrack."
           />
-          <Button variant="outline" onClick={load} disabled={loading}>
+          <Button variant="outline" onClick={applyFilters} disabled={loading}>
             Apply filters
           </Button>
         </div>
@@ -246,9 +439,9 @@ export default function RealtrackBridgePage() {
           </p>
           <p className="mt-1 text-xs text-blue-800">
             The bridge uses seller base cost first, then falls back to the offer
-            price. Currency must match the selected cost currency. The target
-            currency is passed to RealTrack when optional eBay publishing is
-            enabled.
+            price. Every source currency is converted to USD before the pricing
+            bands are applied. The complete image gallery and available fitment
+            rows are sent with the listing.
           </p>
         </div>
       </section>
@@ -278,18 +471,32 @@ export default function RealtrackBridgePage() {
               PartsBazar offers
             </h2>
             <p className="mt-1 text-xs text-graphite-600">
-              Select individual offers; one canonical part can have several
-              seller offers.
+              Page {page} · {total.toLocaleString()} matching offers. Selection
+              can be applied to the complete filtered result, not just this
+              page.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={selectEligible}
-            disabled={!eligibleItems.length}
-          >
-            Select eligible
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={selectEligible}
+              disabled={!eligibleItems.length || selectAllMatching}
+            >
+              Select page
+            </Button>
+            {total > items.length && (
+              <Button
+                size="sm"
+                onClick={selectAllFiltered}
+                disabled={selectAllMatching || !total}
+              >
+                {selectAllMatching
+                  ? `All ${selectedCount.toLocaleString()} selected`
+                  : `Select all ${Math.min(total, 5000).toLocaleString()}`}
+              </Button>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -306,7 +513,7 @@ export default function RealtrackBridgePage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {items.map((item) => {
-              const checked = selected.has(item.offerId);
+              const checked = selectAllMatching || selected.has(item.offerId);
               return (
                 <label
                   key={item.offerId}
@@ -330,11 +537,18 @@ export default function RealtrackBridgePage() {
                           {item.sourceTag || "No source tag"} ·{" "}
                           {item.imageCount} image
                           {item.imageCount === 1 ? "" : "s"}
+                          {" · "}
+                          {item.fitmentCount} fitment
+                          {item.fitmentCount === 1 ? "" : "s"}
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
                         <span className="text-graphite-600">
                           Cost {item.cost.toFixed(2)} {item.currency}
+                          {item.convertedCostUsd != null &&
+                          item.currency.toUpperCase() !== "USD"
+                            ? ` → ${item.convertedCostUsd.toFixed(2)} USD`
+                            : ""}
                         </span>
                         {item.skipReason ? (
                           <Badge size="sm" tone="warning">
@@ -359,6 +573,31 @@ export default function RealtrackBridgePage() {
           </div>
         )}
       </section>
+
+      <div className="flex flex-col gap-3 text-sm text-graphite-600 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Showing {items.length ? (page - 1) * 100 + 1 : 0}–
+          {(page - 1) * 100 + items.length} of {total.toLocaleString()}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void load(page - 1)}
+            disabled={loading || page <= 1}
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void load(page + 1)}
+            disabled={loading || !hasMore}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
 
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-amber-950">
@@ -413,8 +652,17 @@ export default function RealtrackBridgePage() {
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-amber-800">
             Transfer creates or updates RealTrack draft/ready records by
-            deterministic SKU. It does not delete PartsBazar offers.
+            deterministic SKU. It does not delete PartsBazar offers. Large
+            transfers run in the background and are paced with automatic 429
+            retries.
           </p>
+          {transferring && transferProgress && (
+            <p className="text-xs font-medium text-amber-900">
+              {transferProgress.phase === "publishing"
+                ? "Publishing transferred listings…"
+                : `Transferred ${transferProgress.transferred || 0} of ${transferProgress.eligible || transferProgress.total || selectedCount}; ${transferProgress.failed || 0} failed`}
+            </p>
+          )}
           <Button
             onClick={transfer}
             loading={transferring}

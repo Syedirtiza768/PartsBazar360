@@ -26,13 +26,22 @@ import {
  */
 
 export type { SearchParamsShape } from "@/lib/filter-params";
-export { buildHref, countActiveFilters, clearFiltersHref } from "@/lib/filter-params";
+export {
+  buildHref,
+  countActiveFilters,
+  clearFiltersHref,
+} from "@/lib/filter-params";
 
-export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
+export function ActiveFilterChips({
+  params,
+  path = "/search",
+}: {
+  params: SearchParamsShape;
+  path?: string;
+}) {
   const chips: Array<{ field: string; value: string; label: string }> = [];
   const refinementCount = countActiveFilters(params);
-  if (params.q)
-    chips.push({ field: "q", value: "", label: `“${params.q}”` });
+  if (params.q) chips.push({ field: "q", value: "", label: `“${params.q}”` });
   for (const field of MULTI_SELECT_FIELDS) {
     for (const value of csvList(params[field])) {
       chips.push({
@@ -59,14 +68,22 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
 
   const chipHref = (chip: { field: string; value: string }) =>
     chip.field === "q"
-      ? buildHref(params, { q: undefined })
+      ? buildHref(params, { q: undefined }, path)
       : chip.field === "includeInterchange"
-        ? buildHref(params, { includeInterchange: undefined })
+        ? buildHref(params, { includeInterchange: undefined }, path)
         : chip.field === "price"
-          ? buildHref(params, { minPrice: undefined, maxPrice: undefined })
-          : buildHref(params, {
-              [chip.field]: toggleCsv(params[chip.field], chip.value),
-            });
+          ? buildHref(
+              params,
+              { minPrice: undefined, maxPrice: undefined },
+              path,
+            )
+          : buildHref(
+              params,
+              {
+                [chip.field]: toggleCsv(params[chip.field], chip.value),
+              },
+              path,
+            );
 
   return (
     <div className="scrollbar-thin -mx-1 flex flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
@@ -104,7 +121,7 @@ export function ActiveFilterChips({ params }: { params: SearchParamsShape }) {
       )}
       {refinementCount > 0 && (
         <Link
-          href={params.q ? clearFiltersHref(params) : "/search"}
+          href={params.q ? clearFiltersHref(params, path) : path}
           rel="nofollow"
           className="inline-flex min-h-9 shrink-0 items-center px-1 text-xs font-medium text-graphite-600 underline-offset-2 hover:text-graphite-950 hover:underline"
         >

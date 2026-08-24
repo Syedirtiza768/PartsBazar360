@@ -10,6 +10,21 @@ import type {
 } from "@/lib/types";
 import { assessSeoTitle, buildSeoTitle, SEO_TITLE_MAX_LENGTH, SEO_TITLE_TEMPLATE } from "@/lib/title-quality";
 
+interface ListingFacetOption {
+  value: string;
+  count: number;
+}
+
+interface ListingFilterOptions {
+  brands: ListingFacetOption[];
+  categories: ListingFacetOption[];
+  productTypes: ListingFacetOption[];
+  systemCategories: ListingFacetOption[];
+  partTypes: ListingFacetOption[];
+  conditions: ListingFacetOption[];
+  sourceTags: ListingFacetOption[];
+  currencies: ListingFacetOption[];
+}
 interface ListingsResponse {
   items: ListingSummary[];
   total: number;
@@ -17,6 +32,7 @@ interface ListingsResponse {
   pageSize: number;
   pageCount: number;
   stats: ListingStats;
+  filterOptions: ListingFilterOptions;
   source: {
     generatedAt: string;
     sourceFile: string;
@@ -34,6 +50,31 @@ interface CompatibilityLookupResponse {
   compatibility: CompatibilityRow[];
 }
 
+const EMPTY_FILTER_OPTIONS: ListingFilterOptions = {
+  brands: [],
+  categories: [],
+  productTypes: [],
+  systemCategories: [],
+  partTypes: [],
+  conditions: [],
+  sourceTags: [],
+  currencies: [],
+};
+
+const DEFAULT_FACET_FILTERS = {
+  brand: "",
+  category: "",
+  productType: "",
+  systemCategory: "",
+  partType: "",
+  condition: "",
+  sourceTag: "",
+  currency: "",
+  titleState: "all",
+  imageState: "all",
+  compatibilityState: "all",
+  oeState: "all",
+} as const;
 const EMPTY_STATS: ListingStats = {
   total: 0,
   unreviewed: 0,
@@ -259,6 +300,7 @@ export default function WorkbenchPage() {
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [facetFilters, setFacetFilters] = useState(DEFAULT_FACET_FILTERS);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -279,11 +321,26 @@ export default function WorkbenchPage() {
     return () => window.clearTimeout(handle);
   }, [queryInput]);
 
+  function updateFacet(name: keyof typeof DEFAULT_FACET_FILTERS, value: string) {
+    setFacetFilters((current) => ({ ...current, [name]: value }));
+    setPage(1);
+  }
+
+  function clearFacetFilters() {
+    setFacetFilters({ ...DEFAULT_FACET_FILTERS });
+    setPage(1);
+  }
   const loadListings = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ q: query, filter, page: String(page), pageSize: "24" });
+      const params = new URLSearchParams({
+        q: query,
+        filter,
+        page: String(page),
+        pageSize: "24",
+        ...Object.fromEntries(Object.entries(facetFilters).filter(([, value]) => value && value !== "all")),
+      });
       const response = await fetch(`/api/listings?${params}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to load listings");
@@ -293,7 +350,7 @@ export default function WorkbenchPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, page, query]);
+  }, [facetFilters, filter, page, query]);
 
   useEffect(() => {
     void loadListings();
@@ -343,6 +400,18 @@ export default function WorkbenchPage() {
     if (!data) return "Loading catalogue";
     return `${formatCount(data.total)} ${data.total === 1 ? "listing" : "listings"}`;
   }, [data]);
+  const filterOptions = data?.filterOptions || EMPTY_FILTER_OPTIONS;
+  const activeFacetCount = Object.values(facetFilters).filter((value) => value && value !== "all").length;
+  const filterCounts: Record<string, number> = {
+    all: stats.total,
+    "needs-title": stats.needsTitle,
+    "needs-image": stats.needsImage,
+    "needs-compatibility": stats.needsCompatibility,
+    ready: stats.ready,
+    draft: stats.draft,
+    approved: stats.approved,
+  };
+  const orderedFilters = [...FILTERS].sort((left, right) => (filterCounts[right[0]] || 0) - (filterCounts[left[0]] || 0));
 
   function updateDetail(patch: Partial<ListingDetail>) {
     setDetail((current) => {
@@ -537,18 +606,39 @@ export default function WorkbenchPage() {
           </div>
 
           <div className="filter-row" aria-label="Listing filters">
-            {FILTERS.map(([value, label]) => (
+            {orderedFilters.map(([value, label]) => (
               <button
                 type="button"
                 key={value}
                 className={filter === value ? "active" : ""}
                 onClick={() => { setFilter(value); setPage(1); }}
               >
-                {label}
+                {label} ({formatCount(filterCounts[value] || 0)})
               </button>
             ))}
           </div>
 
+          <details className="advanced-filters" open>
+            <summary>
+              <span>All filters</span>
+              <small>{activeFacetCount ? `${activeFacetCount} active` : "Choose any combination"} · {formatCount(filterOptions.brands.length)} brands</small>
+            </summary>
+            <div className="advanced-filter-grid">
+              <label>Brand<select value={facetFilters.brand} onChange={(event) => updateFacet("brand", event.target.value)}><option value="">All brands</option>{filterOptions.brands.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Category<select value={facetFilters.category} onChange={(event) => updateFacet("category", event.target.value)}><option value="">All categories</option>{filterOptions.categories.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Product type<select value={facetFilters.productType} onChange={(event) => updateFacet("productType", event.target.value)}><option value="">All product types</option>{filterOptions.productTypes.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>System category<select value={facetFilters.systemCategory} onChange={(event) => updateFacet("systemCategory", event.target.value)}><option value="">All system categories</option>{filterOptions.systemCategories.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Part type<select value={facetFilters.partType} onChange={(event) => updateFacet("partType", event.target.value)}><option value="">All part types</option>{filterOptions.partTypes.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Condition<select value={facetFilters.condition} onChange={(event) => updateFacet("condition", event.target.value)}><option value="">All conditions</option>{filterOptions.conditions.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Source tag<select value={facetFilters.sourceTag} onChange={(event) => updateFacet("sourceTag", event.target.value)}><option value="">All source tags</option>{filterOptions.sourceTags.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Currency<select value={facetFilters.currency} onChange={(event) => updateFacet("currency", event.target.value)}><option value="">All currencies</option>{filterOptions.currencies.map((option) => <option key={option.value} value={option.value}>{option.value} ({formatCount(option.count)})</option>)}</select></label>
+              <label>Title<select value={facetFilters.titleState} onChange={(event) => updateFacet("titleState", event.target.value)}><option value="all">All title states</option><option value="complete">Complete SEO title</option><option value="needs">Needs title work</option></select></label>
+              <label>Images<select value={facetFilters.imageState} onChange={(event) => updateFacet("imageState", event.target.value)}><option value="all">All image states</option><option value="has">Has image</option><option value="missing">Missing image</option></select></label>
+              <label>Compatibility<select value={facetFilters.compatibilityState} onChange={(event) => updateFacet("compatibilityState", event.target.value)}><option value="all">All fitment states</option><option value="confirmed">Confirmed fitment</option><option value="has">Has compatibility rows</option><option value="missing">Missing compatibility</option></select></label>
+              <label>OE number<select value={facetFilters.oeState} onChange={(event) => updateFacet("oeState", event.target.value)}><option value="all">All OE states</option><option value="has">OE available</option><option value="missing">OE missing</option></select></label>
+            </div>
+            {activeFacetCount > 0 && <button className="clear-filters" type="button" onClick={clearFacetFilters}>Clear advanced filters</button>}
+          </details>
           {error ? (
             <div className="empty-state error-state"><strong>Catalogue unavailable</strong><p>{error}</p></div>
           ) : loading && !data ? (
@@ -700,7 +790,22 @@ export default function WorkbenchPage() {
                 </section>
 
                 <section className="edit-section">
-                  <div className="section-heading"><div><span>03</span><h3>Vehicle compatibility</h3></div><small>{detail.compatibility.length} rows</small></div>
+                  <div className="section-heading"><div><span>03</span><h3>FCPEuro item specifics</h3></div><small>{detail.itemSpecifics.length} fields</small></div>
+                  {detail.itemSpecifics.length > 0 ? (
+                    <div className="item-specifics-list">
+                      {detail.itemSpecifics.map((item, index) => (
+                        <div className="item-specific-row" key={`${item.name}-${index}`}>
+                          <strong>{item.name || "Item specific"}</strong>
+                          <span>{item.value || "Not stated"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="inline-empty">No FCPEuro item specifics returned for this listing.</div>}
+                  {detail.itemSpecificsSourceUrl && <a className="evidence-link" href={detail.itemSpecificsSourceUrl} target="_blank" rel="noreferrer">Open FCPEuro product page ↗</a>}
+                  {detail.lemforderSearchUrl && <a className="evidence-link" href={detail.lemforderSearchUrl} target="_blank" rel="noreferrer">Open FCPEuro search used for selection ↗</a>}
+                </section>
+                <section className="edit-section">
+                  <div className="section-heading"><div><span>04</span><h3>Vehicle compatibility</h3></div><small>{detail.compatibility.length} rows</small></div>
                   <label className="universal-toggle">
                     <input type="checkbox" checked={detail.universalFitment} onChange={(event) => updateDetail({ universalFitment: event.target.checked })} />
                     <span><strong>This is a universal-fit part</strong><small>Use only when vehicle-specific fitment does not apply.</small></span>

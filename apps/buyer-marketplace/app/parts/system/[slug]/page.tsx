@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import {
-  renderTaxonomy,
-  taxonomyMetadata,
-} from "@/lib/taxonomy-page";
+import { renderTaxonomy, taxonomyMetadata } from "@/lib/taxonomy-page";
 
 /**
  * Vehicle-system landing page — /parts/system/<slug>.
@@ -17,14 +14,18 @@ export const revalidate = 900;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
   return taxonomyMetadata({ kind: "categoryGroup", slug });
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  return renderTaxonomy({ kind: "categoryGroup", slug });
+  const query = await searchParams;
+  return renderTaxonomy({ kind: "categoryGroup", slug, searchParams: query });
 }

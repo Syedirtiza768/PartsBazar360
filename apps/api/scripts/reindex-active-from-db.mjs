@@ -26,6 +26,7 @@ const BATCH = Math.max(50, Number(process.env.BATCH || 200));
 const LIMIT = Number(process.env.LIMIT || 0);
 const DRY_RUN = process.env.DRY_RUN === '1';
 const SKIP_DELETE = process.env.SKIP_DELETE === '1';
+const WORKERS = Math.max(1, Math.min(16, Number(process.env.WORKERS || process.env.REINDEX_WORKERS || 4) || 4));
 
 function normalizePartNumber(value) {
   return String(value ?? '')
@@ -391,15 +392,15 @@ async function main() {
             properties: {
               id: { type: 'keyword' },
               title: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
-              partType: { type: 'keyword' },
+              partType: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
               brand: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
               manufacturerPartNumber: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
               partNumbers: { type: 'object', enabled: false },
               normalizedPartNumbers: { type: 'keyword' },
               interchangePartNumbers: { type: 'keyword' },
-              category: { type: 'keyword' },
-              categoryGroup: { type: 'keyword' },
-              makes: { type: 'keyword' },
+              category: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+              categoryGroup: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+              makes: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
               oeNumbers: { type: 'keyword' },
               imageUrls: { type: 'keyword', index: false },
               hasImage: { type: 'boolean' },
@@ -426,8 +427,8 @@ async function main() {
                   sourceTag: { type: 'keyword' },
                 },
               },
-              sourceTags: { type: 'keyword' },
-              conditions: { type: 'keyword' },
+              sourceTags: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+              conditions: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
             },
           },
         },
@@ -437,51 +438,65 @@ async function main() {
 
     let indexed = 0;
     let failed = 0;
-
+    let completed = 0;
+    const chunks = [];
     for (let i = 0; i < partIds.length; i += BATCH) {
-      const slice = partIds.slice(i, i + BATCH);
-      const parts = await prisma.canonicalPart.findMany({
-        where: { id: { in: slice } },
-        include: {
-          partNumbers: true,
-          fitments: {
-            include: {
-              vehicleConfig: {
-                include: {
-                  generation: {
-                    include: {
-                      model: {
-                        include: { make: true },
+      chunks.push(partIds.slice(i, i + BATCH));
+    }
+    console.log(`Indexing ${chunks.length} batches with ${Math.min(WORKERS, chunks.length || 1)} workers (batch=${BATCH})...`);
+
+    async function runWorker(workerId) {
+      while (true) {
+        const slice = chunks.shift();
+        if (!slice) return;
+        const parts = await prisma.canonicalPart.findMany({
+          where: { id: { in: slice } },
+          include: {
+            partNumbers: true,
+            fitments: {
+              include: {
+                vehicleConfig: {
+                  include: {
+                    generation: {
+                      include: {
+                        model: {
+                          include: { make: true },
+                        },
                       },
                     },
                   },
                 },
               },
             },
-          },
-          offers: {
-            where: {
-              status: 'ACTIVE',
-              seller: { onboardingStatus: 'ACTIVE' },
+            offers: {
+              where: {
+                status: 'ACTIVE',
+                seller: { onboardingStatus: 'ACTIVE' },
+              },
+              include: {
+                seller: { select: { id: true, name: true, onboardingStatus: true } },
+              },
             },
-            include: {
-              seller: { select: { id: true, name: true, onboardingStatus: true } },
-            },
           },
-        },
-      });
+        });
 
-      const docs = parts.filter((p) => p.offers.length > 0).map(toDoc);
-      const result = await bulkIndex(docs);
-      indexed += result.indexed;
-      failed += result.errors.length;
-      if (result.errors.length) {
-        console.warn('bulk errors sample:', result.errors.slice(0, 3));
+        const docs = parts.filter((p) => p.offers.length > 0).map(toDoc);
+        const result = await bulkIndex(docs);
+        indexed += result.indexed;
+        failed += result.errors.length;
+        completed += slice.length;
+        if (result.errors.length) {
+          console.warn(`worker=${workerId} bulk errors sample:`, result.errors.slice(0, 3));
+        }
+        console.log(
+          `... worker=${workerId} indexed ${completed}/${partIds.length} (ok=${indexed}, fail=${failed})`,
+        );
       }
-      console.log(
-        `... indexed ${Math.min(i + BATCH, partIds.length)}/${partIds.length} (ok=${indexed}, fail=${failed})`,
-      );
     }
+
+    await Promise.all(
+      Array.from({ length: Math.min(WORKERS, Math.max(1, chunks.length)) }, (_, i) => runWorker(i + 1)),
+    );
 
     await os(`/${INDEX}/_refresh`, { method: 'POST' });
     const after = await os(`/${INDEX}/_count`);

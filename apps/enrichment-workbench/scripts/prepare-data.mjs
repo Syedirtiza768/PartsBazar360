@@ -1,5 +1,5 @@
 /* global process, Buffer */
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,9 +14,12 @@ const COMPATIBILITY_OFFSETS_PATH = path.join(WORK_DIR, "compatibility-offsets.js
 const OE_COMPATIBILITY_INDEX_PATH = path.join(WORK_DIR, "oe-compatibility-index.json");
 const MPN_COMPATIBILITY_INDEX_PATH = path.join(WORK_DIR, "mpn-compatibility-index.json");
 const LUNA_ENRICHMENT_PATH = path.join(WORK_DIR, "mpn-luna-enrichment.jsonl");
-const INDEX_VERSION = 8;
+const INDEX_VERSION = 16;
 
-const SOURCE_PATH = path.join(REPO_ROOT, "active_listings_superior_auto_parts_active_from_server.csv");
+const STATIC_SOURCE_PATH = path.join(REPO_ROOT, "active_listings_superior_auto_parts_active_from_server.csv");
+// Prefer a read-only snapshot pulled from the live production catalog.
+const LIVE_SOURCE_PATH = path.join(WORK_DIR, "live-production-listings.csv");
+const SOURCE_PATH = existsSync(LIVE_SOURCE_PATH) ? LIVE_SOURCE_PATH : STATIC_SOURCE_PATH;
 const SEO_TITLE_PATH = path.join(REPO_ROOT, "active_listings_superior_auto_parts_seo_optimized.csv");
 const TITLE_PATH = path.join(REPO_ROOT, "exports", "superior_listings_enriched.csv");
 const IMAGE_PATH = path.join(
@@ -32,6 +35,20 @@ const COMPATIBILITY_PATH = path.join(
 
 const INPUTS = [SOURCE_PATH, SEO_TITLE_PATH, TITLE_PATH, IMAGE_PATH, COMPATIBILITY_PATH, LUNA_ENRICHMENT_PATH].filter(existsSync);
 
+function febiUrlEnrichmentPaths() {
+  if (!existsSync(WORK_DIR)) return [];
+  return readdirSync(WORK_DIR)
+    .filter((name) => /^febi-url-luna-enrichment-batch-.*\.jsonl$/i.test(name))
+    .map((name) => path.join(WORK_DIR, name));
+}
+
+function lemforderFcpeuroEnrichmentPaths() {
+  if (!existsSync(WORK_DIR)) return [];
+  return readdirSync(WORK_DIR)
+    .filter((name) => /^lemforder-fcpeuro-luna-enrichment-batch-.*\.jsonl$/i.test(name))
+    .map((name) => path.join(WORK_DIR, name));
+}
+
 async function cacheIsFresh() {
   if (
     !existsSync(INDEX_PATH) ||
@@ -44,7 +61,7 @@ async function cacheIsFresh() {
   const meta = JSON.parse(await readFile(META_PATH, "utf8"));
   if (meta.indexVersion !== INDEX_VERSION) return false;
   const indexStat = await stat(INDEX_PATH);
-  for (const input of INPUTS) {
+  for (const input of [...INPUTS, ...febiUrlEnrichmentPaths(), ...lemforderFcpeuroEnrichmentPaths()]) {
     if ((await stat(input)).mtimeMs > indexStat.mtimeMs) return false;
   }
   return true;
@@ -58,6 +75,13 @@ function splitUrls(value) {
   return [...new Set(text(value).split(/\s*[|;\n]\s*/).filter((url) => /^https?:\/\//i.test(url)))];
 }
 
+function isUsableImageCandidate(candidateUrl, status, confidence, validation) {
+  const score = Number(confidence);
+  return /^https?:\/\//i.test(candidateUrl) &&
+    String(status || '').trim().toLowerCase() === 'matched' &&
+    Number.isFinite(score) && score >= 0.85 &&
+    !/^invalid\b/i.test(String(validation || '').trim());
+}
 function normalizePartNumber(value) {
   return text(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -106,6 +130,39 @@ async function readLunaEnrichment() {
   return map;
 }
 
+async function readFebiUrlEnrichment() {
+  const map = new Map();
+  for (const filePath of febiUrlEnrichmentPaths()) {
+    const raw = await readFile(filePath, "utf8");
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row.key && row.status === "ok") map.set(row.key, row);
+      } catch {
+        // Ignore a partial final line while a URL-only batch is still running.
+      }
+    }
+  }
+  return map;
+}
+
+async function readLemforderFcpeuroEnrichment() {
+  const map = new Map();
+  for (const filePath of lemforderFcpeuroEnrichmentPaths()) {
+    const raw = await readFile(filePath, "utf8");
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row.key && row.status === "ok") map.set(row.key, row);
+      } catch {
+        // Ignore a partial final line while a URL-enrichment batch is running.
+      }
+    }
+  }
+  return map;
+}
 function isUsefulBrand(value) {
   const normalized = text(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return Boolean(normalized) && !/^(unknown|oe|oem|genuine oem|aftermarket|na|n a)$/.test(normalized);
@@ -206,6 +263,140 @@ function applyLunaResult(listing, result) {
   listing.compatibilitySourceCanonicalPartId = listing.canonicalPartId || "";
   listing.lunaFitmentApplied = true;
 }
+function febiUrlKeyForListing(listing) {
+  const mpn = normalizePartNumber(listing.manufacturerPartNumber || listing.sellerSku);
+  return mpn ? `FEBI|${mpn}` : "";
+}
+
+function applyFebiUrlResult(listing, result) {
+  if (!result || result.status !== "ok") return;
+  const isFebiListing = [listing.brand, listing.manufacturer, listing.titleBrand].some((value) => normalizeBrand(value) === "FEBI");
+  if (!isFebiListing) return;
+  const key = febiUrlKeyForListing(listing);
+  if (!key || result.key !== key) return;
+  listing.febiUrlEnrichmentApplied = true;
+  const description = [result.title, result.description]
+    .map((candidate) => cleanDescriptionCandidate(candidate, listing))
+    .find(Boolean);
+  if (description) listing.titleDescriptionOverride = description;
+  const references = Array.isArray(result.oeReferences)
+    ? result.oeReferences.flatMap((reference) => Array.isArray(reference?.numbers) ? reference.numbers : [])
+    : [];
+  const oeNumber = references.map(text).find(isPlausiblePartNumber);
+  const pageMakes = [...new Set((Array.isArray(result.oeReferences) ? result.oeReferences : []).map((reference) => text(reference?.make)).filter(Boolean))];
+  if (pageMakes.length > 0) listing._titleFitmentFallback = pageMakes.slice(0, 2).join(", ");
+  if (!listing.oemPartNumber && oeNumber) listing.oemPartNumber = oeNumber;
+  const officialImages = (Array.isArray(result.imageUrls) ? result.imageUrls : [])
+    .map(text)
+    .filter((url) => {
+      if (!/^https?:\/\//i.test(url) || /pf-notfound|robot\.png|facebook\.com\/tr\?/i.test(url)) return false;
+      try { return new URL(url).hostname.toLowerCase().endsWith("partsfinder.bilsteingroup.com"); }
+      catch { return false; }
+    });
+  if (officialImages.length > 0) {
+    const zoomedImage = officialImages.find((url) => /pf-article-zoomed/i.test(url));
+    const orderedImages = [zoomedImage, ...officialImages.filter((url) => url !== zoomedImage)].filter(Boolean);
+    listing.currentImageUrls = [...orderedImages, ...listing.currentImageUrls.filter((url) => !orderedImages.includes(url))];
+    listing.imageCandidateApplied = true;
+    listing.candidateImages = [
+      ...listing.candidateImages,
+      ...orderedImages.map((url) => ({
+        url,
+        sourceUrl: text(result.sourceUrl),
+        status: "official-url-page",
+        confidence: "1.00",
+        reason: "Official FEBI partsfinder image URL returned by Luna URL fetch",
+        validation: "official domain",
+      })),
+    ];
+  }
+  if (listing.existingCompatibilityReady) return;
+  const fitment = (Array.isArray(result.compatibility) ? result.compatibility : [])
+    .map(makeCompatibilityRow)
+    .filter(Boolean)
+    .filter((row) => row.yearStart && row.make && row.model);
+  if (result.fitmentStatus === "confirmed_from_rendered_url" && fitment.length > 0) {
+    listing._lunaCompatibility = fitment;
+    const fitmentSummary = summarizeFitments(fitment);
+    listing._titleFitments = fitmentSummary.labels;
+    listing._titleFitmentCount = fitmentSummary.count;
+    listing.existingCompatibilityCount = fitment.length;
+    listing.existingCompatibilityReady = true;
+    listing.compatibilitySourceCanonicalPartId = listing.canonicalPartId || "";
+  }
+}
+function lemforderFcpeuroKeyForListing(listing) {
+  const mpn = normalizePartNumber(listing.manufacturerPartNumber || listing.sellerSku);
+  return mpn ? `LEMFORDER|${mpn}` : "";
+}
+
+function applyLemforderFcpeuroResult(listing, result) {
+  if (!result || result.status !== "ok" || listing.lemforderFcpeuroEnrichmentApplied) return;
+  const isLemforderListing = [listing.brand, listing.manufacturer, listing.titleBrand].some((value) => normalizeBrand(value) === "LEMFORDER");
+  if (!isLemforderListing) return;
+  const key = lemforderFcpeuroKeyForListing(listing);
+  if (!key || result.key !== key) return;
+  listing.lemforderFcpeuroEnrichmentApplied = true;
+  listing.itemSpecifics = Array.isArray(result.itemSpecifics)
+    ? result.itemSpecifics.map((item) => ({ name: text(item?.name), value: text(item?.value) })).filter((item) => item.name || item.value)
+    : [];
+  listing.itemSpecificsSourceUrl = text(result.selectedProductUrl);
+  listing.lemforderSearchUrl = text(result.searchUrl);
+  listing.lemforderSelectedResultIndex = Number(result.selectedResultIndex || result.expectedResultIndex || 0) || 0;
+  const description = [result.title, result.description]
+    .map((candidate) => cleanDescriptionCandidate(candidate, listing))
+    .find(Boolean);
+  if (description) listing.titleDescriptionOverride = description;
+  const vehicleTitle = text(result.vehicleTitle);
+  if (vehicleTitle) listing._titleFitmentFallback = vehicleTitle.slice(0, 140);
+  const references = Array.isArray(result.oeReferences)
+    ? result.oeReferences.flatMap((reference) => Array.isArray(reference?.numbers) ? reference.numbers : [])
+    : [];
+  const oeNumber = references.map(text).find((candidate) => isPlausiblePartNumber(candidate) && normalizePartNumber(candidate) !== normalizePartNumber(listing.manufacturerPartNumber));
+  if (!listing.oemPartNumber && oeNumber) listing.oemPartNumber = oeNumber;
+  const pageImages = (Array.isArray(result.imageUrls) ? result.imageUrls : [])
+    .map(text)
+    .filter((url) => /^https?:\/\//i.test(url) && !/placeholder|no[-_ ]?image|default[-_ ]?image|logo/i.test(url));
+  if (pageImages.length > 0) {
+    listing.currentImageUrls = [...pageImages, ...listing.currentImageUrls.filter((url) => !pageImages.includes(url))];
+    listing.imageCandidateApplied = true;
+    listing.candidateImages = [
+      ...listing.candidateImages,
+      ...pageImages.map((url) => ({
+        url,
+        sourceUrl: text(result.selectedProductUrl),
+        status: "fcpeuro-product-page",
+        confidence: "1.00",
+        reason: "FCPEuro product image URL returned by Luna page extraction",
+        validation: "source page",
+      })),
+    ];
+  }
+  if (listing.existingCompatibilityReady) return;
+  const fitment = (Array.isArray(result.fitment) ? result.fitment : [])
+    .map(makeCompatibilityRow)
+    .filter(Boolean)
+    .filter((row) => row.yearStart && row.make && row.model);
+  if (result.fitmentStatus === "confirmed_from_fcpeuro_page" && fitment.length > 0) {
+    listing._lunaCompatibility = fitment;
+    const fitmentSummary = summarizeFitments(fitment);
+    listing._titleFitments = fitmentSummary.labels;
+    listing._titleFitmentCount = fitmentSummary.count;
+    listing.existingCompatibilityCount = fitment.length;
+    listing.existingCompatibilityReady = true;
+    listing.compatibilitySourceCanonicalPartId = listing.canonicalPartId || "";
+  }
+}
+function applyOeFitmentLookup(listing, oeCompatibilityIndex) {
+  if (listing.existingCompatibilityReady || !listing.oemPartNumber) return;
+  const match = oeCompatibilityIndex[normalizePartNumber(listing.oemPartNumber)];
+  if (!match) return;
+  listing.compatibilitySourceCanonicalPartId = match.canonicalPartId;
+  listing.existingCompatibilityCount = match.fitmentCount;
+  listing.existingCompatibilityReady = true;
+  listing._titleFitments = match.fitmentLabels;
+  listing._titleFitmentCount = match.fitmentCount;
+}
 function oeCandidatesForRow(row) {
   const manufacturerPartNumber = text(row.manufacturer_part_number);
   const isOemPart = [text(row.part_type), text(row.part_source)]
@@ -244,9 +435,10 @@ function buildBulkSeoTitle(listing) {
   let description = `${baseDescription} ${mpn}`.trim();
   const oe = listing.oemPartNumber ? `OE ${listing.oemPartNumber}` : "OE not available";
   const allFitments = listing._titleFitments || [];
+  const fitmentFallback = text(listing._titleFitmentFallback);
   let selectedFitments = allFitments.slice(0, 3);
   const fitmentLabel = () => {
-    if (selectedFitments.length === 0) return "Fitment not confirmed";
+    if (selectedFitments.length === 0) return fitmentFallback ? `Fits ${fitmentFallback}` : "Fitment not confirmed";
     const remaining = Math.max(0, (listing._titleFitmentCount || selectedFitments.length) - selectedFitments.length);
     return `Fits ${selectedFitments.join(", ")}${remaining > 0 ? ` +${remaining} models` : ""}`;
   };
@@ -384,13 +576,15 @@ async function main() {
   process.stdout.write("Preparing the Superior catalogue…\n");
   const listings = new Map();
   const lunaEnrichment = await readLunaEnrichment();
+  const febiUrlEnrichment = await readFebiUrlEnrichment();
+  const lemforderFcpeuroEnrichment = await readLemforderFcpeuroEnrichment();
   await parseCsv(SOURCE_PATH, (row) => {
     if (text(row.seller_name).toLowerCase() !== "superior auto parts") return;
     const listingId = text(row.listing_id);
     if (!listingId) return;
     listings.set(listingId, {
       listingId,
-      canonicalPartId: "",
+      canonicalPartId: text(row.canonical_part_id),
       sellerName: text(row.seller_name),
       originalTitle: text(row.title).replaceAll("â€“", "–").replaceAll("â€”", "—"),
       suggestedTitle: "",
@@ -408,12 +602,15 @@ async function main() {
       sourceTag: text(row.source_tag),
       sellerSku: text(row.seller_sku),
       sourceUpdatedAt: text(row.updated_at),
-      currentImageUrls: [],
+      currentImageUrls: splitUrls(row.current_image_urls),
+      imageCandidateApplied: false,
       candidateImages: [],
       existingCompatibility: [],
       existingCompatibilityCount: 0,
       existingCompatibilityReady: false,
       compatibilityNote: "",
+      itemSpecifics: [],
+      itemSpecificsSourceUrl: "",
     });
   });
 
@@ -437,19 +634,34 @@ async function main() {
     const listing = listings.get(text(row.listing_id));
     if (!listing) return;
     listing.canonicalPartId = text(row.canonical_part_id);
-    listing.currentImageUrls = splitUrls(row.current_image_urls);
+    const imageUrls = splitUrls(row.current_image_urls);
+    // Keep the live production image as the fallback. The older enrichment
+    // export may contain a stale copy of that field, so it must not overwrite
+    // a URL already supplied by the live snapshot.
+    if (listing.currentImageUrls.length === 0 && imageUrls.length > 0) {
+      listing.currentImageUrls = imageUrls;
+    }
     const candidateUrl = text(row.found_image_url);
+    const candidateStatus = text(row.image_lookup_status);
+    const candidateConfidence = text(row.image_match_confidence);
+    const candidateValidation = text(row.image_url_validation);
     if (candidateUrl) {
       listing.candidateImages.push({
         url: candidateUrl,
         sourceUrl: text(row.image_source_url),
-        status: text(row.image_lookup_status),
-        confidence: text(row.image_match_confidence),
+        status: candidateStatus,
+        confidence: candidateConfidence,
         reason: text(row.image_match_reason),
-        validation: text(row.image_url_validation),
+        validation: candidateValidation,
       });
-    }
-    if (listing.canonicalPartId) {
+      // The image export is explicitly a validated lookup. Promote only
+      // high-confidence matches; keep the production URL behind it so an
+      // operator still has a fallback to compare.
+      if (isUsableImageCandidate(candidateUrl, candidateStatus, candidateConfidence, candidateValidation)) {
+        listing.currentImageUrls = [candidateUrl, ...listing.currentImageUrls.filter((url) => url !== candidateUrl)];
+        listing.imageCandidateApplied = true;
+      }
+    }    if (listing.canonicalPartId) {
       const matches = byCanonicalPartId.get(listing.canonicalPartId) || [];
       matches.push(listing);
       byCanonicalPartId.set(listing.canonicalPartId, matches);
@@ -492,6 +704,8 @@ async function main() {
               sourceTitle: text(row.title),
               fitmentStatus: text(row.fitment_status),
               confidence,
+              fitmentLabels: fitmentSummary.labels,
+              fitmentCount: fitmentSummary.count,
             };
           }
           const manufacturerPartNumber = text(row.manufacturer_part_number);
@@ -525,6 +739,9 @@ async function main() {
       }
     });
     for (const listing of listings.values()) {
+      applyLemforderFcpeuroResult(listing, lemforderFcpeuroEnrichment.get(lemforderFcpeuroKeyForListing(listing)));
+      if (!listing.febiUrlEnrichmentApplied) applyFebiUrlResult(listing, febiUrlEnrichment.get(febiUrlKeyForListing(listing)));
+      applyOeFitmentLookup(listing, oeCompatibilityIndex);
       if (listing.existingCompatibilityReady) continue;
       const match = mpnLookupKeys(
         listing.brand,
@@ -541,6 +758,9 @@ async function main() {
     }
     const lunaSerialized = new Set();
     for (const listing of listings.values()) {
+      applyLemforderFcpeuroResult(listing, lemforderFcpeuroEnrichment.get(lemforderFcpeuroKeyForListing(listing)));
+      applyLemforderFcpeuroResult(listing, lemforderFcpeuroEnrichment.get(lemforderFcpeuroKeyForListing(listing)));
+    if (!listing.existingCompatibilityReady) applyFebiUrlResult(listing, febiUrlEnrichment.get(febiUrlKeyForListing(listing)));
       if (!listing.existingCompatibilityReady) applyLunaResult(listing, lunaEnrichment.get(lunaKeyForListing(listing)));
       const compatibility = listing._lunaCompatibility;
       if (!compatibility?.length || !listing.canonicalPartId || lunaSerialized.has(listing.canonicalPartId)) continue;
@@ -568,13 +788,20 @@ async function main() {
   }
 
   for (const listing of listings.values()) {
-    if (!listing.existingCompatibilityReady) applyLunaResult(listing, lunaEnrichment.get(lunaKeyForListing(listing)));
+    applyLemforderFcpeuroResult(listing, lemforderFcpeuroEnrichment.get(lemforderFcpeuroKeyForListing(listing)));
+    if (!listing.existingCompatibilityReady) applyFebiUrlResult(listing, febiUrlEnrichment.get(febiUrlKeyForListing(listing)));
+      if (!listing.existingCompatibilityReady) applyLunaResult(listing, lunaEnrichment.get(lunaKeyForListing(listing)));
   }
 
-  const values = [...listings.values()];
+  const values = [...listings.values()].filter((listing) => {
+    const isFebiListing = [listing.brand, listing.manufacturer, listing.titleBrand].some((value) => normalizeBrand(value) === "FEBI");
+    return !isFebiListing || listing.febiUrlEnrichmentApplied === true;
+  });
   const lunaFitmentTitles = values.filter((listing) => listing.lunaFitmentApplied).length;
   const lunaDescriptionTitles = values.filter((listing) => listing.lunaDescriptionApplied).length;
   const lunaOeRecovered = values.filter((listing) => listing.lunaOeRecovered).length;
+  const lemforderFcpeuroListingsApplied = values.filter((listing) => listing.lemforderFcpeuroEnrichmentApplied).length;
+  const listingsWithItemSpecifics = values.filter((listing) => listing.itemSpecifics.length > 0).length;
   const knownBrands = [...new Set(values.flatMap((listing) => [listing.brand, listing.manufacturer])
     .filter(isUsefulBrand)
     .map(text))].sort((left, right) => right.length - left.length);
@@ -583,11 +810,13 @@ async function main() {
     listing.suggestedTitle = buildBulkSeoTitle(listing);
     delete listing._titleFitments;
     delete listing._titleFitmentCount;
+    delete listing._titleFitmentFallback;
     delete listing._lunaCompatibility;
     delete listing.titleDescriptionOverride;
     delete listing.lunaFitmentApplied;
     delete listing.lunaDescriptionApplied;
     delete listing.lunaOeRecovered;
+    delete listing.lemforderFcpeuroEnrichmentApplied;
   }
   const temporaryIndex = `${INDEX_PATH}.tmp`;
   const output = createWriteStream(temporaryIndex, { encoding: "utf8" });
@@ -605,8 +834,10 @@ async function main() {
     generatedAt: new Date().toISOString(),
     sourceFile: path.relative(REPO_ROOT, SOURCE_PATH).replaceAll("\\", "/"),
     totalListings: values.length,
+    excludedUnusableFebiListings: listings.size - values.length,
     titleSuggestions,
     listingsWithImages: values.filter((listing) => listing.currentImageUrls.length > 0).length,
+    imageCandidatesApplied: values.filter((listing) => listing.imageCandidateApplied).length,
     listingsWithCompatibility: values.filter((listing) => listing.existingCompatibilityCount > 0).length,
     titlesWithOe: values.filter((listing) => Boolean(listing.oemPartNumber)).length,
     titlesWithConfirmedFitment: values.filter((listing) => listing.existingCompatibilityReady).length,
@@ -614,6 +845,11 @@ async function main() {
     titlesWithLunaDescription: lunaDescriptionTitles,
     lunaOeRecovered,
     lunaEnrichmentRecords: lunaEnrichment.size,
+    febiUrlEnrichmentRecords: febiUrlEnrichment.size,
+    febiUrlListingsApplied: values.filter((listing) => listing.febiUrlEnrichmentApplied).length,
+    lemforderFcpeuroEnrichmentRecords: lemforderFcpeuroEnrichment.size,
+    lemforderFcpeuroListingsApplied,
+    listingsWithItemSpecifics,
     titlesUsingOeFallback: values.filter((listing) => !listing.oemPartNumber).length,
     titlesUsingFitmentFallback: values.filter((listing) => !listing.existingCompatibilityReady).length,
     titlesMatchedByBrandMpn: values.filter((listing) =>

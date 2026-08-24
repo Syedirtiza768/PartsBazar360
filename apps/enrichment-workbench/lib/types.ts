@@ -20,6 +20,11 @@ export interface ImageCandidate {
   validation: string;
 }
 
+export interface ItemSpecific {
+  name: string;
+  value: string;
+}
+
 export interface SourceListing {
   listingId: string;
   canonicalPartId: string;
@@ -42,12 +47,17 @@ export interface SourceListing {
   sellerSku: string;
   sourceUpdatedAt: string;
   currentImageUrls: string[];
+  imageCandidateApplied?: boolean;
   candidateImages: ImageCandidate[];
   existingCompatibility: CompatibilityRow[];
   existingCompatibilityCount: number;
   existingCompatibilityReady: boolean;
   compatibilitySourceCanonicalPartId?: string;
   compatibilityNote: string;
+  itemSpecifics: ItemSpecific[];
+  itemSpecificsSourceUrl: string;
+  lemforderSearchUrl?: string;
+  lemforderSelectedResultIndex?: number;
 }
 
 export interface ListingEdit {

@@ -11,6 +11,7 @@
 
 import { INTERNAL_API_URL } from "@/lib/api";
 import type { BrowseResponse } from "@/lib/types";
+import type { SearchParamsShape } from "@/lib/filter-params";
 import type { SeoTaxonomyKind } from "@repo/catalog-contracts";
 
 export interface TaxonomyNode {
@@ -84,9 +85,25 @@ export async function resolveTaxonomyNode(
  * curated, indexable *view* of the same inventory, not a parallel data path,
  * so there is no way for the two to disagree about what a category contains.
  */
+const TAXONOMY_FILTER_KEYS = [
+  "category",
+  "categoryGroup",
+  "brand",
+  "make",
+  "partType",
+  "sourceTag",
+  "minPrice",
+  "maxPrice",
+  "includeInterchange",
+] as const;
+
 export async function getTaxonomyListings(
   node: TaxonomyNode,
-  options: { page?: number; pageSize?: number } = {},
+  options: {
+    page?: number;
+    pageSize?: number;
+    filters?: SearchParamsShape;
+  } = {},
 ): Promise<BrowseResponse | null> {
   const params = new URLSearchParams();
 
@@ -115,6 +132,11 @@ export async function getTaxonomyListings(
     }
     default:
       return null;
+  }
+
+  for (const key of TAXONOMY_FILTER_KEYS) {
+    const value = options.filters?.[key];
+    if (value && !params.has(key)) params.set(key, value);
   }
 
   params.set("page", String(Math.max(1, options.page ?? 1)));

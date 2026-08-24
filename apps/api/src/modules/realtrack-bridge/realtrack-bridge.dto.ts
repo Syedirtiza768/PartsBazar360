@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsInt,
@@ -24,6 +25,11 @@ export class RealtrackBridgeOfferQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  brand?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(8)
   sourceTag?: string;
 
@@ -43,6 +49,13 @@ export class RealtrackBridgeOfferQueryDto {
   limit = 100;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  @Type(() => Number)
+  page = 1;
+
+  @IsOptional()
   @Matches(CURRENCY)
   sourceCurrency?: string;
 
@@ -57,10 +70,49 @@ export class RealtrackBridgeOfferQueryDto {
 }
 
 export class RealtrackBridgeSelectionDto {
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(5000)
   @IsString({ each: true })
-  offerIds!: string[];
+  offerIds?: string[];
+
+  /** Resolve the current filters server-side instead of relying on visible rows. */
+  @IsOptional()
+  @IsBoolean()
+  @Transform(booleanTransform)
+  selectAll?: boolean;
+
+  /** Safety cap for a filtered transfer. The supported maximum is 5,000. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  @Type(() => Number)
+  maxItems = 5000;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  brand?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  sourceTag?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerId?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @Matches(CURRENCY)

@@ -10,6 +10,7 @@ import {
   RealtrackClientService,
   RemoteListingCreateResult,
 } from './realtrack-client.service';
+import { RealtrackFxService } from './realtrack-fx.service';
 
 interface BridgeOfferRecord {
   id: string;
@@ -34,10 +35,54 @@ interface BridgeOfferRecord {
     description: string | null;
     imageUrls: string[];
     oeNumbers: string[];
+    fitmentFlags: string[];
+    compatibility: unknown;
+    itemSpecifics: unknown;
+    dimensions: unknown;
+    position: string | null;
+    vehicleSystem: string | null;
+    listingUrl: string | null;
+    ebayItemId: string | null;
+    manufacturer: string | null;
     manufacturerPartNumber: string | null;
     genuineOemPartNumber: string | null;
     partType: string;
-    media: Array<{ url: string; sortOrder: number; isPrimary: boolean }>;
+    partSource: string;
+    qualityTier: string;
+    fitmentStatus: string;
+    fitmentConfidence: number | null;
+    fitments: Array<{
+      evidenceLevel: string;
+      confidence: number;
+      source: string | null;
+      verificationStatus: string;
+      reason: string | null;
+      fitmentNotes: string | null;
+      originalData: unknown;
+      vehicleConfig: {
+        trim: string | null;
+        engine: string | null;
+        transmission: string | null;
+        drivetrain: string | null;
+        fuel: string | null;
+        market: string | null;
+        generation: {
+          name: string;
+          startYear: number | null;
+          endYear: number | null;
+          model: {
+            name: string;
+            make: { name: string; displayName: string | null };
+          };
+        };
+      };
+    }>;
+    media: Array<{
+      url: string;
+      sourceUrl: string | null;
+      sortOrder: number;
+      isPrimary: boolean;
+    }>;
   };
 }
 
@@ -49,12 +94,27 @@ interface BridgePlan {
   sourceCurrency: string;
   targetCurrency: string;
   sellingPrice: number | null;
+  convertedCostUsd: number | null;
+  conversionRateToUsd: number | null;
   quantity: number;
   imageUrls: string[];
   skipReason: string | null;
   skipDetail: string | null;
   offer: BridgeOfferRecord;
 }
+
+export type RealtrackBridgeProgressReporter = (
+  progress: Record<string, unknown>,
+) => Promise<void> | void;
+
+type BridgeOfferFilters = {
+  search?: string;
+  brand?: string;
+  sourceTag?: string;
+  sellerId?: string;
+  status?: string;
+  sourceCurrency?: string;
+};
 
 const DEFAULT_SOURCE_CURRENCY = 'USD';
 const DEFAULT_TARGET_CURRENCY = 'USD';
@@ -66,34 +126,39 @@ export class RealtrackBridgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtrack: RealtrackClientService,
+    private readonly fx: RealtrackFxService,
   ) {}
 
   async listOffers(query: RealtrackBridgeOfferQueryDto) {
-    const sourceCurrency = this.currency(
-      query.sourceCurrency || process.env.REALTRACK_BRIDGE_SOURCE_CURRENCY,
-      DEFAULT_SOURCE_CURRENCY,
-    );
-    const targetCurrency = this.currency(
-      query.targetCurrency || process.env.REALTRACK_BRIDGE_TARGET_CURRENCY,
-      DEFAULT_TARGET_CURRENCY,
-    );
+    const sourceCurrency = this.sourceCurrencyFilter(query.sourceCurrency);
+    const targetCurrency = this.targetCurrency(query.targetCurrency);
     const where = this.offerWhere(query);
+    const limit = query.limit || 100;
+    const page = query.page || 1;
     const [total, offers] = await Promise.all([
       this.prisma.sellerOffer.count({ where }),
-      this.findOffers(where, query.limit || 100),
+      this.findOffers(where, limit, {
+        skip: (page - 1) * limit,
+        maxTake: 200,
+      }),
     ]);
 
     return {
       total,
+      page,
+      limit,
+      hasMore: page * limit < total,
       sourceCurrency,
       targetCurrency,
-      items: offers.map((offer) =>
-        this.publicPlan(
-          this.planOffer(
-            offer,
-            sourceCurrency,
-            targetCurrency,
-            query.includeOutOfStock === true,
+      items: await Promise.all(
+        offers.map(async (offer) =>
+          this.publicPlan(
+            await this.planOffer(
+              offer,
+              sourceCurrency,
+              targetCurrency,
+              query.includeOutOfStock === true,
+            ),
           ),
         ),
       ),
@@ -103,6 +168,61 @@ export class RealtrackBridgeService {
   async preview(input: RealtrackBridgeSelectionDto) {
     const plans = await this.plansForSelection(input);
     return this.previewResponse(plans);
+  }
+
+  /**
+   * Build a self-contained migration bundle without calling RealTrack.
+   *
+   * The bundle deliberately uses the same selection, FX, pricing, image and
+   * fitment mapping code as the bridge transfer path. A destination-side
+   * runner can then apply each DTO through RealTrack's ListingsService
+   * transaction, avoiding the HTTP throttler while preserving business rules.
+   */
+  async exportMigration(input: RealtrackBridgeSelectionDto) {
+    const plans = await this.plansForSelection({
+      ...input,
+      dryRun: true,
+      targetCurrency: 'USD',
+    });
+
+    return {
+      schemaVersion: 'parts-bazar-realtrack-migration/v1',
+      generatedAt: new Date().toISOString(),
+      filter: {
+        brand: input.brand || null,
+        search: input.search || null,
+        status: input.status || 'ACTIVE',
+        includeOutOfStock: input.includeOutOfStock === true,
+        maxItems: Math.min(Math.max(input.maxItems || 5000, 1), 5000),
+      },
+      sourceCurrency: plans[0]?.sourceCurrency || this.defaultSourceCurrency(),
+      targetCurrency: 'USD',
+      pricingRule: 'realtrack-bridge-v1',
+      counts: {
+        selected: plans.length,
+        eligible: plans.filter((plan) => !plan.skipReason).length,
+        skipped: plans.filter((plan) => Boolean(plan.skipReason)).length,
+      },
+      records: plans.map((plan) => ({
+        sourceOfferId: plan.offerId,
+        sourcePartId: plan.offer.canonicalPart.id,
+        sourceSellerId: plan.offer.seller.id,
+        sourceBrand: plan.offer.canonicalPart.brand,
+        sourceSku: plan.offer.sellerSku,
+        targetSku: plan.sku,
+        sourceCost: plan.cost,
+        sourceCurrency: plan.offer.currency,
+        convertedCostUsd: plan.convertedCostUsd,
+        conversionRateToUsd: plan.conversionRateToUsd,
+        sellingPriceUsd: plan.sellingPrice,
+        quantity: plan.quantity,
+        imageCount: plan.imageUrls.length,
+        fitmentCount: plan.offer.canonicalPart.fitments.length,
+        skipReason: plan.skipReason,
+        skipDetail: plan.skipDetail,
+        dto: plan.skipReason ? null : this.remoteCreatePayload(plan),
+      })),
+    };
   }
 
   async transfer(input: RealtrackBridgeSelectionDto) {
@@ -120,6 +240,26 @@ export class RealtrackBridgeService {
     const dryRun = input.dryRun !== false;
     if (dryRun) return { dryRun: true, ...this.previewResponse(plans) };
 
+    return this.executeTransfer(input, plans);
+  }
+
+  async executeTransfer(
+    input: RealtrackBridgeSelectionDto,
+    preloadedPlans?: BridgePlan[],
+    reportProgress?: RealtrackBridgeProgressReporter,
+  ) {
+    const publishToEbay = input.publishToEbay === true;
+    const storeIds = [
+      ...new Set((input.storeIds || []).map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (publishToEbay && storeIds.length === 0) {
+      throw new BadRequestException(
+        'storeIds are required when publishToEbay is enabled',
+      );
+    }
+
+    const plans = preloadedPlans || (await this.plansForSelection(input));
+
     const results: Array<Record<string, unknown>> = plans
       .filter((plan) => plan.skipReason)
       .map((plan) => ({
@@ -135,7 +275,19 @@ export class RealtrackBridgeService {
       remote: RemoteListingCreateResult;
     }> = [];
 
-    for (const plan of plans.filter((candidate) => !candidate.skipReason)) {
+    const eligiblePlans = plans.filter((candidate) => !candidate.skipReason);
+    let processed = 0;
+    await reportProgress?.({
+      phase: 'transferring',
+      total: plans.length,
+      eligible: eligiblePlans.length,
+      processed,
+      transferred: 0,
+      failed: 0,
+      skipped: plans.length - eligiblePlans.length,
+    });
+
+    for (const plan of eligiblePlans) {
       try {
         const remote = await this.realtrack.createListing(
           this.remoteCreatePayload(plan),
@@ -158,9 +310,28 @@ export class RealtrackBridgeService {
           error: this.errorMessage(error),
         });
       }
+      processed += 1;
+      await reportProgress?.({
+        phase: 'transferring',
+        total: plans.length,
+        eligible: eligiblePlans.length,
+        processed,
+        transferred: created.length,
+        failed: processed - created.length,
+        skipped: plans.length - eligiblePlans.length,
+      });
     }
 
     if (publishToEbay && created.length) {
+      await reportProgress?.({
+        phase: 'publishing',
+        total: plans.length,
+        eligible: eligiblePlans.length,
+        processed,
+        transferred: created.length,
+        failed: processed - created.length,
+        skipped: plans.length - eligiblePlans.length,
+      });
       try {
         const response = await this.realtrack.publishBatch(
           created.map(({ plan, remote }) =>
@@ -180,7 +351,7 @@ export class RealtrackBridgeService {
     }
 
     const eligibleCount = plans.filter((plan) => !plan.skipReason).length;
-    return {
+    const response = {
       dryRun: false,
       sourceCurrency: plans[0]?.sourceCurrency || this.defaultSourceCurrency(),
       targetCurrency: plans[0]?.targetCurrency || this.defaultTargetCurrency(),
@@ -196,37 +367,60 @@ export class RealtrackBridgeService {
       },
       results,
     };
+    await reportProgress?.({
+      phase: 'completed',
+      total: plans.length,
+      eligible: eligibleCount,
+      processed,
+      transferred: created.length,
+      failed: eligibleCount - created.length,
+      skipped: plans.length - eligibleCount,
+    });
+    return response;
   }
 
   private async plansForSelection(input: RealtrackBridgeSelectionDto) {
     const ids = [
-      ...new Set(input.offerIds.map((id) => id.trim()).filter(Boolean)),
+      ...new Set((input.offerIds || []).map((id) => id.trim()).filter(Boolean)),
     ];
-    if (!ids.length)
-      throw new BadRequestException('At least one offerId is required');
-    const offers = await this.findOffers({ id: { in: ids } }, ids.length);
-    const found = new Set(offers.map((offer) => offer.id));
-    const missing = ids.filter((id) => !found.has(id));
-    if (missing.length) {
-      throw new BadRequestException(
-        `Offer(s) not found: ${missing.join(', ')}`,
-      );
+    let offers: BridgeOfferRecord[];
+    if (input.selectAll === true) {
+      const maxItems = Math.min(Math.max(input.maxItems || 5000, 1), 5000);
+      if (!maxItems) {
+        throw new BadRequestException('maxItems must be at least 1');
+      }
+      const where = this.offerWhere(input);
+      offers = await this.findOffers(where, maxItems, { maxTake: 5000 });
+      if (!offers.length) {
+        throw new BadRequestException('No offers match the selected filters');
+      }
+    } else {
+      if (!ids.length)
+        throw new BadRequestException(
+          'Select at least one offer or enable selectAll',
+        );
+      offers = await this.findOffers({ id: { in: ids } }, ids.length, {
+        maxTake: 5000,
+      });
+      const found = new Set(offers.map((offer) => offer.id));
+      const missing = ids.filter((id) => !found.has(id));
+      if (missing.length) {
+        throw new BadRequestException(
+          `Offer(s) not found: ${missing.join(', ')}`,
+        );
+      }
     }
 
-    const sourceCurrency = this.currency(
-      input.sourceCurrency || process.env.REALTRACK_BRIDGE_SOURCE_CURRENCY,
-      DEFAULT_SOURCE_CURRENCY,
-    );
-    const targetCurrency = this.currency(
-      input.targetCurrency || process.env.REALTRACK_BRIDGE_TARGET_CURRENCY,
-      DEFAULT_TARGET_CURRENCY,
-    );
-    return offers.map((offer) =>
-      this.planOffer(
-        offer,
-        sourceCurrency,
-        targetCurrency,
-        input.includeOutOfStock === true,
+    const sourceCurrency = this.sourceCurrencyFilter(input.sourceCurrency);
+    const targetCurrency = this.targetCurrency(input.targetCurrency);
+    return Promise.all(
+      offers.map((offer) =>
+        this.planOffer(
+          offer,
+          sourceCurrency,
+          targetCurrency,
+          input.includeOutOfStock === true,
+        ),
       ),
     );
   }
@@ -234,11 +428,13 @@ export class RealtrackBridgeService {
   private async findOffers(
     where: Prisma.SellerOfferWhereInput,
     limit: number,
+    options: { skip?: number; maxTake?: number } = {},
   ): Promise<BridgeOfferRecord[]> {
     return this.prisma.sellerOffer.findMany({
       where,
       orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
-      take: Math.min(Math.max(limit, 1), 200),
+      skip: Math.max(options.skip || 0, 0),
+      take: Math.min(Math.max(limit, 1), options.maxTake || 200),
       select: {
         id: true,
         price: true,
@@ -263,28 +459,84 @@ export class RealtrackBridgeService {
             description: true,
             imageUrls: true,
             oeNumbers: true,
+            fitmentFlags: true,
+            compatibility: true,
+            itemSpecifics: true,
+            dimensions: true,
+            position: true,
+            vehicleSystem: true,
+            listingUrl: true,
+            ebayItemId: true,
+            manufacturer: true,
             manufacturerPartNumber: true,
             genuineOemPartNumber: true,
             partType: true,
+            partSource: true,
+            qualityTier: true,
+            fitmentStatus: true,
+            fitmentConfidence: true,
+            fitments: {
+              select: {
+                evidenceLevel: true,
+                confidence: true,
+                source: true,
+                verificationStatus: true,
+                reason: true,
+                fitmentNotes: true,
+                originalData: true,
+                vehicleConfig: {
+                  select: {
+                    trim: true,
+                    engine: true,
+                    transmission: true,
+                    drivetrain: true,
+                    fuel: true,
+                    market: true,
+                    generation: {
+                      select: {
+                        name: true,
+                        startYear: true,
+                        endYear: true,
+                        model: {
+                          select: {
+                            name: true,
+                            make: { select: { name: true, displayName: true } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
             media: {
-              select: { url: true, sortOrder: true, isPrimary: true },
+              select: {
+                url: true,
+                sourceUrl: true,
+                sortOrder: true,
+                isPrimary: true,
+              },
               orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
-              take: 24,
             },
           },
         },
       },
-    }) as unknown as Promise<BridgeOfferRecord[]>;
+    });
   }
 
-  private offerWhere(
-    query: RealtrackBridgeOfferQueryDto,
-  ): Prisma.SellerOfferWhereInput {
+  private offerWhere(query: BridgeOfferFilters): Prisma.SellerOfferWhereInput {
     const search = query.search?.trim();
+    const brand = query.brand?.trim();
     return {
       status: query.status || 'ACTIVE',
       sourceTag: query.sourceTag || undefined,
       sellerId: query.sellerId || undefined,
+      currency: query.sourceCurrency
+        ? this.currency(query.sourceCurrency, '')
+        : undefined,
+      canonicalPart: brand
+        ? { brand: { contains: brand, mode: 'insensitive' } }
+        : undefined,
       ...(search
         ? {
             OR: [
@@ -310,32 +562,19 @@ export class RealtrackBridgeService {
     };
   }
 
-  private planOffer(
+  private async planOffer(
     offer: BridgeOfferRecord,
     sourceCurrency: string,
     targetCurrency: string,
     includeOutOfStock: boolean,
-  ): BridgePlan {
+  ): Promise<BridgePlan> {
     const cost = offer.sellerBasePrice ?? offer.price;
     const part = offer.canonicalPart;
     const title = this.titleFor(offer);
     const quantity = offer.inventory
       .filter((row) => row.status === 'AVAILABLE')
       .reduce((sum, row) => sum + Math.max(0, row.quantity), 0);
-    const imageUrls = [
-      ...new Set(
-        [
-          ...part.imageUrls,
-          ...part.media
-            .sort(
-              (a, b) =>
-                Number(b.isPrimary) - Number(a.isPrimary) ||
-                a.sortOrder - b.sortOrder,
-            )
-            .map((media) => media.url),
-        ].filter((url) => /^https?:\/\//i.test(url)),
-      ),
-    ].slice(0, 24);
+    const imageUrls = this.imageUrlsFor(part);
     const plan: BridgePlan = {
       offerId: offer.id,
       sku: this.skuFor(offer.id),
@@ -344,6 +583,8 @@ export class RealtrackBridgeService {
       sourceCurrency,
       targetCurrency,
       sellingPrice: null,
+      convertedCostUsd: null,
+      conversionRateToUsd: null,
       quantity,
       imageUrls,
       skipReason: null,
@@ -356,31 +597,48 @@ export class RealtrackBridgeService {
       plan.skipDetail = `Offer status is ${offer.status}`;
       return plan;
     }
-    if (this.currency(offer.currency, '') !== sourceCurrency) {
-      plan.skipReason = 'currency_mismatch';
-      plan.skipDetail = `Offer currency is ${offer.currency}; selected source currency is ${sourceCurrency}`;
-      return plan;
-    }
     if (!includeOutOfStock && quantity <= 0) {
       plan.skipReason = 'no_inventory';
       plan.skipDetail = 'No AVAILABLE inventory quantity';
       return plan;
     }
 
-    const price = calculateRealtrackPrice(cost);
+    const initialPrice = calculateRealtrackPrice(cost);
+    if (initialPrice.skipReason === 'invalid_cost') {
+      plan.skipReason = initialPrice.skipReason;
+      plan.skipDetail = 'Cost is not a valid non-negative number';
+      return plan;
+    }
+
+    let converted: { amountUsd: number; rateToUsd: number };
+    try {
+      converted = await this.fx.toUsd(cost, offer.currency);
+    } catch (error: unknown) {
+      plan.skipReason = 'currency_conversion_unavailable';
+      plan.skipDetail =
+        error instanceof Error
+          ? error.message
+          : 'USD exchange rates are temporarily unavailable';
+      return plan;
+    }
+    plan.convertedCostUsd = converted.amountUsd;
+    plan.conversionRateToUsd = converted.rateToUsd;
+
+    const price = calculateRealtrackPrice(converted.amountUsd);
     plan.sellingPrice = price.sellingPrice;
     plan.skipReason = price.skipReason;
     plan.skipDetail =
       price.skipReason === 'below_minimum'
-        ? 'Cost is below $5.00'
+        ? 'Converted USD cost is below $5.00'
         : price.skipReason === 'invalid_cost'
           ? 'Cost is not a valid non-negative number'
           : null;
     return plan;
   }
 
-  private publicPlan(plan: BridgePlan) {
-    return {
+  private publicPlan(plan: BridgePlan, includeDetails = false) {
+    const part = plan.offer.canonicalPart;
+    const response = {
       offerId: plan.offerId,
       sku: plan.sku,
       title: plan.title,
@@ -392,13 +650,23 @@ export class RealtrackBridgeService {
       sourceTag: plan.offer.sourceTag,
       cost: plan.cost,
       currency: plan.offer.currency,
+      convertedCostUsd: plan.convertedCostUsd,
+      conversionRateToUsd: plan.conversionRateToUsd,
       targetCurrency: plan.targetCurrency,
       sellingPrice: plan.sellingPrice,
       quantity: plan.quantity,
       imageCount: plan.imageUrls.length,
       skipReason: plan.skipReason,
       skipDetail: plan.skipDetail,
+      fitmentCount: part.fitments.length,
     };
+    return includeDetails
+      ? {
+          ...response,
+          compatibility: this.compatibilityFor(part),
+          fitmentRows: this.fitmentRowsFor(part),
+        }
+      : response;
   }
 
   private previewResponse(plans: BridgePlan[]) {
@@ -407,28 +675,58 @@ export class RealtrackBridgeService {
       sourceCurrency: plans[0]?.sourceCurrency || this.defaultSourceCurrency(),
       targetCurrency: plans[0]?.targetCurrency || this.defaultTargetCurrency(),
       formula: [
-        '$5.00-$15.00 => $38.00',
-        '$16.00-$21.00 => $45.99',
-        '$22.00-$25.00 => $49.99',
-        'Above $25.00 => cost x 2',
-        'Below $5.00 => skip',
+        'Converted USD cost $5.00-$15.00 => $38.00',
+        'Converted USD cost $16.00-$21.00 => $45.99',
+        'Converted USD cost $22.00-$25.00 => $49.99',
+        'Converted USD cost above $25.00 => cost x 2',
+        'Converted USD cost below $5.00 => skip',
       ],
       counts: {
         selected: plans.length,
         eligible,
         skipped: plans.length - eligible,
       },
-      items: plans.map((plan) => this.publicPlan(plan)),
+      items: plans.map((plan) => this.publicPlan(plan, true)),
     };
   }
 
   private remoteCreatePayload(plan: BridgePlan): Record<string, unknown> {
     const part = plan.offer.canonicalPart;
+    const fitmentRows = this.fitmentRowsFor(part);
     const manufacturerPartNumber =
       part.manufacturerPartNumber || plan.offer.sellerSku;
     const oeNumber = part.genuineOemPartNumber || part.oeNumbers[0] || null;
+    const itemSpecifics = this.asRecord(part.itemSpecifics);
+    const itemSpecificsText = itemSpecifics
+      ? Object.entries(itemSpecifics)
+          .map(([name, value]) => {
+            const rendered = Array.isArray(value)
+              ? value.map((item) => String(item)).join(', ')
+              : typeof value === 'object' && value !== null
+                ? JSON.stringify(value)
+                : typeof value === 'string' ||
+                    typeof value === 'number' ||
+                    typeof value === 'boolean'
+                  ? String(value)
+                  : '';
+            return rendered ? `${name}: ${rendered}` : null;
+          })
+          .filter((line): line is string => Boolean(line))
+          .join('\n')
+      : '';
+    const sourceDetails = [
+      part.position ? `Position: ${part.position}` : null,
+      part.vehicleSystem ? `Vehicle system: ${part.vehicleSystem}` : null,
+      part.manufacturer ? `Manufacturer: ${part.manufacturer}` : null,
+      part.partSource ? `Part source: ${part.partSource}` : null,
+      part.qualityTier ? `Quality tier: ${part.qualityTier}` : null,
+      itemSpecificsText ? `Item specifics:\n${itemSpecificsText}` : null,
+      part.dimensions ? `Dimensions: ${JSON.stringify(part.dimensions)}` : null,
+    ].filter((value): value is string => Boolean(value));
     const description =
-      part.description?.trim() ||
+      [part.description?.trim(), ...sourceDetails]
+        .filter(Boolean)
+        .join('\n\n') ||
       [
         plan.title,
         part.brand ? `Brand: ${part.brand}` : null,
@@ -451,16 +749,17 @@ export class RealtrackBridgeService {
       buyItNowPrice: plan.sellingPrice!.toFixed(2),
       quantity: String(plan.quantity),
       description,
+      cFeatures: itemSpecificsText || undefined,
       itemPhotoUrl: plan.imageUrls.join('|'),
+      imageUrls: plan.imageUrls,
+      fitmentData: fitmentRows,
+      fitmentRows,
       format: 'FIXED_PRICE',
       duration: 'GTC',
       status: 'ready',
     };
     if (part.category && /^\d+$/.test(part.category.trim())) {
       payload.categoryId = part.category.trim();
-    }
-    if (part.weight !== null && part.weight !== undefined) {
-      payload.weight = String(part.weight);
     }
     return Object.fromEntries(
       Object.entries(payload).filter(([, value]) => value !== undefined),
@@ -473,13 +772,15 @@ export class RealtrackBridgeService {
     storeIds: string[],
     input: RealtrackBridgeSelectionDto,
   ): Record<string, unknown> {
-    const categoryId = plan.offer.canonicalPart.category?.trim();
+    const part = plan.offer.canonicalPart;
+    const categoryId = part.category?.trim();
+    const description = part.description?.trim() || plan.title;
     return {
       listingId,
       storeIds,
       sku: plan.sku,
       title: plan.title,
-      description: '',
+      description,
       categoryId: categoryId && /^\d+$/.test(categoryId) ? categoryId : '',
       // RealTrack enriches this placeholder from the numeric conditionId
       // stored in the listing record created above.
@@ -487,12 +788,126 @@ export class RealtrackBridgeService {
       price: plan.sellingPrice,
       currency: plan.targetCurrency,
       quantity: plan.quantity,
-      imageUrls: [],
-      aspects: {},
+      imageUrls: plan.imageUrls,
+      aspects: part.itemSpecifics || {},
+      compatibility: this.compatibilityFor(part),
+      fitmentRows: this.fitmentRowsFor(part),
       requestedFulfillmentPolicyName: input.shippingProfileName,
       requestedReturnPolicyName: input.returnProfileName,
       requestedPaymentPolicyName: input.paymentProfileName,
     };
+  }
+
+  private compatibilityFor(part: BridgeOfferRecord['canonicalPart']) {
+    const stored = part.compatibility;
+    const storedRecord = this.asRecord(stored);
+    if (
+      Array.isArray(storedRecord?.compatibleProducts) &&
+      storedRecord.compatibleProducts.length > 0
+    ) {
+      return { compatibleProducts: storedRecord.compatibleProducts };
+    }
+
+    const storedRows = Array.isArray(stored)
+      ? stored
+      : Array.isArray(storedRecord?.fitmentRows)
+        ? storedRecord.fitmentRows
+        : Array.isArray(storedRecord?.rows)
+          ? storedRecord.rows
+          : [];
+    const rows = storedRows.length ? storedRows : this.fitmentRowsFor(part);
+    return {
+      compatibleProducts: rows
+        .map((row) => this.compatibilityProductFor(row))
+        .filter((row) => row.compatibilityProperties.length > 0),
+    };
+  }
+
+  private compatibilityProductFor(row: unknown) {
+    const record = this.asRecord(row) || {};
+    const existing = Array.isArray(record.compatibilityProperties)
+      ? record.compatibilityProperties
+      : null;
+    if (existing) return { compatibilityProperties: existing };
+
+    const value = (...keys: string[]) => {
+      for (const key of keys) {
+        const candidate = record[key];
+        if (candidate !== null && candidate !== undefined && candidate !== '') {
+          return candidate;
+        }
+      }
+      return null;
+    };
+    return {
+      compatibilityProperties: [
+        { name: 'Year', value: value('year', 'yearStart') },
+        { name: 'Make', value: value('make') },
+        { name: 'Model', value: value('model') },
+        { name: 'Trim', value: value('trim') },
+        { name: 'Engine', value: value('engine') },
+        { name: 'Transmission', value: value('transmission') },
+        { name: 'Drivetrain', value: value('drivetrain') },
+        { name: 'Fuel', value: value('fuel') },
+      ].filter(
+        ({ value: candidate }) =>
+          candidate !== null && candidate !== undefined && candidate !== '',
+      ),
+    };
+  }
+
+  private imageUrlsFor(part: BridgeOfferRecord['canonicalPart']) {
+    return [
+      ...new Set(
+        [
+          ...part.imageUrls,
+          ...part.media
+            .slice()
+            .sort(
+              (a, b) =>
+                Number(b.isPrimary) - Number(a.isPrimary) ||
+                a.sortOrder - b.sortOrder,
+            )
+            .flatMap((media) => [media.url, media.sourceUrl || '']),
+        ]
+          .map((url) => url.trim())
+          .map((url) => (url.startsWith('//') ? `https:${url}` : url))
+          .filter((url) => /^https?:\/\//i.test(url)),
+      ),
+    ];
+  }
+
+  private fitmentRowsFor(part: BridgeOfferRecord['canonicalPart']) {
+    return part.fitments.map((fitment) => {
+      const config = fitment.vehicleConfig;
+      const generation = config.generation;
+      const model = generation.model;
+      const year =
+        generation.startYear &&
+        generation.endYear &&
+        generation.startYear !== generation.endYear
+          ? `${generation.startYear}-${generation.endYear}`
+          : generation.startYear || generation.endYear || null;
+      return {
+        year,
+        make: model.make.displayName || model.make.name,
+        model: model.name,
+        generation: generation.name,
+        trim: config.trim,
+        engine: config.engine,
+        transmission: config.transmission,
+        drivetrain: config.drivetrain,
+        fuel: config.fuel,
+        market: config.market,
+        evidenceLevel: fitment.evidenceLevel,
+        confidence: fitment.confidence,
+        source: fitment.source,
+        verificationStatus: fitment.verificationStatus,
+        reason: fitment.reason,
+        fitmentNotes: fitment.fitmentNotes,
+        originalData: fitment.originalData,
+      };
+    });
   }
 
   private applyPublishResults(
@@ -590,10 +1005,21 @@ export class RealtrackBridgeService {
   }
 
   private defaultTargetCurrency() {
-    return this.currency(
-      process.env.REALTRACK_BRIDGE_TARGET_CURRENCY,
-      DEFAULT_TARGET_CURRENCY,
-    );
+    return DEFAULT_TARGET_CURRENCY;
+  }
+
+  private sourceCurrencyFilter(value?: string) {
+    return value ? this.currency(value, '') : 'AUTO';
+  }
+
+  private targetCurrency(value?: string) {
+    const target = this.currency(value, DEFAULT_TARGET_CURRENCY);
+    if (target !== 'USD') {
+      throw new BadRequestException(
+        'RealTrack bridge output currency must be USD',
+      );
+    }
+    return target;
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

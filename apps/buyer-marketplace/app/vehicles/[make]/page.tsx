@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import {
-  renderTaxonomy,
-  taxonomyMetadata,
-} from "@/lib/taxonomy-page";
+import { renderTaxonomy, taxonomyMetadata } from "@/lib/taxonomy-page";
 
 /**
  * Vehicle-make landing page — /vehicles/<make>.
@@ -16,14 +13,18 @@ export const revalidate = 900;
 
 interface PageProps {
   params: Promise<{ make: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { make } = await params;
   return taxonomyMetadata({ kind: "make", slug: make });
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
   const { make } = await params;
-  return renderTaxonomy({ kind: "make", slug: make });
+  const query = await searchParams;
+  return renderTaxonomy({ kind: "make", slug: make, searchParams: query });
 }

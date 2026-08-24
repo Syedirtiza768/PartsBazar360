@@ -29,7 +29,9 @@ import {
 import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 
 const DEFAULT_PAGE_SIZE = 75;
-const ALLOWED_PAGE_SIZES = [75, 150, 300] as const;
+// Keep the selector within the API's hard limit so the rendered range and the
+// number of cards returned by the server cannot diverge.
+const ALLOWED_PAGE_SIZES = [75, 150, 200] as const;
 
 function resolvePageSize(value?: string): number {
   const n = value ? parseInt(value, 10) : DEFAULT_PAGE_SIZE;
@@ -265,9 +267,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             ? `${params.brand} parts`
             : "Shop all parts";
 
+  const effectivePageSize = results?.limit || pageSize;
   const rangeStart =
-    results && results.total > 0 ? (page - 1) * pageSize + 1 : 0;
-  const rangeEnd = results ? Math.min(page * pageSize, results.total) : 0;
+    results && results.total > 0 ? (page - 1) * effectivePageSize + 1 : 0;
+  const rangeEnd = results
+    ? Math.min(page * effectivePageSize, results.total)
+    : 0;
 
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Badge } from "@repo/ui/badge";
 import { TableScroller } from "@repo/ui/data-table";
 import {
   ShieldCheckIcon,
@@ -17,7 +16,7 @@ import type { CompatibilityRow, CompatibleVehicle } from "@/lib/types";
  *  1. Verified fitment (structured A/B evidence ≥ 0.8) — green, prominent.
  *  2. Advisory matches (title-inferred / low confidence) — amber, clearly
  *     labeled as requiring confirmation.
- *  3. The full per-year table, with its source labeled per row.
+ *  3. The full per-year vehicle table.
  * Uncertain data is never dressed up as verified.
  */
 
@@ -165,7 +164,7 @@ export function CompatibilitySection({
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {["Year", "Make", "Model", "Trim", "Engine", "Source"].map((h, hi) => (
+                      {["Year", "Make", "Model", "Trim", "Engine"].map((h, hi) => (
                         <th
                           key={h}
                           scope="col"
@@ -182,7 +181,7 @@ export function CompatibilitySection({
                   <tbody className="divide-y divide-slate-100">
                     {visible.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-graphite-600">
+                        <td colSpan={5} className="px-4 py-8 text-center text-graphite-600">
                           No vehicles match “{query}”.
                         </td>
                       </tr>
@@ -196,30 +195,6 @@ export function CompatibilitySection({
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">{item.model || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.trim || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.engine || "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5">
-                            {item.mvlVerified === true &&
-                            item.source === "mvl_catalog" ? (
-                              <Badge tone="success" size="sm">
-                                MVL catalog
-                              </Badge>
-                            ) : item.mvlVerified === true ? (
-                              <Badge tone="success" size="sm">
-                                MVL verified
-                              </Badge>
-                            ) : item.mvlVerified === false ? (
-                              <Badge tone="warning" size="sm">
-                                Unverified
-                              </Badge>
-                            ) : item.source === "title" ? (
-                              <Badge tone="warning" size="sm">
-                                Title-inferred
-                              </Badge>
-                            ) : (
-                              <Badge tone="neutral" size="sm">
-                                {item.notes || item.source || "Listing fitment"}
-                              </Badge>
-                            )}
-                          </td>
                         </tr>
                       ))
                     )}

@@ -10,6 +10,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { SeoTaxonomyKind } from "@repo/catalog-contracts";
+import type { SearchParamsShape } from "@/lib/filter-params";
 import { TaxonomyLanding, toTaxonomyInput } from "@/components/TaxonomyLanding";
 import { taxonomySeo, toMetadata } from "@/lib/seo";
 import { resolveTaxonomyNode } from "@/lib/taxonomy";
@@ -21,6 +22,21 @@ import { resolveTaxonomyNode } from "@/lib/taxonomy";
  * an imported constant is rejected at build time.
  */
 export const TAXONOMY_REVALIDATE = 900;
+export type TaxonomyRouteSearchParams = Record<
+  string,
+  string | string[] | undefined
+>;
+
+export function normalizeTaxonomySearchParams(
+  params?: TaxonomyRouteSearchParams,
+): SearchParamsShape {
+  const normalized: SearchParamsShape = {};
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (typeof value === "string") normalized[key] = value;
+    else if (Array.isArray(value)) normalized[key] = value.join(",");
+  }
+  return normalized;
+}
 
 /** Parse a `/page/N` segment. Anything non-numeric is page 1, not an error. */
 export function parsePageParam(value: string | undefined): number {
@@ -63,6 +79,7 @@ export async function renderTaxonomy(options: {
   slug: string;
   parentSlug?: string;
   page?: number;
+  searchParams?: TaxonomyRouteSearchParams;
 }) {
   const node = await resolveTaxonomyNode(
     options.kind,
@@ -72,5 +89,11 @@ export async function renderTaxonomy(options: {
   // An unknown slug is a real 404. Redirecting it to the catalog root would
   // be a soft 404 and would teach crawlers that any invented slug "works".
   if (!node) notFound();
-  return <TaxonomyLanding node={node} page={options.page ?? 1} />;
+  return (
+    <TaxonomyLanding
+      node={node}
+      page={options.page ?? 1}
+      searchParams={normalizeTaxonomySearchParams(options.searchParams)}
+    />
+  );
 }

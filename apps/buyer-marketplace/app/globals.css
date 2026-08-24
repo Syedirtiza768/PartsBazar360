@@ -58,3 +58,7 @@
     @apply border-t-2 border-graphite-950 pt-4;
   }
 }
+
+/* 2026-08-15 production stylesheet refresh */
+
+.css-version-refresh{display:contents}

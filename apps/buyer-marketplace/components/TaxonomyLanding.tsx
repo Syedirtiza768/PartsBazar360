@@ -13,8 +13,17 @@ import {
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Pagination } from "@/components/Pagination";
 import { ProductCard } from "@/components/ProductCard";
+import { FilterDrawer } from "@/components/FilterDrawer";
+import { QuickFilterRow } from "@/components/FilterSectionsClient";
+import {
+  ActiveFilterChips,
+  buildHref,
+  countActiveFilters,
+  type SearchParamsShape,
+} from "@/components/FilterSidebar";
 import { SeoLinkCloud } from "@/components/SeoLinkCloud";
 import { taxonomySeo } from "@/lib/seo";
+import type { FacetsResponse } from "@/lib/types";
 import {
   getSiblingLinks,
   getTaxonomyListings,
@@ -22,6 +31,28 @@ import {
 } from "@/lib/taxonomy";
 
 const PAGE_SIZE = 48;
+function taxonomyScopeParams(node: TaxonomyNode): SearchParamsShape {
+  switch (node.kind) {
+    case "category":
+      return { category: node.name };
+    case "categoryGroup":
+      return { categoryGroup: node.name };
+    case "brand":
+      return { brand: node.name };
+    case "make":
+      return { make: node.name };
+    case "model":
+    case "modelYear": {
+      const make = node.parents?.find((parent) => parent.kind === "make")?.name;
+      return {
+        ...(make ? { make } : {}),
+        q: node.name,
+      };
+    }
+    default:
+      return {};
+  }
+}
 
 /**
  * Turn a resolved taxonomy node into the engine's input shape.
@@ -58,11 +89,22 @@ export function toTaxonomyInput(
 export async function TaxonomyLanding({
   node,
   page,
+  searchParams,
 }: {
   node: TaxonomyNode;
   page: number;
+  searchParams?: SearchParamsShape;
 }) {
-  const results = await getTaxonomyListings(node, { page, pageSize: PAGE_SIZE });
+  const rawFilterParams = searchParams ?? {};
+  const filterParams: SearchParamsShape = {
+    ...taxonomyScopeParams(node),
+    ...rawFilterParams,
+  };
+  const results = await getTaxonomyListings(node, {
+    page,
+    pageSize: PAGE_SIZE,
+    filters: filterParams,
+  });
 
   // A node the catalog reports but that returns nothing is a soft 404 waiting
   // to happen: 404 outright rather than publishing an empty indexable grid.
@@ -83,7 +125,9 @@ export async function TaxonomyLanding({
   const input = toTaxonomyInput(node, page, totalPages);
   const seo = taxonomySeo(input, {
     items: results.items.map((part) => ({
-      url: part.slug ? absoluteUrl(partPath(part.slug)) : absoluteUrl(`/part/${part.id}`),
+      url: part.slug
+        ? absoluteUrl(partPath(part.slug))
+        : absoluteUrl(`/part/${part.id}`),
       name: part.title,
     })),
   });
@@ -107,6 +151,17 @@ export async function TaxonomyLanding({
 
   const rangeStart = (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, results.total);
+  const facets: FacetsResponse = results.facets ?? {
+    brands: [],
+    categories: [],
+    categoryGroups: [],
+    makes: [],
+    partTypes: [],
+    conditions: [],
+    sourceTags: [],
+  };
+  const taxonomyBasePath = taxonomyPath({ ...input, page: 1 });
+  const hasFacets = Object.values(facets).some((values) => values.length > 0);
 
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
@@ -145,6 +200,32 @@ export async function TaxonomyLanding({
         </p>
       </header>
 
+      {hasFacets && (
+        <div className="mt-6 space-y-3">
+          <div className="sticky top-[7.75rem] z-30 -mx-2 flex min-h-14 items-center justify-between gap-3 border-y border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/85 md:top-[6.5rem]">
+            <p className="min-w-0 truncate text-sm font-semibold text-slate-900">
+              Refine these listings
+            </p>
+            <FilterDrawer
+              activeCount={countActiveFilters(rawFilterParams)}
+              facets={facets}
+              params={filterParams}
+              resultCount={results.total}
+              path={taxonomyBasePath}
+            />
+          </div>
+          <div className="hidden lg:block">
+            <QuickFilterRow
+              facets={facets}
+              params={filterParams}
+              resultCount={results.total}
+              path={taxonomyBasePath}
+            />
+          </div>
+          <ActiveFilterChips params={rawFilterParams} path={taxonomyBasePath} />
+        </div>
+      )}
+
       <section aria-label="Listings" className="pt-6">
         {results.items.length === 0 ? (
           <EmptyState
@@ -170,7 +251,11 @@ export async function TaxonomyLanding({
               page={page}
               totalPages={totalPages}
               hrefFor={(target) =>
-                taxonomyPath({ ...input, page: target })
+                buildHref(
+                  rawFilterParams,
+                  {},
+                  taxonomyPath({ ...input, page: target }),
+                )
               }
             />
           </>

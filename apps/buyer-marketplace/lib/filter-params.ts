@@ -10,12 +10,7 @@ import { partTypeLabel } from "@repo/catalog-contracts";
 export type SearchParamsShape = Record<string, string | undefined>;
 
 export type FacetField =
-  | "category"
-  | "categoryGroup"
-  | "brand"
-  | "make"
-  | "partType"
-  | "sourceTag";
+  "category" | "categoryGroup" | "brand" | "make" | "partType" | "sourceTag";
 
 export type FilterGroupId =
   | "category"
@@ -58,6 +53,7 @@ export type FilterState = Record<FacetField, string[]> & {
 export function buildHref(
   base: SearchParamsShape,
   overrides: Record<string, string | undefined>,
+  path = "/search",
 ) {
   // Changing any filter resets pagination; pass an explicit `page` override
   // to paginate within the current filters.
@@ -67,7 +63,7 @@ export function buildHref(
     if (value) qs.set(key, value);
   });
   const str = qs.toString();
-  return `/search${str ? `?${str}` : ""}`;
+  return `${path}${str ? `?${str}` : ""}`;
 }
 
 /** Parse a csv filter param into a de-duplicated value set. */
@@ -116,12 +112,18 @@ export function paramsToFilterState(params: SearchParamsShape): FilterState {
 
 export function filterStateKey(state: FilterState): string {
   return (
-    MULTI_SELECT_FIELDS.map((field) => `${field}:${[...state[field]].sort().join("|")}`).join(";") +
+    MULTI_SELECT_FIELDS.map(
+      (field) => `${field}:${[...state[field]].sort().join("|")}`,
+    ).join(";") +
     `;interchange:${state.includeInterchange};min:${state.minPrice};max:${state.maxPrice}`
   );
 }
 
-export function filterStateToHref(base: SearchParamsShape, state: FilterState): string {
+export function filterStateToHref(
+  base: SearchParamsShape,
+  state: FilterState,
+  path = "/search",
+): string {
   const overrides: Record<string, string | undefined> = {
     includeInterchange: state.includeInterchange ? undefined : "false",
     minPrice: state.minPrice.trim() || undefined,
@@ -130,7 +132,7 @@ export function filterStateToHref(base: SearchParamsShape, state: FilterState): 
   for (const field of MULTI_SELECT_FIELDS) {
     overrides[field] = state[field].length ? state[field].join(",") : undefined;
   }
-  return buildHref(base, overrides);
+  return buildHref(base, overrides, path);
 }
 
 export function hasPriceFilter(params: SearchParamsShape): boolean {
@@ -146,12 +148,50 @@ export function priceFilterLabel(params: SearchParamsShape): string | null {
   return null;
 }
 
-export function priceStateLabel(state: Pick<FilterState, "minPrice" | "maxPrice">): string | null {
+export function priceStateLabel(
+  state: Pick<FilterState, "minPrice" | "maxPrice">,
+): string | null {
   const min = state.minPrice.trim();
   const max = state.maxPrice.trim();
-  if (min && max) return `$${min}-$${max}`;
-  if (min) return `From $${min}`;
-  if (max) return `Up to $${max}`;
+  // Keep the staged group summary in the same format as the applied chip.
+  // Currency is rendered by the active marketplace currency context on cards;
+  // hard-coding `$` here made the filter UI disagree with the AED catalogue.
+  if (min && max) return `Price ${min}-${max}`;
+  if (min) return `Price from ${min}`;
+  if (max) return `Price up to ${max}`;
+  return null;
+}
+
+/** Keep decimal price inputs parseable and stable while a filter is staged. */
+export function normalizePriceInput(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole = "", ...fractionParts] = cleaned.split(".");
+  const fraction = fractionParts.join("");
+  if (!fractionParts.length) return whole;
+  return `${whole || "0"}.${fraction}`;
+}
+
+/** Return a user-facing error instead of silently dropping malformed ranges. */
+export function priceRangeError(
+  state: Pick<FilterState, "minPrice" | "maxPrice">,
+): string | null {
+  const min = state.minPrice.trim();
+  const max = state.maxPrice.trim();
+  const minValue = min ? Number(min) : undefined;
+  const maxValue = max ? Number(max) : undefined;
+
+  if (
+    min &&
+    (minValue === undefined || !Number.isFinite(minValue) || minValue < 0)
+  )
+    return "Enter a valid minimum price.";
+  if (
+    max &&
+    (maxValue === undefined || !Number.isFinite(maxValue) || maxValue < 0)
+  )
+    return "Enter a valid maximum price.";
+  if (minValue !== undefined && maxValue !== undefined && minValue > maxValue)
+    return "Minimum price cannot be greater than maximum price.";
   return null;
 }
 
@@ -163,7 +203,10 @@ export function countFilterState(state: FilterState): number {
   );
 }
 
-export function groupSelectedCount(groupId: FilterGroupId, state: FilterState): number {
+export function groupSelectedCount(
+  groupId: FilterGroupId,
+  state: FilterState,
+): number {
   switch (groupId) {
     case "category":
       return state.categoryGroup.length + state.category.length;
@@ -214,7 +257,10 @@ export function countActiveFilters(params: SearchParamsShape): number {
 }
 
 /** Remove refinements without throwing away the buyer's search or display choices. */
-export function clearFiltersHref(params: SearchParamsShape): string {
+export function clearFiltersHref(
+  params: SearchParamsShape,
+  path = "/search",
+): string {
   const overrides: Record<string, string | undefined> = {
     condition: undefined,
     includeInterchange: undefined,
@@ -222,5 +268,5 @@ export function clearFiltersHref(params: SearchParamsShape): string {
     maxPrice: undefined,
   };
   for (const field of MULTI_SELECT_FIELDS) overrides[field] = undefined;
-  return buildHref(params, overrides);
+  return buildHref(params, overrides, path);
 }

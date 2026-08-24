@@ -7,6 +7,7 @@ import {
   canonicalizeCatalogBrand,
   canonicalizeVehicleMakes,
 } from '../catalog-import/catalog-identity.util';
+import { isDeadCatalogImagePath } from './image-url.util';
 
 const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
 

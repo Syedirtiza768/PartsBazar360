@@ -127,12 +127,58 @@ describe('browseParts query construction', () => {
     // Must be id.keyword: the legacy index maps id as text, and sorting a
     // text field throws search_phase_execution_exception (verified live
     // 2026-08-14 — "brake pad" returned 0 results until this was fixed).
-    for (const sort of ['relevance', 'newest', 'price_asc', 'price_desc'] as const) {
+    for (const sort of [
+      'relevance',
+      'newest',
+      'price_asc',
+      'price_desc',
+    ] as const) {
       const { service, calls } = stubService([100]);
       await service.browseParts({ q: 'brake pad', sort });
       const clause = calls[0].body.sort;
-      expect(clause[clause.length - 1]).toEqual({ 'id.keyword': { order: 'asc' } });
+      expect(clause[clause.length - 1]).toEqual({
+        'id.keyword': { order: 'asc' },
+      });
     }
+  });
+
+  it('keeps explicit sorts monotonic instead of prioritizing images', async () => {
+    const { service, calls } = stubService([100]);
+
+    await service.browseParts({ q: 'brake pad', sort: 'price_desc' });
+
+    expect(calls[0].body.sort[0]).toEqual({
+      minPrice: { order: 'desc', missing: '_last' },
+    });
+    expect(calls[0].body.sort[0]).not.toHaveProperty('hasImage');
+  });
+
+  it('sorts and filters by the same nested offers for offer-scoped refinements', async () => {
+    const { service, calls } = stubService([100]);
+
+    await service.browseParts({
+      q: 'brake pad',
+      sourceTag: 'YNTD',
+      minPrice: 10,
+      sort: 'price_asc',
+    });
+
+    expect(calls[0].body.sort[0]).toEqual({
+      'offers.price': expect.objectContaining({
+        order: 'asc',
+        mode: 'min',
+        nested: expect.objectContaining({ path: 'offers' }),
+      }),
+    });
+    const offerFilter = calls[0].body.query.bool.filter.find(
+      (clause: any) => clause.nested?.path === 'offers',
+    );
+    expect(offerFilter.nested.query.bool.filter).toEqual(
+      expect.arrayContaining([
+        { terms: { 'offers.sourceTag': ['YNTD'] } },
+        { range: { 'offers.price': { gte: 10 } } },
+      ]),
+    );
   });
 
   it('reports the true total — never a fake 0 — beyond the result window', async () => {
@@ -152,7 +198,11 @@ describe('browseParts query construction', () => {
 
   it('reports the relaxed total beyond the result window for no-match queries', async () => {
     const { service, calls } = stubService([0, 40]);
-    const result = await service.browseParts({ q: 'xyzzy brake pad', page: 5000, limit: 24 });
+    const result = await service.browseParts({
+      q: 'xyzzy brake pad',
+      page: 5000,
+      limit: 24,
+    });
 
     expect(calls).toHaveLength(2);
     expect(result.total).toBe(40);
@@ -236,12 +286,16 @@ describe('browseParts query construction', () => {
     });
 
     const filters = calls[0].body.query.bool.filter;
-    const brandTerms = filters.find((value: any) => value.terms?.['brand.keyword'])
-      .terms['brand.keyword'];
-    const makeTerms = filters.find((value: any) => value.terms?.['makes.keyword'])
-      .terms['makes.keyword'];
+    const brandTerms = filters.find(
+      (value: any) => value.terms?.['brand.keyword'],
+    ).terms['brand.keyword'];
+    const makeTerms = filters.find(
+      (value: any) => value.terms?.['makes.keyword'],
+    ).terms['makes.keyword'];
 
-    expect(brandTerms).toEqual(expect.arrayContaining(['Volkswagen', 'VW', 'volkwagen']));
+    expect(brandTerms).toEqual(
+      expect.arrayContaining(['Volkswagen', 'VW', 'volkwagen']),
+    );
     expect(makeTerms).toEqual(
       expect.arrayContaining(['Mercedes-Benz', 'Mercedes', 'mercedes benz']),
     );

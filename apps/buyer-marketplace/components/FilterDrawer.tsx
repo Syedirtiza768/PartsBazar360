@@ -19,18 +19,25 @@ export function AdvancedFiltersButton({
   resultCount,
   className,
   label = "All filters",
+  path = "/search",
 }: {
   facets: FacetsResponse;
   params: SearchParamsShape;
   resultCount?: number;
   className?: string;
   label?: string;
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={className} aria-label="Open all filters">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={className}
+        aria-label="Open all filters"
+      >
         <SlidersIcon className="h-4 w-4" />
         {label}
       </button>
@@ -49,6 +56,7 @@ export function AdvancedFiltersButton({
           params={params}
           resultCount={resultCount}
           onApply={() => setOpen(false)}
+          path={path}
           variant="advanced"
         />
       </Sheet>
@@ -61,17 +69,20 @@ export function FilterDrawer({
   facets,
   params,
   resultCount,
+  path = "/search",
 }: {
   activeCount?: number;
   facets: FacetsResponse;
   params: SearchParamsShape;
   resultCount?: number;
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState<FilterGroupId | null>(null);
   const controller = useStagedFilters({
     params,
     resultCount,
+    path,
     onApply: () => {
       setOpen(false);
       setActiveGroup(null);
@@ -103,8 +114,19 @@ export function FilterDrawer({
         }}
         side="right"
         size="md"
-        title={activeGroup ? "Choose filter" : activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
-        footer={<FilterApplyFooter controller={controller} resultCount={resultCount} />}
+        title={
+          activeGroup
+            ? "Choose filter"
+            : activeCount > 0
+              ? `Filters (${activeCount})`
+              : "Filters"
+        }
+        footer={
+          <FilterApplyFooter
+            controller={controller}
+            resultCount={resultCount}
+          />
+        }
       >
         {activeGroup ? (
           <MobileFilterDrillIn

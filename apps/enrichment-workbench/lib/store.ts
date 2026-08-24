@@ -54,6 +54,9 @@ export interface CatalogMeta {
   titlesUsingOeFallback: number;
   titlesUsingFitmentFallback: number;
   titlesMatchedByBrandMpn: number;
+  lemforderFcpeuroEnrichmentRecords?: number;
+  lemforderFcpeuroListingsApplied?: number;
+  listingsWithItemSpecifics?: number;
 }
 
 interface OeCompatibilityMatch {
@@ -146,7 +149,14 @@ async function loadStore(): Promise<StoreState> {
   const listings = indexText
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as SourceListing);
+    .map((line) => {
+      const listing = JSON.parse(line) as SourceListing;
+      return {
+        ...listing,
+        itemSpecifics: Array.isArray(listing.itemSpecifics) ? listing.itemSpecifics : [],
+        itemSpecificsSourceUrl: listing.itemSpecificsSourceUrl || "",
+      };
+    });
   const byId = new Map(listings.map((listing) => [listing.listingId, listing]));
   const meta = JSON.parse(await fs.readFile(META_PATH, "utf8")) as CatalogMeta;
   const compatibilityOffsets = JSON.parse(
@@ -315,7 +325,71 @@ function statsFor(state: StoreState): ListingStats {
   return stats;
 }
 
-export async function listListings(options: {
+type ListingFacetOptions = {
+  brand?: string;
+  category?: string;
+  productType?: string;
+  systemCategory?: string;
+  partType?: string;
+  condition?: string;
+  sourceTag?: string;
+  currency?: string;
+  titleState?: "all" | "complete" | "needs";
+  imageState?: "all" | "has" | "missing";
+  compatibilityState?: "all" | "confirmed" | "has" | "missing";
+  oeState?: "all" | "has" | "missing";
+};
+
+export interface ListingFacetOption {
+  value: string;
+  count: number;
+}
+
+function facetOptions(values: string[]): ListingFacetOption[] {
+  const counts = new Map<string, number>();
+  for (const value of values.map((item) => item.trim()).filter(Boolean)) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+}
+
+function filterOptionsFor(state: StoreState) {
+  return {
+    brands: facetOptions(state.listings.map((source) => source.brand || source.manufacturer || "")),
+    categories: facetOptions(state.listings.map((source) => source.category)),
+    productTypes: facetOptions(state.listings.map((source) => source.productType)),
+    systemCategories: facetOptions(state.listings.map((source) => source.systemCategory)),
+    partTypes: facetOptions(state.listings.map((source) => source.partType)),
+    conditions: facetOptions(state.listings.map((source) => source.condition)),
+    sourceTags: facetOptions(state.listings.map((source) => source.sourceTag)),
+    currencies: facetOptions(state.listings.map((source) => source.currency)),
+  };
+}
+
+function matchesFacets(source: SourceListing, detail: ListingDetail, options: ListingFacetOptions) {
+  const brand = source.brand || source.manufacturer;
+  if (options.brand && brand !== options.brand) return false;
+  if (options.category && source.category !== options.category) return false;
+  if (options.productType && source.productType !== options.productType) return false;
+  if (options.systemCategory && source.systemCategory !== options.systemCategory) return false;
+  if (options.partType && source.partType !== options.partType) return false;
+  if (options.condition && source.condition !== options.condition) return false;
+  if (options.sourceTag && source.sourceTag !== options.sourceTag) return false;
+  if (options.currency && source.currency !== options.currency) return false;
+  if (options.titleState === "complete" && !detail.readiness.title) return false;
+  if (options.titleState === "needs" && detail.readiness.title) return false;
+  if (options.imageState === "has" && !detail.readiness.image) return false;
+  if (options.imageState === "missing" && detail.readiness.image) return false;
+  if (options.compatibilityState === "confirmed" && !source.existingCompatibilityReady) return false;
+  if (options.compatibilityState === "has" && detail.compatibilityCount === 0) return false;
+  if (options.compatibilityState === "missing" && detail.readiness.compatibility) return false;
+  if (options.oeState === "has" && !detail.oemPartNumber.trim()) return false;
+  if (options.oeState === "missing" && detail.oemPartNumber.trim()) return false;
+  return true;
+}
+export async function listListings(options: ListingFacetOptions & {
   query?: string;
   filter?: string;
   page?: number;
@@ -345,7 +419,7 @@ export async function listListings(options: {
       continue;
     }
     const detail = effectiveDetail(source, state.edits[source.listingId]);
-    if (matchesFilter(detail, filter)) filtered.push(toSummary(detail));
+    if (matchesFilter(detail, filter) && matchesFacets(source, detail, options)) filtered.push(toSummary(detail));
   }
 
   const total = filtered.length;
@@ -360,6 +434,7 @@ export async function listListings(options: {
     pageCount,
     stats: statsFor(state),
     source: state.meta,
+    filterOptions: filterOptionsFor(state),
   };
 }
 

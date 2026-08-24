@@ -25,6 +25,7 @@ import {
   classifyPositions,
   classifySide,
 } from './part-type-classifier';
+import { isDeadCatalogImagePath } from '../image-url.util';
 
 /** Offers that must never reach a buyer. Mirrors buyer-visible-offers.util. */
 const HIDDEN_SELLER_IDS = new Set(['seed-febest-inventory-supplier']);
@@ -42,7 +43,8 @@ export function buyerVisibleOffers(part: any): any[] {
     if (!offer) return false;
     if (HIDDEN_SELLER_IDS.has(offer.sellerId)) return false;
     if (offer.status && offer.status !== 'ACTIVE') return false;
-    const sellerStatus = offer.seller?.onboardingStatus ?? offer.sellerOnboardingStatus;
+    const sellerStatus =
+      offer.seller?.onboardingStatus ?? offer.sellerOnboardingStatus;
     if (sellerStatus && sellerStatus !== 'ACTIVE') return false;
     const sellerName = offer.sellerName ?? offer.seller?.name ?? '';
     if (HIDDEN_SELLER_NAME.test(sellerName)) return false;
@@ -92,9 +94,13 @@ function collectNumbers(part: any) {
   const interchangeNumbers = normalizedSet(
     byType((type) => type === 'OEM_CROSS_REFERENCE' || type === 'INTERCHANGE'),
   );
-  const supersededNumbers = normalizedSet(byType((type) => type === 'SUPERSEDED'));
+  const supersededNumbers = normalizedSet(
+    byType((type) => type === 'SUPERSEDED'),
+  );
   const skuNumbers = normalizedSet([
-    ...(Array.isArray(part?.offers) ? part.offers.map((o: any) => o?.sellerSku) : []),
+    ...(Array.isArray(part?.offers)
+      ? part.offers.map((o: any) => o?.sellerSku)
+      : []),
     ...byType((type) => type === 'SELLER_SKU' || type === 'SKU'),
   ]);
 
@@ -128,7 +134,11 @@ function collectNumbers(part: any) {
  * 0–1 completeness score used only as a tie-break (capped well below any
  * relevance tier — see relevance.builder.ts).
  */
-export function listingQuality(part: any, offers: any[], hasImage: boolean): number {
+export function listingQuality(
+  part: any,
+  offers: any[],
+  hasImage: boolean,
+): number {
   let score = 0;
   if (hasImage) score += 0.3;
   if (part?.title && String(part.title).length >= 25) score += 0.15;
@@ -160,7 +170,9 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
     .map((offer: any) => Number(offer?.price))
     .filter((price: number) => Number.isFinite(price) && price > 0);
 
-  const rawImageUrls = Array.isArray(part?.imageUrls) ? part.imageUrls.filter(Boolean) : [];
+  const rawImageUrls = Array.isArray(part?.imageUrls)
+    ? part.imageUrls.filter(Boolean)
+    : [];
   const seenImg = new Set<string>();
   const imageUrls: string[] = [];
   for (const url of rawImageUrls) {
@@ -183,16 +195,21 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
   const verifiedFitments = fitments
     .filter(
       (fitment: any) =>
-        ['A', 'B'].includes(fitment?.evidenceLevel) && Number(fitment?.confidence) >= 0.8,
+        ['A', 'B'].includes(fitment?.evidenceLevel) &&
+        Number(fitment?.confidence) >= 0.8,
     )
     .map((fitment: any) => fitment?.vehicleConfigId)
     .filter(Boolean);
 
-  const compatibility = Array.isArray(part?.compatibility) ? part.compatibility : [];
-  const makes = uniqueStrings([
-    ...compatibility.map((row: any) => row?.make),
-    ...(Array.isArray(part?.makes) ? part.makes : []),
-  ].flatMap(canonicalizeVehicleMakes));
+  const compatibility = Array.isArray(part?.compatibility)
+    ? part.compatibility
+    : [];
+  const makes = uniqueStrings(
+    [
+      ...compatibility.map((row: any) => row?.make),
+      ...(Array.isArray(part?.makes) ? part.makes : []),
+    ].flatMap(canonicalizeVehicleMakes),
+  );
   const models = uniqueStrings(compatibility.map((row: any) => row?.model));
 
   const years: number[] = [

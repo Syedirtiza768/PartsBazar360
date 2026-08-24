@@ -1,18 +1,24 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-24
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
 ## Depends on
+
 - [[../packages/ui]] — shared components
 - [[../packages/catalog-contracts]] — shared types
 - [[api]] — all data (search, cart, checkout, orders) comes from here
 - `libphonenumber-js` — phone input/validation (checkout, WhatsApp contact)
 
 ## Known feature areas
+
 - Search, filters, and pagination — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]] and phase audits for the current implementation and its history.
-- Quick-filter navigation — recently converted from scrollable pills to nav-bar dropdowns (`QuickFilterRow`).
+- Quick-filter navigation - recently converted from scrollable pills to nav-bar dropdowns (QuickFilterRow).
+- Taxonomy-page filters - category, system, brand, make, and model landing pages reuse
+  the shared staged filter drawer and quick-filter row. The taxonomy node remains pinned in
+  the browse query, refinements stay on the current taxonomy URL, and pagination preserves
+  those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support. On viewports below `lg`, it
   sits above the cart/PDP sticky action bar and the device safe area so both
   actions remain visible and tappable; it returns to the bottom corner on
@@ -26,8 +32,12 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   drafts; changing it invalidates the previous quote and refreshes shipping.
 - Responsive/device handling — see [[../RESPONSIVE_SYSTEM]].
 - Buyer-local state (garage, recently viewed, etc.) is kept device-local — see dev-workflow memory for the specific storage keys.
+- Fitment badges show positive or incompatible states only; the uncertain state no longer renders a warning pill. Compatibility tables remain the source-agnostic vehicle evidence view.
 - **PDP image gallery** (`ImageGallery.tsx`) deduplicates seller photos by normalising eBay size
   tokens and stripping query-param tracking variants; also filters SVGs defensively.
+- Search and PDP image payloads exclude legacy `/api/search/parts/:id/catalog-image/:index`
+  paths. Those paths have no deployed serving route and must not become the card's primary
+  image; validated absolute media URLs are used instead.
 - **PDP description rendering** (`sanitize-html.ts`) decodes HTML entities before injecting into
   `dangerouslySetInnerHTML` so encoded tags render as formatted text rather than raw source.
 - **Verified product SEO view model** (`lib/product-seo.ts`) is the single derivation point for
@@ -37,6 +47,20 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   until their `_seo` evidence says the exact image is a high-confidence match. MPNs are not
   rendered as OE numbers. The model uses catalog/enrichment fields only and does not infer
   vehicle fitment or technical values.
+
+## Search/filter consistency contract (2026-08-24)
+
+The buyer filter UI stages all multi-select changes through one shared
+controller on desktop and mobile. Selections are OR within a facet and AND
+across facets; counts are server-side previews of the same query that will be
+applied. Applied chips and group summaries use the same price-label formatter,
+and invalid or inverted price ranges cannot be applied.
+
+The browse API treats source-tag and price constraints as nested offer-level
+filters. When those refinements are active, price sorting uses the matching
+offer price rather than the part-wide rollup, so result totals, visible card
+prices, and low/high ordering remain aligned. Explicit `newest`, low-to-high,
+and high-to-low sorts are not overridden by image availability.
 
 ## Product detail page enrichment contract
 
@@ -49,9 +73,11 @@ The PDP retains UUID URLs for backward compatibility. Descriptive slugs can be i
 as redirects/canonical aliases after slug collision and legacy-link coverage are measured.
 
 ## UX reference
+
 [[../UX_AUDIT]] and [[../MARKETPLACE_TRANSFORMATION]] cover the eBay-Motors-style journey this app is modeled on.
 
 ## Open questions / TODO
+
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
 
@@ -60,14 +86,20 @@ as redirects/canonical aliases after slug collision and legacy-link coverage are
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
 ## Depends on
+
 - [[../packages/ui]] — shared components
 - [[../packages/catalog-contracts]] — shared types
 - [[api]] — all data (search, cart, checkout, orders) comes from here
 - `libphonenumber-js` — phone input/validation (checkout, WhatsApp contact)
 
 ## Known feature areas
+
 - Search, filters, and pagination — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]] and phase audits for the current implementation and its history.
-- Quick-filter navigation — recently converted from scrollable pills to nav-bar dropdowns (`QuickFilterRow`).
+- Quick-filter navigation - recently converted from scrollable pills to nav-bar dropdowns (QuickFilterRow).
+- Taxonomy-page filters - category, system, brand, make, and model landing pages reuse
+  the shared staged filter drawer and quick-filter row. The taxonomy node remains pinned in
+  the browse query, refinements stay on the current taxonomy URL, and pagination preserves
+  those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support.
 - Guest-first checkout — SMS verification happens before delivery/payment; no
   password or login is required. Drafts survive refresh and payment failure,
@@ -75,11 +107,14 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   after payment. See [[../CHECKOUT_GUEST_FIRST]].
 - Responsive/device handling — see [[../RESPONSIVE_SYSTEM]].
 - Buyer-local state (garage, recently viewed, etc.) is kept device-local — see dev-workflow memory for the specific storage keys.
+- Fitment badges show positive or incompatible states only; the uncertain state no longer renders a warning pill. Compatibility tables remain the source-agnostic vehicle evidence view.
 
 ## UX reference
+
 [[../UX_AUDIT]] and [[../MARKETPLACE_TRANSFORMATION]] cover the eBay-Motors-style journey this app is modeled on.
 
 ## Open questions / TODO
+
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
 
@@ -87,7 +122,7 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
 
 Full detail in [[../SEO_ARCHITECTURE]]. What lives in this app:
 
-- `lib/seo.ts` — the *only* adapter: `Part` → engine input, `SeoDocument` →
+- `lib/seo.ts` — the _only_ adapter: `Part` → engine input, `SeoDocument` →
   Next `Metadata`. Every page's metadata goes through `toMetadata()`, so no page
   can ship without a canonical or a robots directive.
 - `app/parts/[slug]/` — the canonical PDP. `app/part/[id]/` is retained
@@ -97,9 +132,17 @@ Full detail in [[../SEO_ARCHITECTURE]]. What lives in this app:
   `components/TaxonomyLanding.tsx` so they inherit identical SEO.
 - `app/sitemap.xml/`, `app/sitemaps/[file]/`, `app/robots.txt/` — runtime
   routes (a build-time evaluation previously baked `localhost` into production).
-- `lib/product-specs.ts` — the PDP spec table. This is *presentation*; it was
+- `lib/product-specs.ts` — the PDP spec table. This is _presentation_; it was
   split out of the old `lib/product-seo.ts` (now deleted) so a display tweak and
   a metadata rule no longer share a file.
 
 `lib/part-resolve.ts` degrades safely when the API has no `/seo/resolve` route
 (mid-rollout or rollback): a UUID segment renders directly rather than 404ing.
+
+## 2026-08-15 buyer navigation and compatibility update
+
+The header consumes broad `categoryGroup` facets when they exist and falls back to real `category`
+facets when the catalog has no classified groups. Fallback links use `/parts/category/<slug>` so
+legacy or uncategorized inventory does not lead to empty system pages; the synthetic `Other` group is
+not shown in the navigation rail. Compatibility tables omit source/verification labels and the
+fitment badges are suppressed for check and unknown states so the UI does not show a warning pill.

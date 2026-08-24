@@ -107,7 +107,8 @@ export class OpenSearchService implements OnModuleInit {
    */
   private readonly maxResultWindow = Math.max(
     10000,
-    parseInt(process.env.OPENSEARCH_MAX_RESULT_WINDOW || '100000', 10) || 100000,
+    parseInt(process.env.OPENSEARCH_MAX_RESULT_WINDOW || '100000', 10) ||
+      100000,
   );
 
   onModuleInit() {
@@ -140,7 +141,9 @@ export class OpenSearchService implements OnModuleInit {
       // older returns return the boolean directly.
       exists = Boolean((r as any)?.body ?? r);
     } catch (err: any) {
-      this.logger.warn(`ensureIndex: exists check failed: ${err?.message || err}`);
+      this.logger.warn(
+        `ensureIndex: exists check failed: ${err?.message || err}`,
+      );
     }
 
     if (!exists) {
@@ -208,16 +211,37 @@ export class OpenSearchService implements OnModuleInit {
   private indexMapping(): Record<string, any> {
     return {
       id: { type: 'keyword' },
-      title: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
-      partType: { type: 'keyword' },
-      brand: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
-      manufacturerPartNumber: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 512 } } },
+      title: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 512 } },
+      },
+      partType: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
+      brand: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
+      manufacturerPartNumber: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 512 } },
+      },
       partNumbers: { type: 'object', enabled: false },
       normalizedPartNumbers: { type: 'keyword' },
       interchangePartNumbers: { type: 'keyword' },
-      category: { type: 'keyword' },
-      categoryGroup: { type: 'keyword' },
-      makes: { type: 'keyword' },
+      category: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
+      categoryGroup: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
+      makes: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
       oeNumbers: { type: 'keyword' },
       imageUrls: { type: 'keyword', index: false },
       // `imageUrls` is deliberately not indexed, so image availability cannot
@@ -245,12 +269,21 @@ export class OpenSearchService implements OnModuleInit {
           partSource: { type: 'keyword' },
           qualityTier: { type: 'keyword' },
           sellerId: { type: 'keyword' },
-          sellerName: { type: 'text', fields: { keyword: { type: 'keyword', ignore_above: 256 } } },
+          sellerName: {
+            type: 'text',
+            fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+          },
           sourceTag: { type: 'keyword' },
         },
       },
-      sourceTags: { type: 'keyword' },
-      conditions: { type: 'keyword' },
+      sourceTags: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
+      conditions: {
+        type: 'text',
+        fields: { keyword: { type: 'keyword', ignore_above: 256 } },
+      },
     };
   }
 
@@ -329,12 +362,18 @@ export class OpenSearchService implements OnModuleInit {
           // Extract unique makes from both compatibility data and any
           // explicit makes array passed by callers (e.g. from structured
           // fitments where the caller already resolved the make name).
-          makes: [...new Set([
-            ...(part.compatibility || [])
-              .map((c: any) => c.make)
-              .filter(Boolean),
-            ...(part.makes || []).filter(Boolean),
-          ].flatMap(canonicalizeVehicleMakes).filter(Boolean))],
+          makes: [
+            ...new Set(
+              [
+                ...(part.compatibility || [])
+                  .map((c: any) => c.make)
+                  .filter(Boolean),
+                ...(part.makes || []).filter(Boolean),
+              ]
+                .flatMap(canonicalizeVehicleMakes)
+                .filter(Boolean),
+            ),
+          ],
           oeNumbers: sanitizeIdentifierList(part.oeNumbers),
           // Split part numbers by role so search can offer an interchange
           // toggle. `normalizedPartNumbers` stays primary-identity only
@@ -382,8 +421,12 @@ export class OpenSearchService implements OnModuleInit {
             sellerName: o.sellerName || o.seller?.name || null,
             sourceTag: o.sourceTag || null,
           })),
-          sourceTags: [...new Set(offers.map((o: any) => o.sourceTag).filter(Boolean))],
-          conditions: [...new Set(offers.map((o: any) => o.condition).filter(Boolean))],
+          sourceTags: [
+            ...new Set(offers.map((o: any) => o.sourceTag).filter(Boolean)),
+          ],
+          conditions: [
+            ...new Set(offers.map((o: any) => o.condition).filter(Boolean)),
+          ],
         },
         refresh: process.env.OPENSEARCH_REFRESH_ON_INDEX === 'true',
       });
@@ -448,8 +491,8 @@ export class OpenSearchService implements OnModuleInit {
           // Lowest price still orders within each group. The trailing
           // id.keyword tiebreak keeps ties (same image flag + same price) in a
           // stable order across index refreshes, so items cannot duplicate or
-          // vanish between pages. (id is mapped text + keyword sub-field;
-          // sorting plain `id` throws.)
+          // vanish between pages. The deployed legacy index maps id as text
+          // with this keyword sub-field.
           sort: [
             { hasImage: { order: 'desc', missing: '_last' } },
             { minPrice: { order: 'asc', missing: '_last' } },
@@ -604,9 +647,28 @@ export class OpenSearchService implements OnModuleInit {
     let must: any[] = qClause ? [qClause] : [{ match_all: {} }];
 
     // --- filters: AND across dimensions, OR within (terms). ---
+    // Source-tag and price refinements are offer-level constraints. Keeping
+    // them nested makes the result total, the displayed lowest offer, and
+    // price sorting agree when a part has several offers.
+    const offerFilter: any[] = [{ exists: { field: 'offers.sellerId' } }];
+    if (sourceTags.length)
+      offerFilter.push({ terms: { 'offers.sourceTag': sourceTags } });
+    if (minPrice != null || maxPrice != null) {
+      const offerPriceRange: Record<string, number> = {};
+      if (minPrice != null) offerPriceRange.gte = minPrice;
+      if (maxPrice != null) offerPriceRange.lte = maxPrice;
+      offerFilter.push({ range: { 'offers.price': offerPriceRange } });
+    }
+
+    const matchingOffersFilter = {
+      nested: {
+        path: 'offers',
+        query: { bool: { filter: offerFilter } },
+      },
+    };
     const baseFilters: any[] = [
       // Browse only parts that still have at least one indexed offer.
-      { exists: { field: 'offers.sellerId' } },
+      matchingOffersFilter,
     ];
     if (cats.length) baseFilters.push({ terms: { 'category.keyword': cats } });
     if (groups.length)
@@ -617,39 +679,36 @@ export class OpenSearchService implements OnModuleInit {
       baseFilters.push({ terms: { 'partType.keyword': partTypes } });
     if (conditions.length)
       baseFilters.push({ terms: { 'conditions.keyword': conditions } });
-    if (sourceTags.length)
-      baseFilters.push({ terms: { 'sourceTags.keyword': sourceTags } });
-    if (minPrice != null || maxPrice != null) {
-      const priceRange: Record<string, number> = {};
-      if (minPrice != null) priceRange.gte = minPrice;
-      if (maxPrice != null) priceRange.lte = maxPrice;
-      baseFilters.push({ range: { minPrice: priceRange } });
-    }
 
     // --- sort. Relevance only means something for a keyword; a no-query
     //     browse falls back to newest so the feed is stable, not arbitrary. ---
     const useRelevance = sort === 'relevance' && hasQuery;
 
     /**
-     * Listings with a photo come first in every browse ordering.
-     *
-     * A tile with no image converts far worse and looks broken, so an
-     * imageless listing should never outrank an imaged one in a browse feed.
-     * `missing: '_last'` matters during rollout: documents indexed before
-     * `hasImage` existed have no value, and treating them as "no image" is
-     * the safe reading — once the backfill lands they sort correctly.
-     *
-     * Within each group the buyer's chosen ordering is preserved exactly, so
-     * a price sort is still a price sort — just imaged-first.
+     * Relevance may use image availability as a small tie-breaker, but an
+     * explicit buyer sort must remain monotonic. Putting this before price or
+     * createdAt made "high to low" and "newest" lie whenever an imageless
+     * listing crossed an imaged one.
      */
     const imagesFirst = { hasImage: { order: 'desc', missing: '_last' } };
 
     // Final unique tiebreak on the document id: without it, results tied on
     // score / price / createdAt at a page boundary can swap order across
-    // segment merges, duplicating or dropping items between pages. Must use
-    // `id.keyword` — the legacy index maps `id` as text (dynamic mapping),
-    // and sorting a text field throws search_phase_execution_exception.
+    // segment merges, duplicating or dropping items between pages. The
+    // deployed legacy index maps id as text, so use its keyword sub-field.
     const idTiebreak = { 'id.keyword': { order: 'asc' } };
+
+    const offerPriceSort = (order: 'asc' | 'desc') => ({
+      'offers.price': {
+        order,
+        mode: 'min',
+        missing: '_last',
+        nested: {
+          path: 'offers',
+          filter: { bool: { filter: offerFilter } },
+        },
+      },
+    });
 
     const sortClause: any[] = useRelevance
       ? // Deliberately NOT images-first: on a part-number query an exact
@@ -657,12 +716,29 @@ export class OpenSearchService implements OnModuleInit {
         // usable for the identifier lookups this catalogue exists to serve.
         // Image preference is applied as a score nudge instead (see the
         // `should` clause below) and as a tiebreaker here.
-        [{ _score: { order: 'desc' } }, imagesFirst, { createdAt: { order: 'desc' } }, idTiebreak]
+        [
+          { _score: { order: 'desc' } },
+          imagesFirst,
+          { createdAt: { order: 'desc' } },
+          idTiebreak,
+        ]
       : sort === 'price_asc'
-        ? [imagesFirst, { minPrice: { order: 'asc', missing: '_last' } }, { createdAt: { order: 'desc' } }, idTiebreak]
+        ? [
+            sourceTags.length || minPrice != null || maxPrice != null
+              ? offerPriceSort('asc')
+              : { minPrice: { order: 'asc', missing: '_last' } },
+            { createdAt: { order: 'desc' } },
+            idTiebreak,
+          ]
         : sort === 'price_desc'
-          ? [imagesFirst, { minPrice: { order: 'desc', missing: '_last' } }, { createdAt: { order: 'desc' } }, idTiebreak]
-          : [imagesFirst, { createdAt: { order: 'desc' } }, idTiebreak];
+          ? [
+              sourceTags.length || minPrice != null || maxPrice != null
+                ? offerPriceSort('desc')
+                : { minPrice: { order: 'desc', missing: '_last' } },
+              { createdAt: { order: 'desc' } },
+              idTiebreak,
+            ]
+          : [{ createdAt: { order: 'desc' } }, idTiebreak];
 
     // --- scoped facets. Each dimension aggregates over every OTHER active
     //     filter (incl. the keyword), so counts answer "if I add this, how
@@ -675,7 +751,23 @@ export class OpenSearchService implements OnModuleInit {
       // happens to belong to. Both callers below exclude both together.
       const excluded = Array.isArray(exclude) ? exclude : [exclude];
       const skip = (field: string) => excluded.includes(field);
-      const f: any[] = [{ exists: { field: 'offers.sellerId' } }];
+      const scopedOffers: any[] = [{ exists: { field: 'offers.sellerId' } }];
+      if (!skip('sourceTag') && sourceTags.length)
+        scopedOffers.push({ terms: { 'offers.sourceTag': sourceTags } });
+      if (!skip('price') && (minPrice != null || maxPrice != null)) {
+        const offerPriceRange: Record<string, number> = {};
+        if (minPrice != null) offerPriceRange.gte = minPrice;
+        if (maxPrice != null) offerPriceRange.lte = maxPrice;
+        scopedOffers.push({ range: { 'offers.price': offerPriceRange } });
+      }
+      const f: any[] = [
+        {
+          nested: {
+            path: 'offers',
+            query: { bool: { filter: scopedOffers } },
+          },
+        },
+      ];
       if (!skip('category') && cats.length)
         f.push({ terms: { 'category.keyword': cats } });
       if (!skip('categoryGroup') && groups.length)
@@ -688,14 +780,6 @@ export class OpenSearchService implements OnModuleInit {
         f.push({ terms: { 'partType.keyword': partTypes } });
       if (!skip('condition') && conditions.length)
         f.push({ terms: { 'conditions.keyword': conditions } });
-      if (!skip('sourceTag') && sourceTags.length)
-        f.push({ terms: { 'sourceTags.keyword': sourceTags } });
-      if (!skip('price') && (minPrice != null || maxPrice != null)) {
-        const priceRange: Record<string, number> = {};
-        if (minPrice != null) priceRange.gte = minPrice;
-        if (maxPrice != null) priceRange.lte = maxPrice;
-        f.push({ range: { minPrice: priceRange } });
-      }
       if (qClause) f.push(qClause);
       return f;
     };
@@ -704,8 +788,18 @@ export class OpenSearchService implements OnModuleInit {
     // set the buyer is actually looking at.
     const buildAggs = () => ({
       categories: {
-        filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
-        aggs: { names: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } } },
+        filter: {
+          bool: { filter: facetFilter(['category', 'categoryGroup']) },
+        },
+        aggs: {
+          names: {
+            terms: {
+              field: 'category.keyword',
+              size: 200,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
       // Nested: each group bucket carries its own category sub-buckets, so
       // the sidebar can render group -> category hierarchy from one response
@@ -713,35 +807,88 @@ export class OpenSearchService implements OnModuleInit {
       // with no categoryGroup (not yet covered by a categorization pass)
       // fall into "Other" rather than vanishing from the facet entirely.
       categoryGroups: {
-        filter: { bool: { filter: facetFilter(['category', 'categoryGroup']) } },
+        filter: {
+          bool: { filter: facetFilter(['category', 'categoryGroup']) },
+        },
         aggs: {
           names: {
-            terms: { field: 'categoryGroup.keyword', size: 200, missing: 'Other', order: { _key: 'asc' } },
+            terms: {
+              field: 'categoryGroup.keyword',
+              size: 200,
+              missing: 'Other',
+              order: { _key: 'asc' },
+            },
             aggs: {
-              categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
+              categories: {
+                terms: {
+                  field: 'category.keyword',
+                  size: 200,
+                  order: { _key: 'asc' },
+                },
+              },
             },
           },
         },
       },
       brands: {
         filter: { bool: { filter: facetFilter('brand') } },
-        aggs: { names: { terms: { field: 'brand.keyword', size: 200, order: { _key: 'asc' } } } },
+        aggs: {
+          names: {
+            terms: {
+              field: 'brand.keyword',
+              size: 200,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
       makes: {
         filter: { bool: { filter: facetFilter('make') } },
-        aggs: { names: { terms: { field: 'makes.keyword', size: 200, order: { _key: 'asc' } } } },
+        aggs: {
+          names: {
+            terms: {
+              field: 'makes.keyword',
+              size: 200,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
       partTypes: {
         filter: { bool: { filter: facetFilter('partType') } },
-        aggs: { names: { terms: { field: 'partType.keyword', size: 50, order: { _key: 'asc' } } } },
+        aggs: {
+          names: {
+            terms: {
+              field: 'partType.keyword',
+              size: 50,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
       conditions: {
         filter: { bool: { filter: facetFilter('condition') } },
-        aggs: { names: { terms: { field: 'conditions.keyword', size: 50, order: { _key: 'asc' } } } },
+        aggs: {
+          names: {
+            terms: {
+              field: 'conditions.keyword',
+              size: 50,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
       sourceTags: {
         filter: { bool: { filter: facetFilter('sourceTag') } },
-        aggs: { names: { terms: { field: 'sourceTags.keyword', size: 50, order: { _key: 'asc' } } } },
+        aggs: {
+          names: {
+            terms: {
+              field: 'sourceTags.keyword',
+              size: 50,
+              order: { _key: 'asc' },
+            },
+          },
+        },
       },
     });
 
@@ -885,7 +1032,9 @@ export class OpenSearchService implements OnModuleInit {
       const facets: BrowseFacets = includeFacets
         ? {
             categories: bucketsOf(aggsBody.categories as FacetAgg, 'category'),
-            categoryGroups: bucketsOfGroups(aggsBody.categoryGroups as GroupFacetAgg),
+            categoryGroups: bucketsOfGroups(
+              aggsBody.categoryGroups as GroupFacetAgg,
+            ),
             brands: bucketsOf(aggsBody.brands as FacetAgg, 'brand'),
             makes: bucketsOf(aggsBody.makes as FacetAgg, 'make'),
             partTypes: bucketsOf(aggsBody.partTypes as FacetAgg, 'partType'),
@@ -1045,24 +1194,51 @@ export class OpenSearchService implements OnModuleInit {
                   },
                 },
               ],
-              filter: [{ exists: { field: 'offers.sellerId' } }],
+              filter: [
+                {
+                  nested: {
+                    path: 'offers',
+                    query: { exists: { field: 'offers.sellerId' } },
+                  },
+                },
+              ],
             },
           },
           aggs: {
             categories: {
-              terms: { field: 'category.keyword', size: 6, order: { _key: 'asc' } },
+              terms: {
+                field: 'category.keyword',
+                size: 6,
+                order: { _key: 'asc' },
+              },
             },
             categoryGroups: {
-              terms: { field: 'categoryGroup.keyword', size: 6, order: { _key: 'asc' } },
+              terms: {
+                field: 'categoryGroup.keyword',
+                size: 6,
+                order: { _key: 'asc' },
+              },
             },
             brands: {
-              terms: { field: 'brand.keyword', size: 6, order: { _key: 'asc' } },
+              terms: {
+                field: 'brand.keyword',
+                size: 6,
+                order: { _key: 'asc' },
+              },
             },
             makes: {
-              terms: { field: 'makes.keyword', size: 6, order: { _key: 'asc' } },
+              terms: {
+                field: 'makes.keyword',
+                size: 6,
+                order: { _key: 'asc' },
+              },
             },
             sourceTags: {
-              terms: { field: 'sourceTags.keyword', size: 6, order: { _key: 'asc' } },
+              terms: {
+                field: 'sourceTags.keyword',
+                size: 6,
+                order: { _key: 'asc' },
+              },
             },
           },
         } as any,
@@ -1072,7 +1248,7 @@ export class OpenSearchService implements OnModuleInit {
 
       // Apply the same buyer-visibility sanitization the regular search uses.
       // This drops parts whose only offers are from hidden/inactive sellers,
-        // and recomputes minPrice from buyer-visible offers only.
+      // and recomputes minPrice from buyer-visible offers only.
       const sanitized = response.body.hits.hits
         .map((hit: any) => sanitizeSearchItem({ id: hit._id, ...hit._source }))
         .filter((item: any): item is NonNullable<typeof item> => Boolean(item))
@@ -1095,11 +1271,21 @@ export class OpenSearchService implements OnModuleInit {
 
       return {
         parts,
-        categories: bucketsOf(aggs?.categories, 'category').map((b) => b.name).slice(0, 6),
-        categoryGroups: bucketsOf(aggs?.categoryGroups, 'categoryGroup').map((b) => b.name).slice(0, 6),
-        brands: bucketsOf(aggs?.brands, 'brand').map((b) => b.name).slice(0, 6),
-        makes: bucketsOf(aggs?.makes, 'make').map((b) => b.name).slice(0, 6),
-        sourceTags: bucketsOf(aggs?.sourceTags, 'sourceTag').map((b) => b.name).slice(0, 6),
+        categories: bucketsOf(aggs?.categories, 'category')
+          .map((b) => b.name)
+          .slice(0, 6),
+        categoryGroups: bucketsOf(aggs?.categoryGroups, 'categoryGroup')
+          .map((b) => b.name)
+          .slice(0, 6),
+        brands: bucketsOf(aggs?.brands, 'brand')
+          .map((b) => b.name)
+          .slice(0, 6),
+        makes: bucketsOf(aggs?.makes, 'make')
+          .map((b) => b.name)
+          .slice(0, 6),
+        sourceTags: bucketsOf(aggs?.sourceTags, 'sourceTag')
+          .map((b) => b.name)
+          .slice(0, 6),
       };
     } catch (error) {
       this.logger.error(`suggest failed for "${q}"`, error.stack);
@@ -1122,18 +1308,65 @@ export class OpenSearchService implements OnModuleInit {
         body: {
           size: 0,
           aggs: {
-            brands: { terms: { field: 'brand.keyword', size: 200, order: { _key: 'asc' } } },
-            categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
-            categoryGroups: {
-              terms: { field: 'categoryGroup.keyword', size: 200, missing: 'Other', order: { _key: 'asc' } },
-              aggs: {
-                categories: { terms: { field: 'category.keyword', size: 200, order: { _key: 'asc' } } },
+            brands: {
+              terms: {
+                field: 'brand.keyword',
+                size: 200,
+                order: { _key: 'asc' },
               },
             },
-            makes: { terms: { field: 'makes.keyword', size: 200, order: { _key: 'asc' } } },
-            partTypes: { terms: { field: 'partType.keyword', size: 50, order: { _key: 'asc' } } },
-            conditions: { terms: { field: 'conditions.keyword', size: 50, order: { _key: 'asc' } } },
-            sourceTags: { terms: { field: 'sourceTags.keyword', size: 50, order: { _key: 'asc' } } },
+            categories: {
+              terms: {
+                field: 'category.keyword',
+                size: 200,
+                order: { _key: 'asc' },
+              },
+            },
+            categoryGroups: {
+              terms: {
+                field: 'categoryGroup.keyword',
+                size: 200,
+                missing: 'Other',
+                order: { _key: 'asc' },
+              },
+              aggs: {
+                categories: {
+                  terms: {
+                    field: 'category.keyword',
+                    size: 200,
+                    order: { _key: 'asc' },
+                  },
+                },
+              },
+            },
+            makes: {
+              terms: {
+                field: 'makes.keyword',
+                size: 200,
+                order: { _key: 'asc' },
+              },
+            },
+            partTypes: {
+              terms: {
+                field: 'partType.keyword',
+                size: 50,
+                order: { _key: 'asc' },
+              },
+            },
+            conditions: {
+              terms: {
+                field: 'conditions.keyword',
+                size: 50,
+                order: { _key: 'asc' },
+              },
+            },
+            sourceTags: {
+              terms: {
+                field: 'sourceTags.keyword',
+                size: 50,
+                order: { _key: 'asc' },
+              },
+            },
           },
         },
       });
@@ -1141,7 +1374,15 @@ export class OpenSearchService implements OnModuleInit {
       const aggs = (response.body.aggregations ?? {}) as {
         brands: FacetAgg;
         categories: FacetAgg;
-        categoryGroups: { buckets?: Array<{ key: string; doc_count: number; categories?: { buckets?: Array<{ key: string; doc_count: number }> } }> };
+        categoryGroups: {
+          buckets?: Array<{
+            key: string;
+            doc_count: number;
+            categories?: {
+              buckets?: Array<{ key: string; doc_count: number }>;
+            };
+          }>;
+        };
         makes: FacetAgg;
         partTypes: FacetAgg;
         conditions: FacetAgg;
@@ -1212,9 +1453,7 @@ type GroupFacetAgg = {
   }>;
 };
 
-function bucketsOfGroups(
-  agg: GroupFacetAgg | undefined,
-): Array<{
+function bucketsOfGroups(agg: GroupFacetAgg | undefined): Array<{
   name: string;
   count: number;
   categories: Array<{ name: string; count: number }>;
@@ -1225,11 +1464,16 @@ function bucketsOfGroups(
       count: b.doc_count,
       categories: mergeFacetBuckets(b.categories?.buckets ?? [], 'category'),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
 }
 
 function facetKey(value: unknown): string {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase();
 }
 
 type FacetFieldName =
@@ -1258,10 +1502,16 @@ function preferDisplayName(current: string, next: string): string {
   const currentHasLower = /[a-z]/.test(current);
   const nextHasLower = /[a-z]/.test(next);
   if (nextHasLower && !currentHasLower) return next;
-  if (current === current.toLocaleLowerCase() && next !== next.toLocaleLowerCase()) {
+  if (
+    current === current.toLocaleLowerCase() &&
+    next !== next.toLocaleLowerCase()
+  ) {
     return next;
   }
-  if (next.length < current.length && next.toLocaleUpperCase() === current.toLocaleUpperCase()) {
+  if (
+    next.length < current.length &&
+    next.toLocaleUpperCase() === current.toLocaleUpperCase()
+  ) {
     return next;
   }
   return current;

@@ -12,9 +12,11 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { INTERNAL_API_URL } from "@/lib/api";
-import { siteJsonLd } from "@repo/catalog-contracts";
+import { categoryGroupPath, categoryPath, siteJsonLd } from "@repo/catalog-contracts";
 import { absoluteUrl, getSiteUrl, INDEX_ROBOTS } from "@/lib/seo";
 import type { FacetsResponse } from "@/lib/types";
+
+type NavCategory = FacetsResponse["categories"][number] & { href: string };
 
 /**
  * Self-hosted so the type system is deterministic on every device and the
@@ -108,7 +110,7 @@ export const viewport: Viewport = {
 // quick list — those are department-level ("Transmission", "Electrical"),
 // not the granular categories within them. Cached briefly so the header
 // doesn't hit the API on every request.
-async function getNavCategories(): Promise<FacetsResponse["categories"]> {
+async function getNavCategories(): Promise<NavCategory[]> {
   try {
     const res = await fetch(`${INTERNAL_API_URL}/search/facets`, {
       next: { revalidate: 300 },
@@ -116,7 +118,11 @@ async function getNavCategories(): Promise<FacetsResponse["categories"]> {
     });
     if (!res.ok) return [];
     const data: FacetsResponse = await res.json();
-    return (data.categoryGroups ?? []).map(({ name, count }) => ({ name, count }));
+    const groups = (data.categoryGroups ?? []).filter(({ name }) => name.toLowerCase() !== "other");
+    if (groups.length > 0) {
+      return groups.map(({ name, count }) => ({ name, count, href: categoryGroupPath(name) }));
+    }
+    return (data.categories ?? []).map(({ name, count }) => ({ name, count, href: categoryPath(name) }));
   } catch {
     return [];
   }

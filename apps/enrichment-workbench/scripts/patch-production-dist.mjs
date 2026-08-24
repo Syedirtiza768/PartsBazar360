@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const p='/app/dist/src/modules/search/opensearch.service.js';
+let s=fs.readFileSync(p,'utf8');
+const old="{ exists: { field: 'offers.sellerId' } }";
+const next="{ nested: { path: 'offers', query: { exists: { field: 'offers.sellerId' } } } }";
+const count=s.split(old).length-1;
+if(count!==3) throw new Error(`expected 3 active-offer filters, found ${count}`);
+s=s.replaceAll(old,next);
+fs.writeFileSync(p,s);
+console.log(JSON.stringify({patched:count}));
