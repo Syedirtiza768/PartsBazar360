@@ -53,16 +53,21 @@ function AuthGate({ message }: { message: string }) {
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { ready, isAdmin, user, logout } = useAdminAuth();
+  const { ready, isAdmin, isSeoEditor, user, logout } = useAdminAuth();
   const pathname = usePathname();
   const router = useRouter();
   // `trailingSlash: true` means the live path carries the slash.
   const isLogin = pathname === "/login" || pathname === "/login/";
+  const isBlogRoute = pathname === "/blog" || pathname.startsWith("/blog/");
+  const nav = isSeoEditor
+    ? NAV_ITEMS.filter((item) => item.href === "/blog")
+    : NAV_ITEMS;
 
   useEffect(() => {
     if (!ready || isLogin) return;
     if (!isAdmin) router.replace("/login");
-  }, [ready, isAdmin, isLogin, router]);
+    else if (isSeoEditor && !isBlogRoute) router.replace("/blog");
+  }, [ready, isAdmin, isLogin, isSeoEditor, isBlogRoute, router]);
 
   if (isLogin) {
     return <>{children}</>;
@@ -70,6 +75,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   if (!ready) return <AuthGate message="Checking admin session…" />;
   if (!isAdmin) return <AuthGate message="Redirecting to sign in…" />;
+  if (isSeoEditor && !isBlogRoute) {
+    return <AuthGate message="Opening Blog CMS…" />;
+  }
 
   const initial = (user?.name || user?.email || "A").charAt(0).toUpperCase();
 
@@ -77,8 +85,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <AppShell
       brand="PartsBazar"
       brandAccent="360"
-      subtitle="Admin console"
-      nav={NAV_ITEMS}
+      subtitle={isSeoEditor ? "SEO content workspace" : "Admin console"}
+      nav={nav}
       currentPath={pathname}
       LinkComponent={Link}
       navLabel="Admin navigation"

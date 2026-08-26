@@ -29,6 +29,8 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { CHARGE_CURRENCIES } from './currency.util';
 import type { TamaraWebhookPayload } from './tamara.service';
 import { CheckoutIdentityService } from './checkout-identity.service';
@@ -193,7 +195,8 @@ export class CheckoutController {
   }
 
   @Get('orders')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('BUYER', 'SELLER', 'ADMIN', 'SUPPORT_AGENT', 'FULFILLMENT_OPERATOR')
   listCustomerOrders(@CurrentUser() user: AuthenticatedUser) {
     return this.checkoutService.listCustomerOrders(user.userId);
   }

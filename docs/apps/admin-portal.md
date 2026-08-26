@@ -12,8 +12,13 @@ Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (sa
 /blog is the authenticated Blog CMS. It lists drafts and published posts,
 auto-generates a slug from the title until manually edited, supports plain-text
 content with simple headings/lists, cover and SEO fields, draft/publish state,
-public preview, and delete. The API enforces ADMIN on the CMS CRUD routes; the
-buyer app exposes published posts only.
+public preview, and delete. The API allows `ADMIN` and the least-privilege `SEO_EDITOR` role on the CMS
+CRUD routes; the buyer app exposes published posts only. SEO editors are
+accepted by the admin login, routed directly to `/blog/`, and see no other
+admin navigation or pages. Provision them with the API image's
+`seed:seo-editor` command using explicit `SEO_EDITOR_EMAIL` and
+`SEO_EDITOR_PASSWORD` environment variables; the normal marketplace seed does
+not create or reset the account unless `SEED_SEO_EDITOR_PASSWORD` is supplied.
 
 The Orders detail page shows each seller shipment independently. Admins and
 fulfillment operators can select only the next valid delivery state, update a

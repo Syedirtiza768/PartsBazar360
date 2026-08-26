@@ -12,11 +12,15 @@ import {
 
 const TOKEN_KEY = "pb360_admin_access_token";
 
-// Staff roles allowed into this console. Every role sees the same nav today —
-// the API is what actually restricts what each role can do (e.g. a
-// SUPPORT_AGENT's PATCH to /operations/orders is rejected server-side even
-// though the Orders link is visible). Trimming the nav per role is follow-up work.
-const STAFF_ROLES = ["ADMIN", "SUPPORT_AGENT", "FULFILLMENT_OPERATOR"];
+// Staff roles allowed into this console. The portal and API both apply
+// role-specific access; SEO_EDITOR is limited to the Blog CMS surface.
+export const SEO_EDITOR_ROLE = "SEO_EDITOR";
+const STAFF_ROLES = [
+  "ADMIN",
+  "SUPPORT_AGENT",
+  "FULFILLMENT_OPERATOR",
+  SEO_EDITOR_ROLE,
+];
 
 export type AdminUser = {
   id: string;
@@ -30,6 +34,7 @@ type AuthContextValue = {
   token: string | null;
   ready: boolean;
   isAdmin: boolean;
+  isSeoEditor: boolean;
   login: (email: string, password: string) => Promise<AdminUser>;
   logout: () => void;
 };
@@ -54,13 +59,16 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  const persist = useCallback((nextToken: string | null, nextUser: AdminUser | null) => {
-    setToken(nextToken);
-    setUser(nextUser);
-    if (typeof window === "undefined") return;
-    if (nextToken) localStorage.setItem(TOKEN_KEY, nextToken);
-    else localStorage.removeItem(TOKEN_KEY);
-  }, []);
+  const persist = useCallback(
+    (nextToken: string | null, nextUser: AdminUser | null) => {
+      setToken(nextToken);
+      setUser(nextUser);
+      if (typeof window === "undefined") return;
+      if (nextToken) localStorage.setItem(TOKEN_KEY, nextToken);
+      else localStorage.removeItem(TOKEN_KEY);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +110,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) throw new Error(await parseError(res));
-      const data = (await res.json()) as { user: AdminUser; accessToken: string };
+      const data = (await res.json()) as {
+        user: AdminUser;
+        accessToken: string;
+      };
       if (!STAFF_ROLES.includes(data.user.role)) {
         throw new Error("This portal is for marketplace staff only.");
       }
@@ -120,6 +131,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       token,
       ready,
       isAdmin: Boolean(user && token && STAFF_ROLES.includes(user.role)),
+      isSeoEditor: Boolean(user && user.role === SEO_EDITOR_ROLE),
       login,
       logout,
     }),
@@ -131,6 +143,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
 export function useAdminAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAdminAuth must be used within AdminAuthProvider");
+  if (!ctx)
+    throw new Error("useAdminAuth must be used within AdminAuthProvider");
   return ctx;
 }

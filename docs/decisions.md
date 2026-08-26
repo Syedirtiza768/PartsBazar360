@@ -1,6 +1,22 @@
 # Decision log
 
-**Last reviewed:** 2026-08-24
+**Last reviewed:** 2026-08-26
+
+## 2026-08-26 — Give SEO users an isolated blog-CMS role
+
+**Decision:** Add `SEO_EDITOR` as a staff role. It can authenticate to the
+admin portal and use only the blog CMS API and UI; the portal hides all other
+navigation and routes the user directly to `/blog/`. The account is
+provisioned separately with explicit email/password environment variables so
+the regular marketplace seed cannot create a shared default credential.
+
+**Why:** SEO contributors need to publish and maintain buyer education content
+without access to orders, support, catalog governance, seller operations, or
+bridge controls. Server-side role guards remain authoritative even if a user
+manually calls an API route.
+
+**Revisit when:** a broader content-management surface (such as editable
+policies or landing pages) is added and needs to be included in this role.
 
 ## 2026-08-24 — Keep filter counts and explicit sort order on one eligibility set
 

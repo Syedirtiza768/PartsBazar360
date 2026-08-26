@@ -17,14 +17,17 @@ import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 import { normalizePhone } from './phone.util';
 
 /**
- * SUPPORT_AGENT and FULFILLMENT_OPERATOR are scoped staff roles — narrower
- * than ADMIN, for headcount growth beyond one admin account. Enforced via
- * @Roles() on the relevant support/order endpoints; the admin-portal UI
- * doesn't yet trim its nav per role (everyone who can log in sees the same
- * pages, only the API rejects out-of-scope actions).
+ * SUPPORT_AGENT, FULFILLMENT_OPERATOR, and SEO_EDITOR are scoped staff
+ * roles narrower than ADMIN. Endpoint decorators and the admin portal
+ * navigation enforce their separate capabilities.
  */
 export type AuthRole =
-  'BUYER' | 'SELLER' | 'ADMIN' | 'SUPPORT_AGENT' | 'FULFILLMENT_OPERATOR';
+  | 'BUYER'
+  | 'SELLER'
+  | 'ADMIN'
+  | 'SUPPORT_AGENT'
+  | 'FULFILLMENT_OPERATOR'
+  | 'SEO_EDITOR';
 export type SellerMemberRole = 'OWNER' | 'MANAGER' | 'STAFF';
 
 export interface AuthTokenPayload {
@@ -559,6 +562,57 @@ export class AuthService {
   }
 
   /**
+   * Creates the least-privilege staff account used by SEO/content users.
+   * Existing SEO_EDITOR accounts keep their password unless the caller
+   * explicitly requests a reset; another role is never silently reclassified.
+   */
+  async provisionSeoEditor(input: {
+    email: string;
+    password: string;
+    name?: string;
+    resetPassword?: boolean;
+  }) {
+    const email = input.email.trim().toLowerCase();
+    const password = input.password.trim();
+    if (!email || !email.includes('@') || !password || password.length < 8) {
+      throw new BadRequestException(
+        'SEO editor email and password (min 8 chars) are required',
+      );
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing && existing.role !== 'SEO_EDITOR') {
+      throw new BadRequestException(
+        'An account with this email already exists with another role',
+      );
+    }
+
+    const data = {
+      role: 'SEO_EDITOR',
+      name: input.name?.trim() || 'SEO Content Editor',
+      ...(input.resetPassword || !existing?.passwordHash
+        ? { passwordHash: this.hashPassword(password) }
+        : {}),
+    };
+
+    const user = existing
+      ? await this.prisma.user.update({ where: { id: existing.id }, data })
+      : await this.prisma.user.create({
+          data: {
+            email,
+            ...data,
+          },
+        });
+
+    return {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      resetPassword: Boolean(input.resetPassword || !existing?.passwordHash),
+    };
+  }
+
+  /**
    * Seed: 1 admin + 3 logins per seller (owner/manager/staff) + 1 demo buyer.
    * Default password from SEED_AUTH_PASSWORD or "ChangeMe123!".
    */
@@ -616,6 +670,22 @@ export class AuthService {
       },
     });
     created.push({ email: fulfillmentEmail, role: 'FULFILLMENT_OPERATOR' });
+
+    // SEO access is opt-in and has its own password. This prevents a normal
+    // marketplace seed from creating a shared default credential.
+    const seoPassword = process.env.SEED_SEO_EDITOR_PASSWORD;
+    if (seoPassword) {
+      const seoEmail = (
+        process.env.SEED_SEO_EDITOR_EMAIL || 'seo@partsbazar360.com'
+      ).toLowerCase();
+      const seo = await this.provisionSeoEditor({
+        email: seoEmail,
+        password: seoPassword,
+        name: process.env.SEED_SEO_EDITOR_NAME || 'SEO Content Editor',
+        resetPassword: true,
+      });
+      created.push({ email: seo.email || seoEmail, role: seo.role });
+    }
 
     const buyerEmail = (
       process.env.SEED_BUYER_EMAIL || 'buyer@partsbazar360.com'

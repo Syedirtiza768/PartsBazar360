@@ -31,7 +31,7 @@ export class BlogController {
 
 @Controller('admin/blog')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'SEO_EDITOR')
 export class AdminBlogController {
   constructor(private readonly content: ContentService) {}
 
