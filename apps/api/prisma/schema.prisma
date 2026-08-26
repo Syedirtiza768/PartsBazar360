@@ -1203,3 +1203,26 @@ model TicketMessage {
 
   @@index([ticketId, createdAt])
 }
+
+/**
+ * Admin-managed buyer education content. Body is stored as plain text with a
+ * small Markdown-compatible convention; the buyer renderer treats it as text
+ * and never injects arbitrary HTML.
+ */
+model BlogPost {
+  id             String    @id @default(uuid())
+  title          String
+  slug           String    @unique
+  excerpt        String?
+  content        String
+  coverImageUrl  String?
+  seoTitle       String?
+  seoDescription String?
+  status         String    @default("DRAFT") // DRAFT | PUBLISHED
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([updatedAt])
+}

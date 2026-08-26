@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-20
+**Last reviewed:** 2026-08-26
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -14,6 +14,23 @@ NestJS backend for the whole marketplace. Lives at `apps/api`.
 
 The Compose Postgres service is given a 1 GiB `/dev/shm` allocation. The
 default 64 MiB Docker mount is insufficient for concurrent Prisma/Postgres
+
+## 2026-08-26 content and buyer-policy module
+
+ContentModule provides the public GET /policy/shipping response and the
+published-only blog endpoints GET /blog/posts and GET /blog/posts/:slug. Admin
+users use GET/POST /admin/blog/posts, GET/PATCH/DELETE
+/admin/blog/posts/:id to maintain BlogPost records. The BlogPost model and
+migration keep title, unique slug, plain-text content, excerpt, optional cover
+and SEO fields, draft/published status, and publication timestamps.
+
+Shipping policy handling is data-driven: active SellerOffer.leadTimeDays values
+are preferred, active seller fulfillment SLA hours are converted to working-day
+values when offer data is absent, and the production three-working-day
+statement is the safe fallback during schema/data transitions. The API response
+also centralizes the 2:00 PM GST cutoff and carrier/coverage clauses consumed
+by the buyer page.
+
 queries and reports as `No space left on device` even when the host disk has
 free capacity.
 

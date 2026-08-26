@@ -1,10 +1,19 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-18
+**Last reviewed:** 2026-08-26
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
 ## Order fulfillment
+
+
+## 2026-08-26 blog CMS
+
+/blog is the authenticated Blog CMS. It lists drafts and published posts,
+auto-generates a slug from the title until manually edited, supports plain-text
+content with simple headings/lists, cover and SEO fields, draft/publish state,
+public preview, and delete. The API enforces ADMIN on the CMS CRUD routes; the
+buyer app exposes published posts only.
 
 The Orders detail page shows each seller shipment independently. Admins and
 fulfillment operators can select only the next valid delivery state, update a

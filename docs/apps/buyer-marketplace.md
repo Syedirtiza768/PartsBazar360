@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-24
+**Last reviewed:** 2026-08-26
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -21,6 +21,30 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support. On viewports below `lg`, it
   sits above the cart/PDP sticky action bar and the device safe area so both
+
+## 2026-08-26 buyer policies and blog CMS
+
+The buyer app now exposes /return-policy, /shipping-policy, /terms, and /blog
+(all rendered under the app's /buyer base path). Return policy content carries
+the production 14-day return statement plus eligibility, inspection,
+shipping/refund, seller-responsibility, and contact clauses. Terms provide
+general marketplace, order, acceptable-use, liability, UAE-law, and contact
+clauses and should receive qualified UAE legal review before being treated as a
+final legal agreement.
+
+The shipping-policy page reads GET /policy/shipping. The API keeps the order
+cutoff at 2:00 PM Gulf Standard Time (GST, UTC+4), derives handling days from
+active offer/profile data, and falls back to the verified production listing
+statement of three working days during a rolling schema transition. The live
+production listing copy also identifies DHL, FedEx, and Aramex and worldwide
+delivery to most countries.
+
+The public blog is published-only: /blog and /blog/<slug> consume GET
+/blog/posts and GET /blog/posts/<slug>. The admin portal's /blog CMS uses
+authenticated admin CRUD endpoints to create drafts, edit slugs/content/SEO
+fields, preview, publish, and delete posts. Blog bodies are stored as text with
+limited heading/list rendering; arbitrary HTML is never injected.
+
   actions remain visible and tappable; it returns to the bottom corner on
   desktop.
 - Guest-first checkout — SMS verification happens before delivery/payment; no

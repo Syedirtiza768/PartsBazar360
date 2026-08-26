@@ -12,6 +12,7 @@ import {
   StoreIcon,
   TruckIcon,
   MessageIcon,
+  FileTextIcon,
 } from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 
@@ -19,10 +20,26 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/", icon: GaugeIcon },
   { label: "Orders", href: "/orders", icon: TruckIcon, matchPrefix: true },
   { label: "Support", href: "/support", icon: MessageIcon, matchPrefix: true },
-  { label: "Catalog queues", href: "/catalog", icon: ClipboardIcon, matchPrefix: true },
-  { label: "Operations", href: "/operations", icon: GridIcon, matchPrefix: true },
-  { label: "RealTrack bridge", href: "/realtrack-bridge", icon: GridIcon, matchPrefix: true },
+  {
+    label: "Catalog queues",
+    href: "/catalog",
+    icon: ClipboardIcon,
+    matchPrefix: true,
+  },
+  {
+    label: "Operations",
+    href: "/operations",
+    icon: GridIcon,
+    matchPrefix: true,
+  },
+  {
+    label: "RealTrack bridge",
+    href: "/realtrack-bridge",
+    icon: GridIcon,
+    matchPrefix: true,
+  },
   { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
+  { label: "Blog CMS", href: "/blog", icon: FileTextIcon, matchPrefix: true },
 ];
 
 /** Centred, responsive status screen for the pre-authenticated states. */
