@@ -62,6 +62,10 @@ Run modes: `start:dev` (web process, watch), `start:worker` (background job work
 The `sms` module records bounded, redacted provider diagnostics when an
 SMSGlobal send fails, including the HTTP status and safe response details.
 
+## Coupon checkout
+
+Checkout exposes `POST /checkout/:cartId/coupon` for buyer-side code validation and preview, then revalidates the entered code during final order creation. Discounts apply to the item subtotal only, not shipping; the applied code and discount are snapshotted on `Order` and `SellerOrder` while seller payout fields remain unchanged. The marketplace seed upserts the active 20% codes `PBAUG26` and `PBSEP26`.
+
 ## Orders, fulfillment, and confirmations
 
 The parent `Order.status` is the payment lifecycle (`PENDING_PAYMENT`,

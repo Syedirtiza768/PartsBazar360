@@ -20,6 +20,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import type { RawBodyRequest } from '@nestjs/common';
@@ -57,6 +58,13 @@ class CheckoutDto {
 
   @IsObject()
   shippingAddress!: Record<string, unknown>;
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @MaxLength(64)
+  couponCode?: string;
 
   @IsOptional()
   @Transform(({ value }) =>
@@ -67,6 +75,23 @@ class CheckoutDto {
   chargeCurrency?: string;
 }
 
+class CouponDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  code!: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsIn([...CHARGE_CURRENCIES])
+  currency?: string;
+}
 class ShippingQuoteDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -266,6 +291,10 @@ export class CheckoutController {
    * quote doesn't read the buyer's identity at all (cartId + country/currency
    * is all `quoteShipping` needs).
    */
+  @Post(':cartId/coupon')
+  couponQuote(@Param('cartId') cartId: string, @Body() body: CouponDto) {
+    return this.checkoutService.quoteCoupon(cartId, body.code, body.currency);
+  }
   @Post(':cartId/shipping-quote')
   shippingQuote(
     @Param('cartId') cartId: string,
@@ -313,6 +342,7 @@ export class CheckoutController {
       body.chargeCurrency,
       body.paymentProvider,
       { checkoutSessionId, checkoutToken, idempotencyKey },
+      body.couponCode,
     );
   }
 }

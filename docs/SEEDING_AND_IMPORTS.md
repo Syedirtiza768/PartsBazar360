@@ -17,7 +17,9 @@ See `docs/IMPLEMENTATION_PLAN.md` for the full linked rollout.
 
 `npm run seed:marketplace --workspace api` is the single repeatable entry point for RealTrack/eBay stores and seller workbooks. It creates a seller per source account, keeps seller identity separate from product brand, fetches every configured listing unless a development limit is set, requests the store-scoped listing detail, and reuses the production spreadsheet upload service for `.xlsx` and `.csv` files.
 
-The importer detects the supplied DXB-EXW and FEBEST shapes as templates, but the parser itself is header-driven. Original rows are retained in `SourceRecord`; normalization output and confidence are retained separately.
+The importer detects the supplied DXB-EXW and FEBEST shapes as templates, but the parser itself is header-driven.
+
+The same seed entry point upserts the active buyer coupons `PBAUG26` and `PBSEP26` at 20%; checkout still requires the buyer to enter a code and the API revalidates it. Original rows are retained in `SourceRecord`; normalization output and confidence are retained separately.
 
 ## Required setup
 

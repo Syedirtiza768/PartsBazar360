@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { TamaraService, type TamaraCurrency } from '../checkout/tamara.service';
+import { roundMoney } from '../checkout/currency.util';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -105,15 +106,26 @@ export class OrdersController {
         throw new BadRequestException('Unsupported Tamara order currency');
       }
 
-      await this.tamaraService.captureOrder({
-        orderId: payment.externalId,
-        amount: Math.round((order.subTotal + order.shippingTotal) * 100) / 100,
-        shippingAmount: order.shippingTotal,
-        currency: payment.currency as TamaraCurrency,
-        shippedAt: new Date(),
-        shippingCompany: body.carrier,
-        trackingNumber: body.trackingNumber,
-        items: order.items.map((item) => ({
+      const itemSubtotals = order.items.map((item) =>
+        roundMoney(item.unitPrice * item.quantity),
+      );
+      const sellerSubtotal = itemSubtotals.reduce(
+        (sum, value) => sum + value,
+        0,
+      );
+      let allocatedDiscount = 0;
+      const captureItems = order.items.map((item, index) => {
+        const discountAmount =
+          index === order.items.length - 1
+            ? roundMoney(order.discountTotal - allocatedDiscount)
+            : roundMoney(
+                sellerSubtotal > 0
+                  ? (order.discountTotal * itemSubtotals[index]) /
+                      sellerSubtotal
+                  : 0,
+              );
+        allocatedDiscount += discountAmount;
+        return {
           referenceId: item.sellerOfferId,
           name:
             item.sellerOffer.canonicalPart?.title ||
@@ -125,8 +137,22 @@ export class OrdersController {
             item.sellerOfferId,
           quantity: item.quantity,
           unitAmount: item.unitPrice,
-          totalAmount: Math.round(item.unitPrice * item.quantity * 100) / 100,
-        })),
+          totalAmount: itemSubtotals[index],
+          discountAmount,
+        };
+      });
+
+      await this.tamaraService.captureOrder({
+        orderId: payment.externalId,
+        amount: roundMoney(
+          order.subTotal - order.discountTotal + order.shippingTotal,
+        ),
+        shippingAmount: order.shippingTotal,
+        currency: payment.currency as TamaraCurrency,
+        shippedAt: new Date(),
+        shippingCompany: body.carrier,
+        trackingNumber: body.trackingNumber,
+        items: captureItems,
       });
     }
 

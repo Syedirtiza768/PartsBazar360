@@ -18,6 +18,9 @@ export class OrderService {
       checkoutSessionId?: string;
       verifiedPhone: string;
       idempotencyKey: string;
+      couponId?: string;
+      couponCode?: string;
+      discountAmount?: number;
     },
   ) {
     // We group cart items by Seller ID to split them into SellerOrders
@@ -32,6 +35,17 @@ export class OrderService {
     );
 
     let parentOrderTotal = 0;
+    const itemSubtotal = cartItems.reduce(
+      (sum, item) => sum + item.quantity * item.sellerOffer.price,
+      0,
+    );
+    const discountAmount = Math.min(
+      Math.max(
+        0,
+        Math.round(Number(identity?.discountAmount ?? 0) * 100) / 100,
+      ),
+      Math.max(0, Math.round(itemSubtotal * 100) / 100),
+    );
 
     // Use Prisma Transaction to ensure atomic order creation
     return this.prisma.$transaction(async (tx) => {
@@ -44,6 +58,9 @@ export class OrderService {
           verifiedPhone: identity?.verifiedPhone,
           idempotencyKey: identity?.idempotencyKey,
           totalAmount: 0, // Will update after summation
+          couponId: identity?.couponId,
+          couponCode: identity?.couponCode,
+          discountAmount,
           currency,
           shippingAddress,
           status: 'PENDING_PAYMENT',
@@ -67,6 +84,11 @@ export class OrderService {
         }
 
         const shippingTotal = shippingTotalsBySeller[sellerId] || 0;
+        const sellerDiscount =
+          itemSubtotal > 0
+            ? Math.round(((discountAmount * subTotal) / itemSubtotal) * 100) /
+              100
+            : 0;
         parentOrderTotal += subTotal + shippingTotal;
 
         // Create Child Seller Order
@@ -75,6 +97,7 @@ export class OrderService {
             parentOrderId: parentOrder.id,
             sellerId: sellerId,
             subTotal,
+            discountTotal: sellerDiscount,
             shippingTotal,
             marketplaceFeeTotal,
             sellerProceedsTotal,
@@ -100,6 +123,9 @@ export class OrderService {
           });
         }
       }
+
+      // Coupons reduce the buyer-facing parent total, not seller payouts.
+      parentOrderTotal = Math.max(0, parentOrderTotal - discountAmount);
 
       // Update parent order total
       return tx.order.update({

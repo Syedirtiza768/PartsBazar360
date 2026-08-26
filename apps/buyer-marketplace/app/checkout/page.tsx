@@ -112,11 +112,26 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
   return errors;
 }
 
+type CouponQuote = {
+  code: string;
+  discountPercent: number;
+  currency: string;
+  subtotal: number;
+  discountAmount: number;
+  discountedSubtotal: number;
+};
 function toCheckoutDraft(
   form: FormState,
   paymentProvider: "stripe" | "tamara",
+  couponCode?: string,
 ): CheckoutDraft {
-  return { ...form, paymentProvider };
+  return {
+    ...form,
+    paymentProvider,
+    ...(couponCode?.trim()
+      ? { couponCode: couponCode.trim().toUpperCase() }
+      : {}),
+  };
 }
 
 function Steps({ current }: { current: 1 | 2 }) {
@@ -188,6 +203,7 @@ function SummaryCard({
   shippingError,
   paymentProvider,
   chargeCurrency,
+  couponQuote,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -197,6 +213,7 @@ function SummaryCard({
   shippingError?: string | null;
   paymentProvider: "stripe" | "tamara";
   chargeCurrency: string;
+  couponQuote: CouponQuote | null;
 }) {
   const { format, settlementCurrency } = useCurrency();
   const leadTime = commonLeadTime(shippingQuote);
@@ -229,6 +246,14 @@ function SummaryCard({
           <dt className="text-graphite-600">Subtotal</dt>
           <dd className="price text-sm">{format(subtotal, currency)}</dd>
         </div>
+        {couponQuote && (
+          <div className="flex justify-between gap-3 text-emerald-700">
+            <dt>Coupon ({couponQuote.code})</dt>
+            <dd className="price text-sm">
+              -{format(couponQuote.discountAmount, couponQuote.currency)}
+            </dd>
+          </div>
+        )}
         <div className="flex justify-between gap-3">
           <dt className="text-graphite-600">Shipping</dt>
           <dd className="text-right text-graphite-600">
@@ -253,8 +278,14 @@ function SummaryCard({
             <dt className="font-semibold text-slate-900">Estimated total</dt>
             <dd className="price text-sm">
               {format(
-                shippingQuote.totalAmount,
-                shippingQuote.currency || SETTLEMENT_CURRENCY,
+                Math.max(
+                  0,
+                  shippingQuote.totalAmount -
+                    (couponQuote?.discountAmount ?? 0),
+                ),
+                shippingQuote.currency ||
+                  couponQuote?.currency ||
+                  SETTLEMENT_CURRENCY,
               )}
             </dd>
           </div>
@@ -301,6 +332,10 @@ function CheckoutContent() {
   const [confirmError, setConfirmError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponQuote, setCouponQuote] = useState<CouponQuote | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   // Phone verification, shown just before "Place order" for anyone not
   // already signed in — keeps checkout guest-feeling until the last step.
@@ -350,6 +385,14 @@ function CheckoutContent() {
     authHeaders,
   });
 
+  const payableTotal = shippingQuote
+    ? Math.max(
+        0,
+        shippingQuote.totalAmount - (couponQuote?.discountAmount ?? 0),
+      )
+    : (couponQuote?.discountedSubtotal ?? subtotal);
+  const payableCurrency =
+    shippingQuote?.currency || couponQuote?.currency || currency;
   // Shipments over the courier ceiling are rejected by processCheckout, so the
   // Pay button must be disabled rather than failing after the buyer commits.
   const freightSellers = (shippingQuote?.sellerQuotes ?? []).filter(
@@ -370,6 +413,7 @@ function CheckoutContent() {
         : saved.draft;
       setForm(draft);
       setPaymentProvider(draft.paymentProvider);
+      setCouponCode(draft.couponCode ?? "");
       setCheckoutSessionId(saved.checkoutSessionId);
       setIdempotencyKey(saved.idempotencyKey);
       setMaskedPhone(saved.maskedPhone ?? null);
@@ -389,7 +433,7 @@ function CheckoutContent() {
       country: getShippingCountry(),
     };
     setForm(initial);
-    void createCheckoutSession(cart.id, toCheckoutDraft(initial, "stripe"))
+    void createCheckoutSession(cart.id, toCheckoutDraft(initial, "stripe", ""))
       .then(({ checkoutSessionId: sessionId }) => {
         if (cancelled) return;
         const key = crypto.randomUUID();
@@ -399,7 +443,7 @@ function CheckoutContent() {
           checkoutSessionId: sessionId,
           idempotencyKey: key,
           phoneVerified: false,
-          draft: toCheckoutDraft(initial, "stripe"),
+          draft: toCheckoutDraft(initial, "stripe", ""),
         });
       })
       .catch((error) => {
@@ -427,7 +471,7 @@ function CheckoutContent() {
       phoneVerified,
       maskedPhone: maskedPhone ?? undefined,
       accountExists,
-      draft: toCheckoutDraft(form, paymentProvider),
+      draft: toCheckoutDraft(form, paymentProvider, couponCode),
     };
     saveCheckoutState(cart.id, state);
     const timer = window.setTimeout(() => {
@@ -481,6 +525,59 @@ function CheckoutContent() {
       if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
     };
 
+  const applyCoupon = async () => {
+    const normalizedCode = couponCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setCouponQuote(null);
+      setCouponError("Enter a coupon code first.");
+      return;
+    }
+    setCouponCode(normalizedCode);
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const response = await fetch(
+        API_BASE_URL + "/checkout/" + cart.id + "/coupon",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            code: normalizedCode,
+            currency: checkoutCurrency,
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          data.message || "This coupon code is invalid or expired.",
+        );
+      }
+      setCouponQuote(data as CouponQuote);
+    } catch (error) {
+      setCouponQuote(null);
+      setCouponError(
+        error instanceof Error
+          ? error.message
+          : "This coupon code is invalid or expired.",
+      );
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !couponQuote ||
+      !couponCode.trim() ||
+      couponQuote.currency === checkoutCurrency
+    ) {
+      return;
+    }
+    void applyCoupon();
+    // Re-quote only when the selected charge currency changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutCurrency]);
   const goToReview = (e: FormEvent) => {
     e.preventDefault();
     const nextErrors = validate(form);
@@ -532,7 +629,7 @@ function CheckoutContent() {
             phoneVerified,
             maskedPhone: maskedPhone ?? undefined,
             accountExists,
-            draft: toCheckoutDraft(form, paymentProvider),
+            draft: toCheckoutDraft(form, paymentProvider, couponCode),
           }),
         },
         body: JSON.stringify({
@@ -541,6 +638,7 @@ function CheckoutContent() {
           phone: form.phone,
           paymentProvider,
           chargeCurrency: checkoutCurrency,
+          couponCode: couponQuote?.code || undefined,
           shippingAddress: {
             line1: form.line1,
             line2: form.line2 || undefined,
@@ -706,12 +804,7 @@ function CheckoutContent() {
             Order summary ·{" "}
             {items.reduce((sum, item) => sum + item.quantity, 0)} items
           </span>
-          <span>
-            {format(
-              shippingQuote?.totalAmount ?? subtotal,
-              shippingQuote?.currency ?? currency,
-            )}
-          </span>
+          <span>{format(payableTotal, payableCurrency)}</span>
         </summary>
         <div className="border-t border-slate-100">
           <SummaryCard
@@ -723,6 +816,7 @@ function CheckoutContent() {
             shippingError={shippingError}
             paymentProvider={paymentProvider}
             chargeCurrency={checkoutCurrency}
+            couponQuote={couponQuote}
           />
         </div>
       </details>
@@ -1107,6 +1201,52 @@ function CheckoutContent() {
                 </ul>
               </section>
             ))}
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
+              <h2 className="text-base font-semibold text-slate-900">
+                Coupon code
+              </h2>
+              <p className="mt-1 text-sm text-graphite-600">
+                Enter your coupon code to apply its discount before payment.
+              </p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+                <Input
+                  label="Coupon code"
+                  autoComplete="off"
+                  value={couponCode}
+                  onChange={(event) => {
+                    setCouponCode(event.target.value);
+                    setCouponQuote(null);
+                    setCouponError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  error={couponError || undefined}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="shrink-0 sm:mt-1"
+                  loading={couponLoading}
+                  disabled={!couponCode.trim()}
+                  onClick={() => void applyCoupon()}
+                >
+                  Apply coupon
+                </Button>
+              </div>
+              {couponQuote && (
+                <p
+                  className="mt-3 text-sm font-semibold text-emerald-700"
+                  role="status"
+                >
+                  {couponQuote.code} applied — {couponQuote.discountPercent}%
+                  off your item subtotal.
+                </p>
+              )}
+            </section>
 
             <section
               className={cn(
@@ -1261,19 +1401,12 @@ function CheckoutContent() {
                   {/* The full label runs to three lines in a 288px button, so
                         phones get the amount and desktops get the full sentence. */}
                   <span className="sm:hidden">
-                    Pay{" "}
-                    {format(
-                      shippingQuote?.totalAmount ?? subtotal,
-                      shippingQuote?.currency ?? currency,
-                    )}
+                    Pay {format(payableTotal, payableCurrency)}
                   </span>
                   <span className="hidden sm:inline">
                     Pay with{" "}
                     {paymentProvider === "tamara" ? "Tamara" : "Stripe"} —{" "}
-                    {format(
-                      shippingQuote?.totalAmount ?? subtotal,
-                      shippingQuote?.currency ?? currency,
-                    )}
+                    {format(payableTotal, payableCurrency)}
                   </span>
                 </Button>
               </div>
@@ -1302,6 +1435,7 @@ function CheckoutContent() {
             shippingError={shippingError}
             paymentProvider={paymentProvider}
             chargeCurrency={checkoutCurrency}
+            couponQuote={couponQuote}
           />
         </aside>
       </div>

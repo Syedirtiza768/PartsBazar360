@@ -7,6 +7,7 @@ import { PrismaService } from './src/prisma.service';
 import { MerchantUploadsService } from './src/modules/merchant/uploads.service';
 import { IngestionProcessor } from './src/modules/ingestion/ingestion.processor';
 import { AuthService } from './src/modules/auth/auth.service';
+import { seedDiscountCoupons } from './src/modules/seed/discount-coupons';
 import { enabled, listingLimit, storeManifest } from './src/modules/seed/seed.config';
 import {
   MARKETPLACE_ORG,
@@ -103,6 +104,13 @@ async function main() {
   };
 
   try {
+    report.discountCoupons = (await seedDiscountCoupons(prisma)).map(
+      (coupon) => ({
+        code: coupon.code,
+        discountPercent: coupon.discountPercent,
+        active: coupon.active,
+      }),
+    );
     const org = await prisma.organization.upsert({
       where: { id: process.env.SEED_MARKETPLACE_ORG_ID || MARKETPLACE_ORG.id },
       update: { name: MARKETPLACE_ORG.name },

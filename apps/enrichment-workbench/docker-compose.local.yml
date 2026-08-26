@@ -1,0 +1,15 @@
+services:
+  enrichment-workbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: partsbazar-enrichment-workbench
+    ports:
+      - "1002:3004"
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3004
+    volumes:
+      - ../../tmp/superior-enrichment-workbench:/workspace/tmp/superior-enrichment-workbench
+    restart: unless-stopped

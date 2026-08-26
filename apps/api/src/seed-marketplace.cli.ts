@@ -20,6 +20,7 @@ import {
 import { deactivateLegacySellers } from './modules/seed/deactivate-legacy-sellers';
 import { wipeMarketplaceSellerInventory } from './modules/seed/wipe-marketplace-inventory';
 import { MARKETPLACE_CURRENCY } from './modules/ingestion/listing-eligibility.util';
+import { seedDiscountCoupons } from './modules/seed/discount-coupons';
 
 async function ensureSeller(
   prisma: PrismaService,
@@ -113,6 +114,13 @@ async function main() {
   };
 
   try {
+    report.discountCoupons = (await seedDiscountCoupons(prisma)).map(
+      (coupon) => ({
+        code: coupon.code,
+        discountPercent: coupon.discountPercent,
+        active: coupon.active,
+      }),
+    );
     const org = await prisma.organization.upsert({
       where: { id: process.env.SEED_MARKETPLACE_ORG_ID || MARKETPLACE_ORG.id },
       update: { name: MARKETPLACE_ORG.name },

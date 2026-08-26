@@ -45,12 +45,14 @@ authenticated admin CRUD endpoints to create drafts, edit slugs/content/SEO
 fields, preview, publish, and delete posts. Blog bodies are stored as text with
 limited heading/list rendering; arbitrary HTML is never injected.
 
-  actions remain visible and tappable; it returns to the bottom corner on
-  desktop.
+actions remain visible and tappable; it returns to the bottom corner on
+desktop.
+
 - Guest-first checkout — SMS verification happens before delivery/payment; no
   password or login is required. Drafts survive refresh and payment failure,
   OTP supports paste/autofill/auto-submit, and account creation is offered only
   after payment. See [[../CHECKOUT_GUEST_FIRST]].
+- Checkout coupon entry — buyers must enter and apply a coupon code on the review step; the API revalidates it before payment.
 - Cart shipping estimates are available to guests. The selected country is
   persisted immediately and carried into checkout, including restored checkout
   drafts; changing it invalidates the previous quote and refreshes shipping.
@@ -105,7 +107,7 @@ as redirects/canonical aliases after slug collision and legacy-link coverage are
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
 
-**Last reviewed:** 2026-08-07
+**Last reviewed:** 2026-08-26
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 

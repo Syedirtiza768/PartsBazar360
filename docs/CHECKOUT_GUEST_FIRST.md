@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-26
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -12,6 +12,7 @@ an account login. Buying never requires a password.
 3. Successful OTP verification resolves one `Customer` by normalized E.164
    phone and returns a short-lived, checkout-scoped token.
 4. Delivery and payment fields are progressively disclosed after verification.
+   The review step accepts an optional coupon code; the server validates it again at order creation and applies any discount to the item subtotal only.
 5. One stable idempotency key creates at most one order for the checkout
    session. A failed payment creates another provider attempt on that order.
 6. The cart remains active through declines/cancellation and is closed only by
@@ -96,7 +97,7 @@ Phone, email, address, name, OTP, token, and provider secrets are prohibited.
 
 Both rails read their credentials from `process.env` at request time inside the
 **api** and **worker** containers, so a cutover is an env change plus a
-container *recreate* — no image rebuild, no frontend deploy. Stripe is used via
+container _recreate_ — no image rebuild, no frontend deploy. Stripe is used via
 hosted Checkout Sessions, so there is no publishable key in the browser bundle
 to rebuild either.
 
@@ -112,7 +113,7 @@ It backs up `.env`, rewrites only the payment keys, flips `TAMARA_API_URL` to
 other container and no standalone job is disturbed), and prints a rollback
 command.
 
-**The one that bites:** `STRIPE_WEBHOOK_SECRET` is *not* transferable from
+**The one that bites:** `STRIPE_WEBHOOK_SECRET` is _not_ transferable from
 test mode. Create a webhook endpoint in Stripe's **live** dashboard pointing at
 `https://partsbazar360.com/api/checkout/webhooks/stripe` and use the
 `whsec_…` it issues. Reusing the sandbox secret makes every live webhook fail

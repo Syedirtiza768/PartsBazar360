@@ -68,6 +68,7 @@ export class CheckoutService {
       checkoutToken?: string;
       idempotencyKey?: string;
     },
+    couponCodeInput?: string | null,
   ) {
     const normalizedBuyerPhone = normalizePhone(buyer.phone || '');
     let customerId: string;
@@ -196,6 +197,14 @@ export class CheckoutService {
     if (paymentProvider === 'tamara' && !buyer.phone?.trim()) {
       throw new BadRequestException('Phone number is required for Tamara');
     }
+
+    const coupon = couponCodeInput?.trim()
+      ? await this.resolveCouponForItems(
+          cart.items,
+          couponCodeInput,
+          chargeCurrency,
+        )
+      : null;
 
     const dbUser = resolvedBuyerId
       ? await this.prisma.user.findUnique({ where: { id: resolvedBuyerId } })
@@ -328,6 +337,9 @@ export class CheckoutService {
           checkoutSessionId,
           verifiedPhone: normalizedBuyerPhone,
           idempotencyKey,
+          couponId: coupon?.id,
+          couponCode: coupon?.code,
+          discountAmount: coupon?.discountAmount,
         },
       );
     } catch (error) {
@@ -408,7 +420,7 @@ export class CheckoutService {
             city: this.addressField(shippingAddress, 'city', true)!,
             region: this.addressField(shippingAddress, 'region'),
           },
-          items: this.toTamaraItems(pricedItems),
+          items: this.toTamaraItems(pricedItems, coupon?.discountAmount),
           successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
           failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara&reason=failed`,
           cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
@@ -695,7 +707,7 @@ export class CheckoutService {
             city: this.addressField(address, 'city', true)!,
             region: this.addressField(address, 'region'),
           },
-          items: this.toTamaraItems(orderItems),
+          items: this.toTamaraItems(orderItems, order.discountAmount),
           successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
           failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara&reason=failed`,
           cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
@@ -805,6 +817,30 @@ export class CheckoutService {
     };
   }
 
+  async quoteCoupon(
+    cartId: string,
+    code: string,
+    chargeCurrencyInput?: string | null,
+  ) {
+    const cart = await this.cartService.getCart(cartId);
+    if (cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+    const chargeCurrency = resolveChargeCurrency(chargeCurrencyInput);
+    const coupon = await this.resolveCouponForItems(
+      cart.items,
+      code,
+      chargeCurrency,
+    );
+    return {
+      code: coupon.code,
+      discountPercent: coupon.discountPercent,
+      currency: chargeCurrency,
+      subtotal: coupon.subtotal,
+      discountAmount: coupon.discountAmount,
+      discountedSubtotal: roundMoney(coupon.subtotal - coupon.discountAmount),
+    };
+  }
   async quoteShipping(
     cartId: string,
     destinationCountry: string,
@@ -873,6 +909,56 @@ export class CheckoutService {
     };
   }
 
+  private async resolveCouponForItems(
+    items: any[],
+    codeInput: string,
+    chargeCurrency: ChargeCurrency,
+  ) {
+    const code = codeInput.trim().toUpperCase();
+    if (!code || code.length > 64) {
+      throw new BadRequestException('Enter a valid coupon code');
+    }
+
+    const coupon = await this.prisma.discountCoupon.findUnique({
+      where: { code },
+    });
+    const now = new Date();
+    if (
+      !coupon ||
+      !coupon.active ||
+      (coupon.startsAt && coupon.startsAt > now) ||
+      (coupon.endsAt && coupon.endsAt <= now) ||
+      coupon.discountPercent <= 0 ||
+      coupon.discountPercent > 100
+    ) {
+      throw new BadRequestException('This coupon code is invalid or expired');
+    }
+
+    const subtotal = roundMoney(
+      items.reduce(
+        (sum, item) =>
+          sum +
+          item.quantity *
+            convertAmount(
+              item.sellerOffer.price,
+              item.sellerOffer.currency,
+              chargeCurrency,
+            ),
+        0,
+      ),
+    );
+    const discountAmount = roundMoney(
+      Math.min(subtotal, (subtotal * coupon.discountPercent) / 100),
+    );
+
+    return {
+      id: coupon.id,
+      code: coupon.code,
+      discountPercent: coupon.discountPercent,
+      subtotal,
+      discountAmount,
+    };
+  }
   async confirmPayment(
     paymentIntentId: string,
     body: { status: 'SUCCEEDED' | 'FAILED'; externalId?: string },
@@ -1414,9 +1500,31 @@ export class CheckoutService {
     return value || undefined;
   }
 
-  private toTamaraItems(items: any[]): TamaraCheckoutItem[] {
-    return items.map((item) => {
+  private toTamaraItems(
+    items: any[],
+    discountAmount = 0,
+  ): TamaraCheckoutItem[] {
+    const lineSubtotals = items.map((item) =>
+      roundMoney(Number(item.sellerOffer.price) * Number(item.quantity)),
+    );
+    const subtotal = lineSubtotals.reduce((sum, value) => sum + value, 0);
+    const appliedDiscount = Math.min(
+      Math.max(0, roundMoney(discountAmount)),
+      roundMoney(subtotal),
+    );
+    let allocatedDiscount = 0;
+
+    return items.map((item, index) => {
       const unitAmount = roundMoney(Number(item.sellerOffer.price));
+      const lineDiscount =
+        index === items.length - 1
+          ? roundMoney(appliedDiscount - allocatedDiscount)
+          : roundMoney(
+              subtotal > 0
+                ? (appliedDiscount * lineSubtotals[index]) / subtotal
+                : 0,
+            );
+      allocatedDiscount += lineDiscount;
       return {
         referenceId: String(item.sellerOfferId),
         name:
@@ -1429,7 +1537,8 @@ export class CheckoutService {
           item.sellerOfferId,
         quantity: Number(item.quantity),
         unitAmount,
-        totalAmount: roundMoney(unitAmount * Number(item.quantity)),
+        totalAmount: lineSubtotals[index],
+        discountAmount: lineDiscount,
       };
     });
   }

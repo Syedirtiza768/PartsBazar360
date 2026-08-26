@@ -21,6 +21,7 @@ export type TamaraCheckoutItem = {
   quantity: number;
   unitAmount: number;
   totalAmount: number;
+  discountAmount?: number;
 };
 
 export type TamaraCheckoutSession = {
@@ -123,7 +124,7 @@ export class TamaraService {
           unit_price: money(item.unitAmount),
           total_amount: money(item.totalAmount),
           tax_amount: money(0),
-          discount_amount: money(0),
+          discount_amount: money(item.discountAmount ?? 0),
         })),
         merchant_url: {
           success: input.successUrl,
@@ -180,7 +181,7 @@ export class TamaraService {
           unit_price: money(item.unitAmount),
           total_amount: money(item.totalAmount),
           tax_amount: money(0),
-          discount_amount: money(0),
+          discount_amount: money(item.discountAmount ?? 0),
         })),
         tax_amount: money(0),
         discount_amount: money(0),

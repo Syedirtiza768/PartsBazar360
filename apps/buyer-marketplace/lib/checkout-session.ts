@@ -15,6 +15,7 @@ export type CheckoutDraft = {
   country: string;
   postalCode: string;
   paymentProvider: "stripe" | "tamara";
+  couponCode?: string;
 };
 
 export type SavedCheckoutState = {

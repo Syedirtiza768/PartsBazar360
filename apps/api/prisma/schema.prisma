@@ -836,6 +836,21 @@ model CheckoutEvent {
   @@index([checkoutSessionId, createdAt])
 }
 
+model DiscountCoupon {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  discountPercent Float
+  active          Boolean   @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  orders Order[]
+
+  @@index([active, startsAt, endsAt])
+}
+
 model CartItem {
   id            String   @id @default(uuid())
   cartId        String
@@ -887,6 +902,9 @@ model Order {
   verifiedPhone     String?
   idempotencyKey    String?     @unique
   totalAmount       Float
+  couponId          String?
+  couponCode        String?
+  discountAmount    Float       @default(0)
   currency          String      @default("AED")
   status            OrderStatus @default(PENDING_PAYMENT)
   shippingAddress   Json?
@@ -897,8 +915,10 @@ model Order {
   paymentIntent   PaymentIntent?
   customer        Customer?        @relation(fields: [customerId], references: [id])
   checkoutSession CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
+  coupon          DiscountCoupon?  @relation(fields: [couponId], references: [id], onDelete: SetNull)
   supportTickets  SupportTicket[]
 
+  @@index([couponId])
   @@index([customerId, createdAt])
 }
 
@@ -907,6 +927,7 @@ model SellerOrder {
   parentOrderId       String
   sellerId            String
   subTotal            Float
+  discountTotal       Float             @default(0)
   shippingTotal       Float
   marketplaceFeeTotal Float             @default(0)
   sellerProceedsTotal Float             @default(0)
