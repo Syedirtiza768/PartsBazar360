@@ -31,13 +31,13 @@ export default function RootLayout({
         new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
         j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-        })(window,document,'script','dataLayer','GTM-N373KFW3');
+        })(window,document,'script','dataLayer','GTM-5ZKV5KGG');
       `}</Script>
       <body
         className={`${inter.className} min-h-dvh bg-zinc-950 text-zinc-100 antialiased selection:bg-purple-500/30`}
       >
         <noscript>
-          <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N373KFW3" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
+          <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5ZKV5KGG" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
         </noscript>
         <a href="#main-content" className="skip-link">
           Skip to content

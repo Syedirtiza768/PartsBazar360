@@ -147,7 +147,7 @@ export default async function RootLayout({
         new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
         j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-        })(window,document,'script','dataLayer','GTM-N373KFW3');
+        })(window,document,'script','dataLayer','GTM-5ZKV5KGG');
       `}</Script>
       <Script id="meta-pixel" strategy="afterInteractive">{`
         !function(f,b,e,v,n,t,s)
@@ -165,7 +165,7 @@ export default async function RootLayout({
           the retracted toolbar under every short page. */}
       <body className="flex min-h-dvh flex-col">
         <noscript>
-          <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N373KFW3" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
+          <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5ZKV5KGG" height="0" width="0" style={{ display: "none", visibility: "hidden" }} />
           {/* eslint-disable-next-line @next/next/no-img-element -- Meta Pixel requires this exact noscript image. */}
           <img
             height="1"
