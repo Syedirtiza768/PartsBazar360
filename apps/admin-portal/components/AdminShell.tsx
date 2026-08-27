@@ -13,6 +13,7 @@ import {
   TruckIcon,
   MessageIcon,
   FileTextIcon,
+  TagIcon,
 } from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
     matchPrefix: true,
   },
   { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
+  { label: "Coupons", href: "/coupons", icon: TagIcon, matchPrefix: true },
   { label: "Blog CMS", href: "/blog", icon: FileTextIcon, matchPrefix: true },
 ];
 
@@ -59,15 +61,30 @@ export function AdminShell({ children }: { children: ReactNode }) {
   // `trailingSlash: true` means the live path carries the slash.
   const isLogin = pathname === "/login" || pathname === "/login/";
   const isBlogRoute = pathname === "/blog" || pathname.startsWith("/blog/");
+  const isCouponRoute =
+    pathname === "/coupons" || pathname.startsWith("/coupons/");
+  const isPlatformAdmin = user?.role === "ADMIN";
   const nav = isSeoEditor
     ? NAV_ITEMS.filter((item) => item.href === "/blog")
-    : NAV_ITEMS;
+    : isPlatformAdmin
+      ? NAV_ITEMS
+      : NAV_ITEMS.filter((item) => item.href !== "/coupons");
 
   useEffect(() => {
     if (!ready || isLogin) return;
     if (!isAdmin) router.replace("/login");
     else if (isSeoEditor && !isBlogRoute) router.replace("/blog");
-  }, [ready, isAdmin, isLogin, isSeoEditor, isBlogRoute, router]);
+    else if (!isPlatformAdmin && isCouponRoute) router.replace("/");
+  }, [
+    ready,
+    isAdmin,
+    isLogin,
+    isSeoEditor,
+    isBlogRoute,
+    isPlatformAdmin,
+    isCouponRoute,
+    router,
+  ]);
 
   if (isLogin) {
     return <>{children}</>;

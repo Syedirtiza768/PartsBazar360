@@ -22,6 +22,7 @@ import { SeoModule } from './modules/seo/seo.module';
 import { SmsModule } from './modules/sms/sms.module';
 import { RealtrackBridgeModule } from './modules/realtrack-bridge/realtrack-bridge.module';
 import { ContentModule } from './modules/content/content.module';
+import { DiscountCouponModule } from './modules/discount-coupon/discount-coupon.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ContentModule } from './modules/content/content.module';
     SeoModule,
     RealtrackBridgeModule,
     ContentModule,
+    DiscountCouponModule,
   ],
   controllers: [AppController],
   providers: [AppService],

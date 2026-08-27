@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-27
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -42,6 +42,7 @@ Run modes: `start:dev` (web process, watch), `start:worker` (background job work
 - `cart`
 - `catalog-import` — bulk catalog import pipeline
 - `checkout`
+- `discount-coupon` — admin-only coupon CRUD and audit logging
 - `email`
 - `enrichment` — data enrichment (brand mapping, item specifics, etc. — ties into [[../packages/scraper-engine]] and root-level enrich/import scripts)
 - `garage` — buyer's saved vehicles ("garage")
@@ -65,6 +66,13 @@ SMSGlobal send fails, including the HTTP status and safe response details.
 ## Coupon checkout
 
 Checkout exposes `POST /checkout/:cartId/coupon` for buyer-side code validation and preview, then revalidates the entered code during final order creation. Discounts apply to the item subtotal only, not shipping; the applied code and discount are snapshotted on `Order` and `SellerOrder` while seller payout fields remain unchanged. The marketplace seed upserts the active 20% codes `PBAUG26` and `PBSEP26`.
+
+The admin console manages the same `DiscountCoupon` rows through the
+admin-only `GET/POST /admin/coupons` and `PATCH /admin/coupons/:id` endpoints.
+Codes are normalized to uppercase, percentage discounts are constrained to
+0.01–100, and optional start/end dates must form a valid window. Admin writes
+are recorded as `COUPON_CREATED` or `COUPON_UPDATED` audit events. Coupons are
+deactivated rather than deleted so order history remains intact.
 
 ## Orders, fulfillment, and confirmations
 

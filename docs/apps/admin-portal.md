@@ -1,11 +1,10 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-27
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
 ## Order fulfillment
-
 
 ## 2026-08-26 blog CMS
 
@@ -27,7 +26,17 @@ The lifecycle is `PROCESSING` → `SHIPPED` → `DELIVERED`; cancellation is
 available before shipment. The API remains authoritative for transition
 validation and audit logging, so the UI cannot bypass the workflow.
 
+## Coupon management
+
+`/coupons` is an admin-only promotion workspace. It lists existing percentage
+coupons, shows active/scheduled/expired/disabled state and order counts, and
+supports creating or editing a code, discount percentage, enabled state, and
+optional start/end dates. Disabling a coupon keeps its order history while the
+checkout API rejects it for new orders. The API remains authoritative for all
+validation and the acting admin is recorded in the audit log.
+
 ## Depends on
+
 - [[../packages/ui]]
 - [[../packages/catalog-contracts]]
 - [[api]] — likely the primary consumer of `operations`, `audit`, and `merchant` modules
