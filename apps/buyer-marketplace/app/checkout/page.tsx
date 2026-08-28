@@ -874,7 +874,7 @@ function CheckoutContent() {
               </h2>
               <p className="mt-1 text-sm text-graphite-600">
                 {!otpRequired
-                  ? "No account or OTP required for now."
+                  ? "Enter your mobile number to continue."
                   : "Continue securely — no account or password required."}
               </p>
               <div className="mt-4 grid grid-cols-[116px_1fr] items-start gap-2">
@@ -904,12 +904,7 @@ function CheckoutContent() {
                   error={errors.phone}
                 />
               </div>
-              {!otpRequired ? (
-                <p className="mt-3 text-sm text-amber-700" role="status">
-                  Phone verification is temporarily skipped. We will use this
-                  number for order updates.
-                </p>
-              ) : phoneVerified ? (
+              {otpRequired && phoneVerified ? (
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
                   <span className="font-semibold">Verified {maskedPhone}</span>
                   <button
@@ -926,7 +921,7 @@ function CheckoutContent() {
                     Change
                   </button>
                 </div>
-              ) : showOtpPanel ? (
+              ) : otpRequired && showOtpPanel ? (
                 <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm text-graphite-700">
                     We sent a 6-digit code to{" "}
@@ -977,7 +972,7 @@ function CheckoutContent() {
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : otpRequired ? (
                 <Button
                   type="button"
                   size="lg"
@@ -989,7 +984,7 @@ function CheckoutContent() {
                 >
                   Continue securely
                 </Button>
-              )}
+              ) : null}
             </section>
 
             {phoneVerified && (
