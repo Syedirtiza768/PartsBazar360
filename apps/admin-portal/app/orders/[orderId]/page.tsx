@@ -34,6 +34,23 @@ function fulfillmentStatusLabel(status: string) {
   return FULFILLMENT_STATUS_LABELS[status] || status.replace(/_/g, " ");
 }
 
+function shippingAddressLines(address?: Record<string, unknown> | null) {
+  if (!address) return [];
+
+  const text = (key: string) => {
+    const value = address[key];
+    return typeof value === "string" || typeof value === "number"
+      ? String(value).trim()
+      : "";
+  };
+
+  const locality = [text("city"), text("region"), text("postalCode")]
+    .filter(Boolean)
+    .join(", ");
+
+  return [text("name"), text("line1"), text("line2"), locality, text("country")].filter(Boolean);
+}
+
 interface OrderDetail {
   id: string;
   status: string;
@@ -291,6 +308,17 @@ export default function OrderDetailPage() {
           </p>
         </section>
       </div>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5" aria-label="Shipping address">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Shipping address</h2>
+        {shippingAddressLines(order.shippingAddress).length > 0 ? (
+          <address className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 not-italic">
+            {shippingAddressLines(order.shippingAddress).join("\n")}
+          </address>
+        ) : (
+          <p className="mt-2 text-sm text-graphite-600">No shipping address provided.</p>
+        )}
+      </section>
 
       <section aria-label="Seller orders" className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Seller orders</h2>
