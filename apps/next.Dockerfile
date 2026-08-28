@@ -19,6 +19,8 @@ ARG APP_NAME
 # time. Runtime SITE_URL still overrides via getSiteUrl() when present.
 ARG SITE_URL=https://partsbazar360.com/buyer
 ENV SITE_URL=${SITE_URL}
+ARG NEXT_PUBLIC_CHECKOUT_OTP_BYPASS=0
+ENV NEXT_PUBLIC_CHECKOUT_OTP_BYPASS=${NEXT_PUBLIC_CHECKOUT_OTP_BYPASS}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1

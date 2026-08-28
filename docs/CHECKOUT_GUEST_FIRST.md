@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-28
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -52,6 +52,18 @@ estimate for one country from being used for an address in another country.
 - no OTPs, credentials, destinations, or authorization data in logs; failed
   provider response bodies may be logged only after recursive redaction and a
   4 KB bound for SMS delivery diagnostics.
+
+## Temporary OTP bypass
+
+For temporary operational use only, set CHECKOUT_OTP_BYPASS=1 in the
+deployment environment. The flag defaults to 0 and applies only to guest
+checkout. The buyer build receives the same value, hides the OTP step, and the
+API still validates the phone format, active cart/session, customer identity,
+and order data before checkout. It does not send or verify an SMS; a checkout
+token is issued silently for the session and remains required for post-order
+access and account creation. Reset the flag to 0 and rebuild the buyer/API
+containers before treating phone verification as an authorization boundary
+again.
 
 ## Orders, payments, and inventory
 

@@ -22,6 +22,7 @@ export type SavedCheckoutState = {
   checkoutSessionId: string;
   idempotencyKey: string;
   phoneVerified: boolean;
+  otpRequired?: boolean;
   maskedPhone?: string;
   accountExists?: boolean;
   draft: CheckoutDraft;
@@ -88,7 +89,10 @@ export async function createCheckoutSession(
     body: JSON.stringify({ draft }),
   });
   if (!response.ok) throw new Error(await responseError(response));
-  return (await response.json()) as { checkoutSessionId: string };
+  return (await response.json()) as {
+    checkoutSessionId: string;
+    otpRequired: boolean;
+  };
 }
 
 export async function persistCheckoutDraft(
@@ -120,10 +124,15 @@ export async function requestCheckoutOtp(
   );
   if (!response.ok) throw new Error(await responseError(response));
   return (await response.json()) as {
-    sent: true;
+    sent?: true;
+    verified?: true;
+    bypassed?: true;
+    checkoutToken?: string;
+    tokenExpiresAt?: string;
     maskedPhone: string;
     expiresInSeconds: number;
     resendAfterSeconds: number;
+    accountExists?: boolean;
   };
 }
 

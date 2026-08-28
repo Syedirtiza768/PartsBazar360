@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-27
+**Last reviewed:** 2026-08-28
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -99,8 +99,12 @@ Checkout identity is separate from account authentication. `Customer` owns the
 verified E.164 phone and order history; a `User` password account is optional.
 Short-lived `CheckoutSession` tokens authorize one transaction without exposing
 account data. OTP challenges are hashed, rate limited, attempt limited, and
-consumed once. Order creation is idempotent and payment retries create
-`PaymentAttempt` audit rows on the same order. See [[../CHECKOUT_GUEST_FIRST]].
+consumed once. For temporary operations, CHECKOUT_OTP_BYPASS=1 disables only
+the guest checkout OTP challenge while preserving phone normalization, customer
+resolution, cart/session checks, and order idempotency; it defaults to 0. A
+checkout token is still issued silently and protects post-order access.
+Order creation is idempotent and payment retries create `PaymentAttempt` audit
+rows on the same order. See [[../CHECKOUT_GUEST_FIRST]].
 
 The hidden payment-verification part is a deliberate checkout-only exception:
 `PAYMENT_TEST_PART_ID` contributes zero chargeable shipping weight, so its

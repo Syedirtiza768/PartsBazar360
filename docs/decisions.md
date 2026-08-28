@@ -601,6 +601,22 @@ disk space. This interrupted API requests, including payment processing.
 
 **Revisit when:** RealTrack provides a first-class bulk import endpoint with equivalent transactional and audit guarantees; then the migration CLI can become a compatibility fallback.
 
+## 2026-08-28 — Temporarily bypass guest checkout OTP behind an explicit flag
+
+**Decision:** `CHECKOUT_OTP_BYPASS` defaults to `0`. When set to `1`, the
+buyer checkout hides the SMS challenge and the API permits the checkout
+session to establish its normal customer identity without requiring an OTP.
+The checkout token is still issued silently for post-order access.
+
+**Why:** SMS delivery is temporarily unavailable, but checkout still needs
+phone normalization, active cart/session checks, stable customer identity, and
+idempotent order creation. The flag is intentionally explicit and deploy-time
+configurable so restoring the phone-verification boundary is a one-variable
+rollback followed by a container rebuild.
+
+**Revisit when:** SMS delivery is operational again; reset the flag to `0` and
+remove this temporary exception.
+
 ## 2026-08-20 — Vehicle configurations get a display-identity unique index (QA-03)
 
 **Decision:** The canonical identity of a `VehicleConfiguration` is its generation plus the five buyer-visible display fields (`trim`, `engine`, `transmission`, `drivetrain`, `fuel`), compared case-insensitively with NULL/'' normalization. `market` and `epid` are provenance, not identity. Enforced by the `VehicleConfiguration_display_identity_key` expression index; all creation goes through `resolveVehicleConfiguration` (`vehicle-config-identity.util.ts`), which turns a lost create race (P2002) into "return the winner's row".

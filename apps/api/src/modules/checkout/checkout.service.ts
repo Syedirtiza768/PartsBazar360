@@ -81,6 +81,7 @@ export class CheckoutService {
         checkoutAuth.checkoutToken,
         cartId,
         true,
+        normalizedBuyerPhone,
       );
       if (checkoutSession.phoneNormalized !== normalizedBuyerPhone) {
         throw new UnauthorizedException(

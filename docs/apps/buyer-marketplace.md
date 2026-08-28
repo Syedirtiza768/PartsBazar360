@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-28
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -48,10 +48,12 @@ limited heading/list rendering; arbitrary HTML is never injected.
 actions remain visible and tappable; it returns to the bottom corner on
 desktop.
 
-- Guest-first checkout — SMS verification happens before delivery/payment; no
-  password or login is required. Drafts survive refresh and payment failure,
-  OTP supports paste/autofill/auto-submit, and account creation is offered only
-  after payment. See [[../CHECKOUT_GUEST_FIRST]].
+- Guest-first checkout — SMS verification normally happens before
+  delivery/payment; no password or login is required. Drafts survive refresh
+  and payment failure, OTP supports paste/autofill/auto-submit, and account
+  creation is offered only after payment. The temporary
+  `CHECKOUT_OTP_BYPASS=1` deployment flag skips only this checkout challenge.
+  See [[../CHECKOUT_GUEST_FIRST]].
 - Checkout coupon entry — buyers must enter and apply a coupon code on the review step; the API revalidates it before payment.
 - Cart shipping estimates are available to guests. The selected country is
   persisted immediately and carried into checkout, including restored checkout

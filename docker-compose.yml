@@ -90,6 +90,7 @@ services:
       REALTRACK_BRIDGE_RETRY_BASE_DELAY_MS: ${REALTRACK_BRIDGE_RETRY_BASE_DELAY_MS:-1000}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
+      CHECKOUT_OTP_BYPASS: ${CHECKOUT_OTP_BYPASS:-0}
       BUYER_APP_URL: ${BUYER_APP_URL:-https://partsbazar360.com/buyer}
       BUYER_INTERNAL_URL: http://buyer-marketplace:3000/buyer
       ADMIN_APP_URL: ${ADMIN_APP_URL:-https://partsbazar360.com/admin}
@@ -234,6 +235,7 @@ services:
       dockerfile: apps/next.Dockerfile
       args:
         APP_NAME: buyer-marketplace
+        NEXT_PUBLIC_CHECKOUT_OTP_BYPASS: ${CHECKOUT_OTP_BYPASS:-0}
     environment:
       # Server components/route handlers run inside this container and can
       # reach the API directly over the compose network (faster + avoids an

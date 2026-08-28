@@ -105,6 +105,85 @@ describe('CheckoutIdentityService', () => {
     expect(getChallenge().codeHash).not.toContain(getCode());
   });
 
+  it('bypasses OTP delivery and still creates checkout identity when enabled', async () => {
+    const previousBypass = process.env.CHECKOUT_OTP_BYPASS;
+    process.env.CHECKOUT_OTP_BYPASS = '1';
+    try {
+      const { service, prisma, sms } = build();
+      const result = await service.requestOtp('checkout-1', '+971501234567');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          verified: true,
+          bypassed: true,
+          checkoutToken: expect.any(String),
+        }),
+      );
+      expect(sms.sendOtpSms).not.toHaveBeenCalled();
+      expect(prisma.phoneVerificationChallenge.create).not.toHaveBeenCalled();
+      expect(prisma.checkoutSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            phoneNormalized: '+971501234567',
+            customerId: 'customer-1',
+          }),
+        }),
+      );
+    } finally {
+      if (previousBypass === undefined) {
+        delete process.env.CHECKOUT_OTP_BYPASS;
+      } else {
+        process.env.CHECKOUT_OTP_BYPASS = previousBypass;
+      }
+    }
+  });
+
+  it('authorizes an active checkout without a token when bypass is enabled', async () => {
+    const previousBypass = process.env.CHECKOUT_OTP_BYPASS;
+    process.env.CHECKOUT_OTP_BYPASS = '1';
+    try {
+      const { service, prisma } = build();
+      prisma.checkoutSession.findUnique
+        .mockResolvedValueOnce({
+          id: 'checkout-1',
+          cartId: 'cart-1',
+          status: 'ACTIVE',
+          phoneNormalized: null,
+          customer: null,
+        })
+        .mockResolvedValueOnce({
+          id: 'checkout-1',
+          cartId: 'cart-1',
+          status: 'ACTIVE',
+          phoneNormalized: '+971501234567',
+          customer: { id: 'customer-1' },
+        });
+
+      const result = await service.authorize(
+        'checkout-1',
+        undefined,
+        'cart-1',
+        true,
+        '+971501234567',
+      );
+
+      expect(result.customer).toEqual({ id: 'customer-1' });
+      expect(prisma.checkoutSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            phoneNormalized: '+971501234567',
+          }),
+        }),
+      );
+    } finally {
+      if (previousBypass === undefined) {
+        delete process.env.CHECKOUT_OTP_BYPASS;
+      } else {
+        process.env.CHECKOUT_OTP_BYPASS = previousBypass;
+      }
+    }
+  });
+
   it('reuses an existing phone owner without issuing an account login token', async () => {
     const { service, prisma, getCode } = build();
     await service.requestOtp('checkout-1', '+971501234567');

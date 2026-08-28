@@ -26,6 +26,7 @@ const OTP_RATE_WINDOW_MS = 15 * 60 * 1000;
 const OTP_MAX_SENDS_PER_PHONE = 5;
 const OTP_MAX_SENDS_PER_IP = 20;
 const CHECKOUT_TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000;
+const CHECKOUT_OTP_BYPASS_ENV = 'CHECKOUT_OTP_BYPASS';
 
 const ALLOWED_EVENTS = new Set([
   'checkout_started',
@@ -33,6 +34,7 @@ const ALLOWED_EVENTS = new Set([
   'otp_requested',
   'otp_verified',
   'otp_failed',
+  'phone_verification_bypassed',
   'contact_completed',
   'delivery_completed',
   'payment_started',
@@ -74,7 +76,11 @@ export class CheckoutIdentityService {
       },
     });
     await this.trackEvent(session.id, 'checkout_started');
-    return { checkoutSessionId: session.id, status: session.status };
+    return {
+      checkoutSessionId: session.id,
+      status: session.status,
+      otpRequired: !this.isOtpBypassed(),
+    };
   }
 
   async updateDraft(checkoutSessionId: string, draft: Record<string, unknown>) {
@@ -107,6 +113,20 @@ export class CheckoutIdentityService {
       session.cart.status !== 'ACTIVE'
     ) {
       throw new BadRequestException('Checkout session is no longer active');
+    }
+
+    if (this.isOtpBypassed()) {
+      const phoneNormalized = normalizePhone(phone);
+      const result = await this.completePhoneVerification(
+        checkoutSessionId,
+        phoneNormalized,
+        new Date(),
+      );
+      await this.trackEvent(checkoutSessionId, 'phone_verification_bypassed');
+      return {
+        ...result,
+        bypassed: true,
+      };
     }
 
     const phoneNormalized = normalizePhone(phone);
@@ -285,87 +305,16 @@ export class CheckoutIdentityService {
     }
 
     const now = new Date();
-    const rawToken = randomBytes(32).toString('base64url');
-    const tokenExpiresAt = new Date(now.getTime() + CHECKOUT_TOKEN_EXPIRY_MS);
     const phoneNormalized = challenge.phoneNormalized;
+    const result = await this.completePhoneVerification(
+      checkoutSessionId,
+      phoneNormalized,
+      now,
+      challenge.id,
+    );
 
-    const customer = await this.prisma.$transaction(async (tx) => {
-      let resolved = await tx.customer.findUnique({
-        where: { phoneNormalized },
-      });
-      let existingUser = await tx.user.findUnique({
-        where: { phone: phoneNormalized },
-      });
-      if (!existingUser) {
-        const candidates = await tx.user.findMany({
-          where: { phone: { endsWith: phoneNormalized.slice(-7) } },
-          take: 20,
-        });
-        existingUser =
-          candidates.find((candidate) => {
-            try {
-              return candidate.phone
-                ? normalizePhone(candidate.phone) === phoneNormalized
-                : false;
-            } catch {
-              return false;
-            }
-          }) ?? null;
-      }
-      if (!resolved) {
-        resolved = await tx.customer.create({
-          data: {
-            phoneNormalized,
-            phoneVerifiedAt: now,
-            name: existingUser?.name,
-            email: existingUser?.email,
-          },
-        });
-      } else {
-        resolved = await tx.customer.update({
-          where: { id: resolved.id },
-          data: { phoneVerifiedAt: now },
-        });
-      }
-      if (existingUser && !existingUser.customerId) {
-        await tx.user.update({
-          where: { id: existingUser.id },
-          data: { customerId: resolved.id, phoneVerified: true },
-        });
-      }
-      if (existingUser?.customerId && existingUser.customerId !== resolved.id) {
-        throw new ConflictException(
-          'This verified phone needs customer identity reconciliation before checkout can continue.',
-        );
-      }
-      await tx.phoneVerificationChallenge.update({
-        where: { id: challenge.id },
-        data: { consumedAt: now },
-      });
-      await tx.checkoutSession.update({
-        where: { id: checkoutSessionId },
-        data: {
-          customerId: resolved.id,
-          phoneNormalized,
-          phoneVerifiedAt: now,
-          checkoutTokenHash: this.hashToken(rawToken),
-          tokenExpiresAt,
-        },
-      });
-      return resolved;
-    });
-
-    const account = await this.prisma.user.findUnique({
-      where: { customerId: customer.id },
-    });
     await this.trackEvent(checkoutSessionId, 'otp_verified');
-    return {
-      verified: true,
-      checkoutToken: rawToken,
-      tokenExpiresAt,
-      maskedPhone: maskPhone(phoneNormalized),
-      accountExists: Boolean(account?.passwordHash),
-    };
+    return result;
   }
 
   async authorize(
@@ -373,13 +322,99 @@ export class CheckoutIdentityService {
     rawToken: string | undefined,
     cartId?: string,
     allowOrdered = false,
+    phone?: string,
   ) {
-    if (!rawToken)
-      throw new UnauthorizedException('Verify your phone to continue');
     const session = await this.prisma.checkoutSession.findUnique({
       where: { id: checkoutSessionId },
       include: { customer: true },
     });
+
+    if (this.isOtpBypassed()) {
+      if (
+        !session ||
+        (cartId && session.cartId !== cartId) ||
+        (session.status !== 'ACTIVE' &&
+          !(allowOrdered && session.status === 'ORDERED'))
+      ) {
+        throw new UnauthorizedException('Checkout session is no longer active');
+      }
+
+      if (session.status === 'ORDERED') {
+        if (
+          !session.customer ||
+          !rawToken ||
+          !session.phoneVerifiedAt ||
+          !session.checkoutTokenHash ||
+          !session.tokenExpiresAt ||
+          session.tokenExpiresAt <= new Date()
+        ) {
+          throw new UnauthorizedException('Phone verification has expired');
+        }
+        const expected = Buffer.from(session.checkoutTokenHash, 'hex');
+        const actual = Buffer.from(this.hashToken(rawToken), 'hex');
+        if (
+          expected.length !== actual.length ||
+          !timingSafeEqual(expected, actual)
+        ) {
+          throw new UnauthorizedException('Invalid checkout verification');
+        }
+        return session;
+      }
+
+      if (
+        rawToken &&
+        session.customer &&
+        session.phoneVerifiedAt &&
+        session.checkoutTokenHash &&
+        session.tokenExpiresAt &&
+        session.tokenExpiresAt > new Date()
+      ) {
+        const expected = Buffer.from(session.checkoutTokenHash, 'hex');
+        const actual = Buffer.from(this.hashToken(rawToken), 'hex');
+        const phoneMatches =
+          !phone ||
+          session.phoneNormalized === normalizePhone(phone);
+        if (
+          phoneMatches &&
+          expected.length === actual.length &&
+          timingSafeEqual(expected, actual)
+        ) {
+          return session;
+        }
+      }
+
+      const phoneCandidate = phone || session.phoneNormalized;
+      if (!phoneCandidate) {
+        throw new UnauthorizedException('Enter a phone number to continue');
+      }
+      let phoneNormalized: string;
+      try {
+        phoneNormalized = normalizePhone(phoneCandidate);
+      } catch {
+        throw new UnauthorizedException(
+          'Enter a valid phone number to continue',
+        );
+      }
+
+      await this.completePhoneVerification(
+        checkoutSessionId,
+        phoneNormalized,
+        new Date(),
+      );
+      const refreshed = await this.prisma.checkoutSession.findUnique({
+        where: { id: checkoutSessionId },
+        include: { customer: true },
+      });
+      if (!refreshed?.customer) {
+        throw new UnauthorizedException(
+          'Checkout identity could not be created',
+        );
+      }
+      return refreshed;
+    }
+
+    if (!rawToken)
+      throw new UnauthorizedException('Verify your phone to continue');
     if (
       !session ||
       !session.customer ||
@@ -520,6 +555,99 @@ export class CheckoutIdentityService {
         .slice(0, 12)
         .map(([key, value]) => [key.slice(0, 40), value]),
     );
+  }
+
+  private isOtpBypassed() {
+    return process.env[CHECKOUT_OTP_BYPASS_ENV] === '1';
+  }
+
+  private async completePhoneVerification(
+    checkoutSessionId: string,
+    phoneNormalized: string,
+    now: Date,
+    challengeId?: string,
+  ) {
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenExpiresAt = new Date(now.getTime() + CHECKOUT_TOKEN_EXPIRY_MS);
+
+    const customer = await this.prisma.$transaction(async (tx) => {
+      let resolved = await tx.customer.findUnique({
+        where: { phoneNormalized },
+      });
+      let existingUser = await tx.user.findUnique({
+        where: { phone: phoneNormalized },
+      });
+      if (!existingUser) {
+        const candidates = await tx.user.findMany({
+          where: { phone: { endsWith: phoneNormalized.slice(-7) } },
+          take: 20,
+        });
+        existingUser =
+          candidates.find((candidate) => {
+            try {
+              return candidate.phone
+                ? normalizePhone(candidate.phone) === phoneNormalized
+                : false;
+            } catch {
+              return false;
+            }
+          }) ?? null;
+      }
+      if (!resolved) {
+        resolved = await tx.customer.create({
+          data: {
+            phoneNormalized,
+            phoneVerifiedAt: now,
+            name: existingUser?.name,
+            email: existingUser?.email,
+          },
+        });
+      } else {
+        resolved = await tx.customer.update({
+          where: { id: resolved.id },
+          data: { phoneVerifiedAt: now },
+        });
+      }
+      if (existingUser && !existingUser.customerId) {
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: { customerId: resolved.id, phoneVerified: true },
+        });
+      }
+      if (existingUser?.customerId && existingUser.customerId !== resolved.id) {
+        throw new ConflictException(
+          'This verified phone needs customer identity reconciliation before checkout can continue.',
+        );
+      }
+      if (challengeId) {
+        await tx.phoneVerificationChallenge.update({
+          where: { id: challengeId },
+          data: { consumedAt: now },
+        });
+      }
+      await tx.checkoutSession.update({
+        where: { id: checkoutSessionId },
+        data: {
+          customerId: resolved.id,
+          phoneNormalized,
+          phoneVerifiedAt: now,
+          checkoutTokenHash: this.hashToken(rawToken),
+          tokenExpiresAt,
+        },
+      });
+      return resolved;
+    });
+
+    const account = await this.prisma.user.findUnique({
+      where: { customerId: customer.id },
+    });
+    return {
+      verified: true,
+      checkoutToken: rawToken,
+      tokenExpiresAt,
+      maskedPhone: maskPhone(phoneNormalized),
+      accountExists: Boolean(account?.passwordHash),
+    };
   }
 
   private otpSecret() {

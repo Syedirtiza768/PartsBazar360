@@ -83,6 +83,7 @@ const REQUIRED: Array<keyof FormState> = [
 
 /** Sending a new code invalidates the previous one, so throttle resends. */
 const RESEND_COOLDOWN_SECONDS = 45;
+const CHECKOUT_OTP_BYPASS = process.env.NEXT_PUBLIC_CHECKOUT_OTP_BYPASS === "1";
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
@@ -102,8 +103,7 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
   if (!errors.phone && !isValidPhoneNumber(form.phone.trim(), "AE")) {
-    errors.phone =
-      "Enter a valid mobile number — we'll text a code here to confirm your order.";
+    errors.phone = "Enter a valid mobile number for order updates.";
   }
   if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
     errors.email =
@@ -337,14 +337,15 @@ function CheckoutContent() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
 
-  // Phone verification, shown just before "Place order" for anyone not
-  // already signed in — keeps checkout guest-feeling until the last step.
+  // Phone verification is shown just before "Place order" when the temporary
+  // checkout bypass is disabled.
   const [showOtpPanel, setShowOtpPanel] = useState(false);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(
     null,
   );
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   const [checkoutReady, setCheckoutReady] = useState(false);
+  const [otpRequired, setOtpRequired] = useState(!CHECKOUT_OTP_BYPASS);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [maskedPhone, setMaskedPhone] = useState<string | null>(null);
   const [accountExists, setAccountExists] = useState(false);
@@ -418,9 +419,14 @@ function CheckoutContent() {
       setIdempotencyKey(saved.idempotencyKey);
       setMaskedPhone(saved.maskedPhone ?? null);
       setAccountExists(Boolean(saved.accountExists));
+      const savedOtpRequired = CHECKOUT_OTP_BYPASS
+        ? false
+        : (saved.otpRequired ?? true);
+      setOtpRequired(savedOtpRequired);
       setPhoneVerified(
-        saved.phoneVerified &&
-          Boolean(loadCheckoutToken(saved.checkoutSessionId)),
+        !savedOtpRequired ||
+          (saved.phoneVerified &&
+            Boolean(loadCheckoutToken(saved.checkoutSessionId))),
       );
       setCheckoutReady(true);
       return;
@@ -434,15 +440,19 @@ function CheckoutContent() {
     };
     setForm(initial);
     void createCheckoutSession(cart.id, toCheckoutDraft(initial, "stripe", ""))
-      .then(({ checkoutSessionId: sessionId }) => {
+      .then(({ checkoutSessionId: sessionId, otpRequired: requiresOtp }) => {
         if (cancelled) return;
         const key = crypto.randomUUID();
+        const nextOtpRequired = requiresOtp ?? !CHECKOUT_OTP_BYPASS;
         setCheckoutSessionId(sessionId);
         setIdempotencyKey(key);
+        setOtpRequired(nextOtpRequired);
+        setPhoneVerified(!nextOtpRequired);
         saveCheckoutState(cart.id!, {
           checkoutSessionId: sessionId,
           idempotencyKey: key,
-          phoneVerified: false,
+          phoneVerified: !nextOtpRequired,
+          otpRequired: nextOtpRequired,
           draft: toCheckoutDraft(initial, "stripe", ""),
         });
       })
@@ -469,6 +479,7 @@ function CheckoutContent() {
       checkoutSessionId,
       idempotencyKey,
       phoneVerified,
+      otpRequired,
       maskedPhone: maskedPhone ?? undefined,
       accountExists,
       draft: toCheckoutDraft(form, paymentProvider, couponCode),
@@ -487,6 +498,7 @@ function CheckoutContent() {
     form,
     idempotencyKey,
     maskedPhone,
+    otpRequired,
     paymentProvider,
     phoneVerified,
   ]);
@@ -516,7 +528,7 @@ function CheckoutContent() {
       const value = e.target.value;
       if (field === "country") setShippingCountry(value);
       setForm((prev) => ({ ...prev, [field]: value }));
-      if (field === "phone" && phoneVerified) {
+      if (field === "phone" && phoneVerified && otpRequired) {
         setPhoneVerified(false);
         setMaskedPhone(null);
         setShowOtpPanel(false);
@@ -581,7 +593,7 @@ function CheckoutContent() {
   const goToReview = (e: FormEvent) => {
     e.preventDefault();
     const nextErrors = validate(form);
-    if (!phoneVerified)
+    if (otpRequired && !phoneVerified)
       nextErrors.phone = "Verify this mobile number to continue.";
     if (paymentProvider === "tamara" && !tamaraMarket(form.country)) {
       nextErrors.country =
@@ -607,8 +619,17 @@ function CheckoutContent() {
   };
 
   const placeOrder = async () => {
-    if (!cart.id || !checkoutSessionId || !idempotencyKey || !phoneVerified) {
-      setServerError("Verify your phone before placing the order.");
+    if (
+      !cart.id ||
+      !checkoutSessionId ||
+      !idempotencyKey ||
+      (otpRequired && !phoneVerified)
+    ) {
+      setServerError(
+        otpRequired
+          ? "Verify your phone before placing the order."
+          : "Enter your phone number before placing the order.",
+      );
       return;
     }
     if (!confirmedFit) {
@@ -618,6 +639,16 @@ function CheckoutContent() {
     setSubmitting(true);
     setServerError(null);
     try {
+      if (!otpRequired) {
+        const bypassResult = await requestCheckoutOtp(
+          checkoutSessionId,
+          form.phone,
+        );
+        if (!bypassResult.checkoutToken) {
+          throw new Error("Checkout identity could not be created.");
+        }
+        saveCheckoutToken(checkoutSessionId, bypassResult.checkoutToken);
+      }
       const res = await fetch(`${API_BASE_URL}/checkout/${cart.id}`, {
         method: "POST",
         headers: {
@@ -711,6 +742,19 @@ function CheckoutContent() {
       const result = await requestCheckoutOtp(checkoutSessionId, candidate);
       setForm((previous) => ({ ...previous, phone: candidate }));
       setMaskedPhone(result.maskedPhone);
+      if (result.verified && result.checkoutToken) {
+        saveCheckoutToken(checkoutSessionId, result.checkoutToken);
+        setPhoneVerified(true);
+        setAccountExists(Boolean(result.accountExists));
+        saveCheckoutAccountStatus(
+          checkoutSessionId,
+          Boolean(result.accountExists),
+        );
+        void trackCheckoutEvent("contact_completed", checkoutSessionId);
+        setShowOtpPanel(false);
+        setErrors((previous) => ({ ...previous, phone: undefined }));
+        return;
+      }
       setShowOtpPanel(true);
       setOtpCode("");
       setOtpCooldown(RESEND_COOLDOWN_SECONDS);
@@ -829,13 +873,15 @@ function CheckoutContent() {
                 Mobile number
               </h2>
               <p className="mt-1 text-sm text-graphite-600">
-                Continue securely — no account or password required.
+                {!otpRequired
+                  ? "No account or OTP required for now."
+                  : "Continue securely — no account or password required."}
               </p>
               <div className="mt-4 grid grid-cols-[116px_1fr] items-start gap-2">
                 <Select
                   label="Country code"
                   value={phoneCountryCode}
-                  disabled={phoneVerified}
+                  disabled={phoneVerified && otpRequired}
                   onChange={(event) => setPhoneCountryCode(event.target.value)}
                 >
                   <option value="+971">🇦🇪 +971</option>
@@ -851,14 +897,19 @@ function CheckoutContent() {
                   type="tel"
                   inputMode="tel"
                   required
-                  disabled={phoneVerified}
+                  disabled={phoneVerified && otpRequired}
                   hint="Enter a local UAE number or a full international number"
                   value={form.phone}
                   onChange={setField("phone")}
                   error={errors.phone}
                 />
               </div>
-              {phoneVerified ? (
+              {!otpRequired ? (
+                <p className="mt-3 text-sm text-amber-700" role="status">
+                  Phone verification is temporarily skipped. We will use this
+                  number for order updates.
+                </p>
+              ) : phoneVerified ? (
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
                   <span className="font-semibold">Verified {maskedPhone}</span>
                   <button
