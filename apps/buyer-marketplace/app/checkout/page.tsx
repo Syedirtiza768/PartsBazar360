@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { isValidPhoneNumber } from "libphonenumber-js";
+import {
+  getCountries,
+  getCountryCallingCode,
+  isValidPhoneNumber,
+} from "libphonenumber-js";
 import { Button, buttonClasses } from "@repo/ui/button";
 import { Input, Select, Checkbox } from "@repo/ui/field";
 import { EmptyState } from "@repo/ui/empty-state";
@@ -84,6 +88,18 @@ const REQUIRED: Array<keyof FormState> = [
 /** Sending a new code invalidates the previous one, so throttle resends. */
 const RESEND_COOLDOWN_SECONDS = 45;
 const CHECKOUT_OTP_BYPASS = process.env.NEXT_PUBLIC_CHECKOUT_OTP_BYPASS === "1";
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+const PHONE_COUNTRY_OPTIONS = getCountries()
+  .map((code) => ({
+    code,
+    dialCode: "+" + getCountryCallingCode(code),
+    name: REGION_NAMES.of(code) ?? code,
+    flag: code
+      .split("")
+      .map((letter) => String.fromCodePoint(letter.charCodeAt(0) + 127397))
+      .join(""),
+  }))
+  .sort((left, right) => left.name.localeCompare(right.name));
 
 const LABELS: Record<keyof FormState, string> = {
   name: "Full name",
@@ -97,12 +113,24 @@ const LABELS: Record<keyof FormState, string> = {
   postalCode: "Postal code",
 };
 
-function validate(form: FormState): Partial<Record<keyof FormState, string>> {
+function phoneCandidate(phone: string, countryCode: string): string {
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+")) return trimmed;
+  return countryCode + trimmed.replace(/\D/g, "").replace(/^0/, "");
+}
+
+function validate(
+  form: FormState,
+  phoneCountryCode: string,
+): Partial<Record<keyof FormState, string>> {
   const errors: Partial<Record<keyof FormState, string>> = {};
   for (const field of REQUIRED) {
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
-  if (!errors.phone && !isValidPhoneNumber(form.phone.trim(), "AE")) {
+  if (
+    !errors.phone &&
+    !isValidPhoneNumber(phoneCandidate(form.phone, phoneCountryCode))
+  ) {
     errors.phone = "Enter a valid mobile number for order updates.";
   }
   if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
@@ -592,7 +620,7 @@ function CheckoutContent() {
   }, [checkoutCurrency]);
   const goToReview = (e: FormEvent) => {
     e.preventDefault();
-    const nextErrors = validate(form);
+    const nextErrors = validate(form, phoneCountryCode);
     if (otpRequired && !phoneVerified)
       nextErrors.phone = "Verify this mobile number to continue.";
     if (paymentProvider === "tamara" && !tamaraMarket(form.country)) {
@@ -726,9 +754,7 @@ function CheckoutContent() {
   // so placeOrder's authHeaders() picks up the just-issued session.
   const startPhoneVerification = async () => {
     if (!checkoutSessionId) return;
-    const candidate = form.phone.trim().startsWith("+")
-      ? form.phone.trim()
-      : `${phoneCountryCode}${form.phone.replace(/\D/g, "").replace(/^0/, "")}`;
+    const candidate = phoneCandidate(form.phone, phoneCountryCode);
     if (!isValidPhoneNumber(candidate)) {
       setErrors((previous) => ({
         ...previous,
@@ -878,19 +904,18 @@ function CheckoutContent() {
                   ? "Enter your mobile number to continue."
                   : "Continue securely — no account or password required."}
               </p>
-              <div className="mt-4 grid grid-cols-[116px_1fr] items-start gap-2">
+              <div className="mt-4 grid grid-cols-[minmax(128px,0.65fr)_minmax(0,1fr)] items-start gap-2 sm:grid-cols-[180px_1fr]">
                 <Select
                   label="Country code"
                   value={phoneCountryCode}
                   disabled={phoneVerified && otpRequired}
                   onChange={(event) => setPhoneCountryCode(event.target.value)}
                 >
-                  <option value="+971">🇦🇪 +971</option>
-                  <option value="+966">🇸🇦 +966</option>
-                  <option value="+1">🇺🇸 +1</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+92">🇵🇰 +92</option>
-                  <option value="+91">🇮🇳 +91</option>
+                  {PHONE_COUNTRY_OPTIONS.map(({ code, dialCode, flag, name }) => (
+                    <option key={code} value={dialCode}>
+                      {flag} {name} ({dialCode})
+                    </option>
+                  ))}
                 </Select>
                 <Input
                   label="Mobile number"

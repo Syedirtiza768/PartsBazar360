@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-28
+**Last reviewed:** 2026-08-29
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -54,6 +54,9 @@ desktop.
   creation is offered only after payment. The temporary
   `CHECKOUT_OTP_BYPASS=1` deployment flag skips only this checkout challenge.
   See [[../CHECKOUT_GUEST_FIRST]].
+- Checkout phone country codes are generated from libphonenumber-js metadata,
+  so the selector includes every supported country/territory and validates
+  local numbers against the selected calling code.
 - Checkout coupon entry — buyers must enter and apply a coupon code on the review step; the API revalidates it before payment.
 - Cart shipping estimates are available to guests. The selected country is
   persisted immediately and carried into checkout, including restored checkout
