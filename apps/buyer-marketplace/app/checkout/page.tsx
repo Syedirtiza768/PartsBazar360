@@ -128,6 +128,7 @@ function validate(
     if (!form[field].trim()) errors[field] = `${LABELS[field]} is required.`;
   }
   if (
+    !CHECKOUT_OTP_BYPASS &&
     !errors.phone &&
     !isValidPhoneNumber(phoneCandidate(form.phone, phoneCountryCode))
   ) {
@@ -667,10 +668,11 @@ function CheckoutContent() {
     setSubmitting(true);
     setServerError(null);
     try {
+      const submittedPhone = phoneCandidate(form.phone, phoneCountryCode);
       if (!otpRequired) {
         const bypassResult = await requestCheckoutOtp(
           checkoutSessionId,
-          form.phone,
+          submittedPhone,
         );
         if (!bypassResult.checkoutToken) {
           throw new Error("Checkout identity could not be created.");
@@ -694,7 +696,7 @@ function CheckoutContent() {
         body: JSON.stringify({
           name: form.name,
           email: form.email || undefined,
-          phone: form.phone,
+          phone: submittedPhone,
           paymentProvider,
           chargeCurrency: checkoutCurrency,
           couponCode: couponQuote?.code || undefined,
@@ -755,7 +757,7 @@ function CheckoutContent() {
   const startPhoneVerification = async () => {
     if (!checkoutSessionId) return;
     const candidate = phoneCandidate(form.phone, phoneCountryCode);
-    if (!isValidPhoneNumber(candidate)) {
+    if (!CHECKOUT_OTP_BYPASS && !isValidPhoneNumber(candidate)) {
       setErrors((previous) => ({
         ...previous,
         phone: "Enter a valid mobile number.",
@@ -924,7 +926,7 @@ function CheckoutContent() {
                   inputMode="tel"
                   required
                   disabled={phoneVerified && otpRequired}
-                  hint="Enter a local UAE number or a full international number"
+                  hint="Choose a country code or enter a full international number; formatting is recorded as entered"
                   value={form.phone}
                   onChange={setField("phone")}
                   error={errors.phone}

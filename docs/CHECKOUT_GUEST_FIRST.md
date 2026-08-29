@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-28
+**Last reviewed:** 2026-08-29
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -9,6 +9,8 @@ an account login. Buying never requires a password.
 
 1. An active cart opens a `CheckoutSession` and records `checkout_started`.
 2. The buyer enters a country-aware phone number and receives a six-digit SMS.
+   During the temporary bypass, a non-empty phone-like value is accepted and
+   recorded without country or length validation.
 3. Successful OTP verification resolves one `Customer` by normalized E.164
    phone and returns a short-lived, checkout-scoped token.
 4. Delivery and payment fields are progressively disclosed after verification.
@@ -58,12 +60,15 @@ estimate for one country from being used for an address in another country.
 For temporary operational use only, set CHECKOUT_OTP_BYPASS=1 in the
 deployment environment. The flag defaults to 0 and applies only to guest
 checkout. The buyer build receives the same value, hides the OTP step, and the
-API still validates the phone format, active cart/session, customer identity,
-and order data before checkout. It does not send or verify an SMS; a checkout
-token is issued silently for the session and remains required for post-order
-access and account creation. Reset the flag to 0 and rebuild the buyer/API
-containers before treating phone verification as an authorization boundary
-again.
+API accepts any non-empty phone-like value without checking country metadata or
+length. It only normalizes separators and the international prefix, then
+records the result in CheckoutSession.phoneNormalized,
+Customer.phoneNormalized, and Order.verifiedPhone. Active cart/session,
+customer identity, and order data are still checked before checkout. No SMS is
+sent or verified; a checkout token is issued silently for the session and
+remains required for post-order access and account creation. Reset the flag to
+0 and rebuild the buyer/API containers before treating phone verification as an
+authorization boundary again.
 
 ## Orders, payments, and inventory
 
@@ -91,6 +96,8 @@ shipping calculation.
 ## Migration and duplicate safety
 
 The migration is additive and backfills only already-verified E.164 phones.
+Phones recorded while the bypass is enabled may be outside E.164 and should
+remain in the checkout-only identity path until they are reconciled.
 Build the API, then run `node apps/api/dist/src/audit-checkout-customers.cli.js`
 before production rollout (or run the same compiled CLI in a one-off API
 container attached to the application network).

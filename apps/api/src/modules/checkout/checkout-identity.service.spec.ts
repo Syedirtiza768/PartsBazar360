@@ -138,6 +138,31 @@ describe('CheckoutIdentityService', () => {
     }
   });
 
+  it('records an arbitrary-country phone without validating its country or length', async () => {
+    const previousBypass = process.env.CHECKOUT_OTP_BYPASS;
+    process.env.CHECKOUT_OTP_BYPASS = '1';
+    try {
+      const { service, prisma } = build();
+
+      await expect(
+        service.requestOtp('checkout-1', '+999 12 345'),
+      ).resolves.toEqual(expect.objectContaining({ bypassed: true }));
+      expect(prisma.checkoutSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            phoneNormalized: '+99912345',
+          }),
+        }),
+      );
+    } finally {
+      if (previousBypass === undefined) {
+        delete process.env.CHECKOUT_OTP_BYPASS;
+      } else {
+        process.env.CHECKOUT_OTP_BYPASS = previousBypass;
+      }
+    }
+  });
+
   it('authorizes an active checkout without a token when bypass is enabled', async () => {
     const previousBypass = process.env.CHECKOUT_OTP_BYPASS;
     process.env.CHECKOUT_OTP_BYPASS = '1';

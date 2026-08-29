@@ -103,13 +103,15 @@ orders are not backfilled and continue to fall back to that UUID in displays.
 
 ## Guest-first checkout
 
-Checkout identity is separate from account authentication. `Customer` owns the
-verified E.164 phone and order history; a `User` password account is optional.
-Short-lived `CheckoutSession` tokens authorize one transaction without exposing
-account data. OTP challenges are hashed, rate limited, attempt limited, and
-consumed once. For temporary operations, CHECKOUT_OTP_BYPASS=1 disables only
-the guest checkout OTP challenge while preserving phone normalization, customer
-resolution, cart/session checks, and order idempotency; it defaults to 0. A
+Checkout identity is separate from account authentication. Customer owns the
+checkout phone identity and order history; normal verification stores a strict
+E.164 phone and a User password account is optional. Short-lived CheckoutSession
+tokens authorize one transaction without exposing account data. OTP challenges
+are hashed, rate limited, attempt limited, and consumed once. For temporary
+operations, CHECKOUT_OTP_BYPASS=1 disables only the guest checkout OTP
+challenge, accepts any non-empty phone-like value, and records its
+format-normalized value without country or length validation; it defaults to 0.
+Customer resolution, cart/session checks, and order idempotency remain active. A
 checkout token is still issued silently and protects post-order access.
 Order creation is idempotent and payment retries create `PaymentAttempt` audit
 rows on the same order. See [[../CHECKOUT_GUEST_FIRST]].

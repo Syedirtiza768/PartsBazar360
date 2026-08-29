@@ -56,7 +56,10 @@ desktop.
   See [[../CHECKOUT_GUEST_FIRST]].
 - Checkout phone country codes are generated from libphonenumber-js metadata,
   so the selector includes every supported country/territory and validates
-  local numbers against the selected calling code.
+  local numbers against the selected calling code during normal OTP checkout.
+  With CHECKOUT_OTP_BYPASS=1, the challenge is hidden and any non-empty
+  phone-like value is passed through for recording without country/length
+  validation; local input still receives the selected calling code.
 - Checkout coupon entry — buyers must enter and apply a coupon code on the review step; the API revalidates it before payment.
 - Cart shipping estimates are available to guests. The selected country is
   persisted immediately and carried into checkout, including restored checkout

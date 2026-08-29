@@ -633,6 +633,24 @@ rollback followed by a container rebuild.
 **Revisit when:** SMS delivery is operational again; reset the flag to `0` and
 remove this temporary exception.
 
+## 2026-08-29 — Accept arbitrary-country phone values during OTP bypass
+
+**Decision:** When CHECKOUT_OTP_BYPASS=1, buyer checkout skips libphonenumber
+country/length validation and sends the selected-country or full international
+phone value to the API. The API only performs format-preserving compaction,
+then records the value in the checkout session, customer identity, and
+Order.verifiedPhone. Strict normalization remains in account authentication and
+normal OTP flows.
+
+**Why:** OTP delivery is bypassed operationally, and rejecting numbers that are
+valid outside the previous default/metadata path prevents checkout from
+recording usable customer contact data. Keeping the permissive formatter
+checkout-only avoids weakening password login or other authentication paths.
+
+**Revisit when:** OTP delivery is restored; reset the bypass flag and decide
+whether stored non-E.164 checkout contacts should be reconciled before being
+used by strict account-authentication flows.
+
 ## 2026-08-20 — Vehicle configurations get a display-identity unique index (QA-03)
 
 **Decision:** The canonical identity of a `VehicleConfiguration` is its generation plus the five buyer-visible display fields (`trim`, `engine`, `transmission`, `drivetrain`, `fuel`), compared case-insensitively with NULL/'' normalization. `market` and `epid` are provenance, not identity. Enforced by the `VehicleConfiguration_display_identity_key` expression index; all creation goes through `resolveVehicleConfiguration` (`vehicle-config-identity.util.ts`), which turns a lost create race (P2002) into "return the winner's row".

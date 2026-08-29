@@ -17,7 +17,11 @@ import {
 } from 'node:crypto';
 import { PrismaService } from '../../prisma.service';
 import { AuthService } from '../auth/auth.service';
-import { maskPhone, normalizePhone } from '../auth/phone.util';
+import {
+  maskPhone,
+  normalizePhone,
+  normalizeUnvalidatedPhone,
+} from '../auth/phone.util';
 import { SmsGlobalService } from '../sms/smsglobal.service';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
@@ -116,7 +120,7 @@ export class CheckoutIdentityService {
     }
 
     if (this.isOtpBypassed()) {
-      const phoneNormalized = normalizePhone(phone);
+      const phoneNormalized = normalizeUnvalidatedPhone(phone);
       const result = await this.completePhoneVerification(
         checkoutSessionId,
         phoneNormalized,
@@ -373,7 +377,7 @@ export class CheckoutIdentityService {
         const actual = Buffer.from(this.hashToken(rawToken), 'hex');
         const phoneMatches =
           !phone ||
-          session.phoneNormalized === normalizePhone(phone);
+          session.phoneNormalized === normalizeUnvalidatedPhone(phone);
         if (
           phoneMatches &&
           expected.length === actual.length &&
@@ -389,11 +393,9 @@ export class CheckoutIdentityService {
       }
       let phoneNormalized: string;
       try {
-        phoneNormalized = normalizePhone(phoneCandidate);
+        phoneNormalized = normalizeUnvalidatedPhone(phoneCandidate);
       } catch {
-        throw new UnauthorizedException(
-          'Enter a valid phone number to continue',
-        );
+        throw new UnauthorizedException('Enter a phone number to continue');
       }
 
       await this.completePhoneVerification(

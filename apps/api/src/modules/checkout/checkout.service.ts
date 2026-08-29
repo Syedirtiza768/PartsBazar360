@@ -30,7 +30,10 @@ import {
 import { EmailService } from '../email/email.service';
 import { SmsGlobalService } from '../sms/smsglobal.service';
 import { CheckoutIdentityService } from './checkout-identity.service';
-import { normalizePhone } from '../auth/phone.util';
+import {
+  normalizePhone,
+  normalizeUnvalidatedPhone,
+} from '../auth/phone.util';
 
 @Injectable()
 export class CheckoutService {
@@ -70,7 +73,11 @@ export class CheckoutService {
     },
     couponCodeInput?: string | null,
   ) {
-    const normalizedBuyerPhone = normalizePhone(buyer.phone || '');
+    const normalizedBuyerPhone =
+      process.env.CHECKOUT_OTP_BYPASS === '1' &&
+      Boolean(checkoutAuth?.checkoutSessionId)
+        ? normalizeUnvalidatedPhone(buyer.phone || '')
+        : normalizePhone(buyer.phone || '');
     let customerId: string;
     let resolvedBuyerId = buyer.buyerId;
     let checkoutSessionId: string | undefined;
