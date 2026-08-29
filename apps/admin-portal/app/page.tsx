@@ -45,6 +45,7 @@ interface DashboardData {
   };
   recentOrders?: Array<{
     id: string;
+    orderNumber?: string | null;
     totalAmount: number;
     currency: string;
     status: string;
@@ -186,7 +187,7 @@ export default function Home() {
             {(dashboard?.recentOrders || []).slice(0, 8).map((order) => (
               <li key={order.id} className="flex items-center justify-between px-4 py-3 sm:px-5">
                 <div className="min-w-0">
-                  <p className="part-number break-anywhere text-sm font-semibold text-slate-900">{order.id}</p>
+                  <p className="part-number break-anywhere text-sm font-semibold text-slate-900">{order.orderNumber || order.id}</p>
                   <p className="text-xs text-graphite-600">
                     {new Date(order.createdAt).toLocaleDateString()} &middot; {order.status.replace(/_/g, " ")}
                   </p>

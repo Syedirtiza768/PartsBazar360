@@ -896,6 +896,7 @@ enum PaymentStatus {
 
 model Order {
   id                String      @id @default(uuid())
+  orderNumber       String?     @unique
   buyerId           String?
   customerId        String?
   checkoutSessionId String?     @unique
@@ -920,6 +921,13 @@ model Order {
 
   @@index([couponId])
   @@index([customerId, createdAt])
+}
+
+// Singleton counter for public order numbers. The internal Order UUID remains
+// the stable identifier for payment providers, callbacks, and existing URLs.
+model OrderNumberSequence {
+  id         Int @id @default(1)
+  lastNumber Int @default(1109)
 }
 
 model SellerOrder {

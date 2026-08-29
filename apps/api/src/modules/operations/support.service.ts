@@ -49,9 +49,25 @@ export class SupportService {
 
     const isFreightQuote = body.category === 'FREIGHT_QUOTE';
 
+    const submittedOrderId = body.orderId?.trim();
+    let orderId: string | null = null;
+    if (submittedOrderId) {
+      const order = await this.prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: submittedOrderId },
+            { orderNumber: submittedOrderId.toUpperCase() },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!order) throw new BadRequestException('Order not found');
+      orderId = order.id;
+    }
+
     const ticket = await this.prisma.supportTicket.create({
       data: {
-        orderId: body.orderId || null,
+        orderId,
         sellerOrderId: body.sellerOrderId || null,
         canonicalPartId: body.canonicalPartId || null,
         sellerOfferId: body.sellerOfferId || null,

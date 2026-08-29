@@ -42,6 +42,7 @@ interface TicketRow extends Record_ {
 
 interface OrderRow extends Record_ {
   id: string;
+  orderNumber?: string | null;
   customerEmail?: string;
   totalAmount?: number;
   currency?: string;
@@ -62,6 +63,7 @@ interface DashboardData {
 interface QueueRow {
   id: string;
   parentOrderId: string;
+  parentOrderNumber?: string | null;
   customerEmail?: string;
   status: string;
   seller?: { name?: string };
@@ -90,6 +92,7 @@ export default function OperationsCommandCenterPage() {
     orders.flatMap((order) => (order.sellerOrders || []).map((sellerOrder: QueueRow) => ({
       ...sellerOrder,
       parentOrderId: order.id,
+      parentOrderNumber: order.orderNumber,
       customerEmail: order.customerEmail,
       totalAmount: order.totalAmount,
       currency: order.currency,
@@ -202,7 +205,7 @@ export default function OperationsCommandCenterPage() {
       priority: 'primary',
       cell: (row) => (
         <div className="min-w-0">
-          <p className="part-number break-anywhere text-graphite-700">{row.parentOrderId}</p>
+          <p className="part-number break-anywhere text-graphite-700">{row.parentOrderNumber || row.parentOrderId}</p>
           <p className="mt-0.5 break-anywhere text-xs text-graphite-600">
             {row.customerEmail || 'Customer email missing'}
           </p>
@@ -460,7 +463,7 @@ function ShipmentSheet({
       open={Boolean(row)}
       onClose={onClose}
       title="Mark shipped"
-      description={row ? `Order ${row.parentOrderId}` : undefined}
+      description={row ? `Order ${row.parentOrderNumber || row.parentOrderId}` : undefined}
       size="sm"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

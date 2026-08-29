@@ -686,6 +686,7 @@ function CheckoutContent() {
 
       storeOrder({
         id: data.order.id,
+        orderNumber: data.order.orderNumber,
         createdAt: data.order.createdAt || new Date().toISOString(),
         status: data.order.status || "PENDING_PAYMENT",
         paymentStatus: data.paymentIntent?.status || "PENDING",

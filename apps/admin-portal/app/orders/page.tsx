@@ -17,6 +17,7 @@ const STATUSES = ["PENDING_PAYMENT", "PAID", "PAYMENT_FAILED", "CANCELLED", "REF
 
 interface OrderRow {
   id: string;
+  orderNumber?: string | null;
   status: string;
   totalAmount: number;
   currency: string;
@@ -81,7 +82,7 @@ export default function OrdersListPage() {
       header: "Order",
       priority: "primary",
       cell: (row) => (
-        <span className="part-number break-anywhere text-graphite-700">{row.id}</span>
+        <span className="part-number break-anywhere text-graphite-700">{row.orderNumber || row.id}</span>
       ),
     },
     {

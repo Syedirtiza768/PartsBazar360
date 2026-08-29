@@ -17,6 +17,7 @@ import { API_BASE_URL } from "@/lib/api";
 
 type ServerOrder = {
   id: string;
+  orderNumber?: string | null;
   createdAt: string;
   status: string;
   totalAmount: number;
@@ -47,6 +48,7 @@ export default function PurchasesPage() {
         setOrders(
           serverOrders.map((order) => ({
             id: order.id,
+            orderNumber: order.orderNumber,
             createdAt: order.createdAt,
             status: order.status,
             paymentStatus: order.paymentIntent?.status || "PENDING",
@@ -107,7 +109,7 @@ export default function PurchasesPage() {
               <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-300 bg-canvas-sunk px-4 py-3 sm:px-5">
                 <div className="min-w-0">
                   <p className="part-number break-anywhere font-bold text-graphite-950">
-                    Order {order.id}
+                    Order {order.orderNumber || order.id}
                   </p>
                   <p className="mt-0.5 text-xs text-graphite-600">
                     Placed {new Date(order.createdAt).toLocaleDateString()}

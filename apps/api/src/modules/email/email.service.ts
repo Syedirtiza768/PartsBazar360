@@ -189,6 +189,7 @@ export class EmailService {
     to: string,
     shipment: {
       orderId: string;
+      orderNumber?: string;
       sellerName: string;
       trackingNumber: string;
       carrier?: string;
@@ -204,7 +205,7 @@ export class EmailService {
 
     const html = this.layout(`
       <h1>Your order has shipped!</h1>
-      <p>Order <strong>${shipment.orderId}</strong> from <strong>${shipment.sellerName}</strong> is on its way.</p>
+      <p>Order <strong>${shipment.orderNumber || shipment.orderId}</strong> from <strong>${shipment.sellerName}</strong> is on its way.</p>
       <hr class="divider" />
       <p class="field"><strong>Tracking number:</strong> ${shipment.trackingNumber}</p>
       ${shipment.carrier ? `<p class="field"><strong>Carrier:</strong> ${shipment.carrier}</p>` : ''}
@@ -214,7 +215,7 @@ export class EmailService {
     `);
     await this.send(
       to,
-      `Order shipped � ${shipment.orderId} (tracking: ${shipment.trackingNumber})`,
+      `Order shipped � ${shipment.orderNumber || shipment.orderId} (tracking: ${shipment.trackingNumber})`,
       html,
     );
   }

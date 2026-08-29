@@ -53,6 +53,7 @@ function shippingAddressLines(address?: Record<string, unknown> | null) {
 
 interface OrderDetail {
   id: string;
+  orderNumber?: string | null;
   status: string;
   totalAmount: number;
   currency: string;
@@ -119,9 +120,10 @@ export default function OrderDetailPage() {
     order && !["CANCELLED", "REFUNDED"].includes(order.status) &&
     !order.sellerOrders.some((so) => ["SHIPPED", "DELIVERED"].includes(so.status));
   const canRefund = order?.paymentIntent?.status === "SUCCEEDED";
+  const displayOrderNumber = order?.orderNumber || order?.id;
 
   const cancelOrder = async () => {
-    if (!order || !confirm(`Cancel order ${order.id}? This can't be undone.`)) return;
+    if (!order || !confirm(`Cancel order ${displayOrderNumber}? This can't be undone.`)) return;
     setActing("cancel");
     setError(null);
     setMessage(null);
@@ -143,7 +145,7 @@ export default function OrderDetailPage() {
   const refundOrder = async () => {
     if (!order) return;
     const reason = prompt("Reason for refund (optional):") ?? undefined;
-    if (!confirm(`Refund order ${order.id}? This charges the refund back to the buyer.`)) return;
+    if (!confirm(`Refund order ${displayOrderNumber}? This charges the refund back to the buyer.`)) return;
     setActing("refund");
     setError(null);
     setMessage(null);
@@ -235,7 +237,7 @@ export default function OrderDetailPage() {
 
       <PageHeader
         eyebrow="Order detail"
-        title={order.id}
+        title={displayOrderNumber || order.id}
         description={`Placed ${new Date(order.createdAt).toLocaleString()}`}
         actions={
           <div className="flex flex-wrap gap-2">

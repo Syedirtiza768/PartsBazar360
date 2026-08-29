@@ -49,9 +49,18 @@ export class OrderService {
 
     // Use Prisma Transaction to ensure atomic order creation
     return this.prisma.$transaction(async (tx) => {
+      // The row lock from this update serializes concurrent checkouts. Because
+      // it is in the same transaction as the Order insert, failed or duplicate
+      // checkout attempts roll the counter back and do not consume a number.
+      const sequence = await tx.orderNumberSequence.update({
+        where: { id: 1 },
+        data: { lastNumber: { increment: 1 } },
+      });
+
       // Create Parent Order
       const parentOrder = await tx.order.create({
         data: {
+          orderNumber: 'PB' + sequence.lastNumber,
           buyerId,
           customerId: identity?.customerId,
           checkoutSessionId: identity?.checkoutSessionId,

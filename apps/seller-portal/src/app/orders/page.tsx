@@ -19,9 +19,9 @@ interface SellerOrderItem {
   quantity: number;
   sellerOffer: { canonicalPart?: { title?: string; imageUrls?: string[] } };
 }
-
 interface SellerOrder {
   id: string;
+  parentOrder?: { id: string; orderNumber?: string | null };
   status: string;
   subTotal: number;
   shippingTotal: number;
@@ -89,7 +89,7 @@ function ShipDialog({
       open
       onClose={onClose}
       title="Mark as shipped"
-      description={`Order #${order.id.split("-")[0]} · ${order.items.length} item${
+      description={`Order #${order.parentOrder?.orderNumber || order.id.split("-")[0]} · ${order.items.length} item${
         order.items.length === 1 ? "" : "s"
       }`}
       size="sm"
@@ -203,12 +203,12 @@ export default function OrdersPage() {
             <section
               key={order.id}
               className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-6"
-              aria-label={`Order ${order.id.split("-")[0]}`}
+              aria-label={`Order ${order.parentOrder?.orderNumber || order.id.split("-")[0]}`}
             >
               <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="part-number text-graphite-600">#{order.id.split("-")[0]}</span>
+                    <span className="part-number text-graphite-600">#{order.parentOrder?.orderNumber || order.id.split("-")[0]}</span>
                     <StatusBadge status={order.status} size="sm" />
                   </div>
                   <p className="text-balance text-base font-semibold text-slate-900 sm:text-lg">

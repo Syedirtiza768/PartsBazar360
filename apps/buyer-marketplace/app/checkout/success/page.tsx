@@ -74,8 +74,20 @@ function SuccessContent() {
           },
         );
         if (response.ok) {
-          const current = (await response.json()) as { status?: string };
+          const current = (await response.json()) as {
+            status?: string;
+            orderNumber?: string | null;
+          };
           if (cancelled) return;
+          setOrder((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  orderNumber: current.orderNumber || previous.orderNumber,
+                  status: current.status || previous.status,
+                }
+              : previous,
+          );
           if (current.status === "PAID") {
             setPaymentState("paid");
             return;
@@ -177,7 +189,7 @@ function SuccessContent() {
             </p>
           </div>
           <p className="part-number px-5 py-4 text-sm text-slate-900">
-            {orderId}
+            {params.get("displayOrderNumber") || order?.orderNumber || orderId}
           </p>
           {breakdown && order && (
             <dl className="space-y-2 border-t border-slate-100 px-5 py-4 text-sm">

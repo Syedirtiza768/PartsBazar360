@@ -503,6 +503,9 @@ export class OperationsController {
         void this.emailService
           .sendShipmentNotification(buyerEmail, {
             orderId: sellerOrder.parentOrderId,
+            orderNumber:
+              sellerOrder.parentOrder.orderNumber ||
+              sellerOrder.parentOrderId,
             sellerName: sellerOrder.seller?.name || 'Marketplace seller',
             trackingNumber: body.trackingNumber,
             carrier: body.carrier,

@@ -56,7 +56,13 @@ export class OrdersController {
             },
           },
           parentOrder: {
-            select: { id: true, status: true, createdAt: true, currency: true },
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              createdAt: true,
+              currency: true,
+            },
           },
         },
         orderBy: { createdAt: 'desc' },

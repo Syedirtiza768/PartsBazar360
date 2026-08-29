@@ -5,6 +5,7 @@ const STORAGE_KEY = "pb360_purchase_history_v1";
 
 export interface StoredOrder {
   id: string;
+  orderNumber?: string | null;
   createdAt: string;
   status: string;
   paymentStatus: string;

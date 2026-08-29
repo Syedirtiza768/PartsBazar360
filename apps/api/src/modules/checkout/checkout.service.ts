@@ -422,9 +422,9 @@ export class CheckoutService {
             region: this.addressField(shippingAddress, 'region'),
           },
           items: this.toTamaraItems(pricedItems, coupon?.discountAmount),
-          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
-          failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara&reason=failed`,
-          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
+          failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara&reason=failed`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara`,
         });
         checkoutSession = {
           externalId: session.order_id,
@@ -445,8 +445,8 @@ export class CheckoutService {
               unitAmount: order.totalAmount,
             },
           ],
-          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
-          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=stripe`,
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&session_id={CHECKOUT_SESSION_ID}${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=stripe`,
         });
         checkoutSession = { externalId: session.id, url: session.url };
       }
@@ -709,9 +709,9 @@ export class CheckoutService {
             region: this.addressField(address, 'region'),
           },
           items: this.toTamaraItems(orderItems, order.discountAmount),
-          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
-          failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara&reason=failed`,
-          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=tamara`,
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
+          failureUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara&reason=failed`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=tamara`,
         });
         externalId = session.order_id;
         checkoutUrl = session.checkout_url;
@@ -729,8 +729,8 @@ export class CheckoutService {
               unitAmount: order.totalAmount,
             },
           ],
-          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
-          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&provider=stripe`,
+          successUrl: `${buyerAppUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&session_id={CHECKOUT_SESSION_ID}${checkoutSessionId ? `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}` : ''}`,
+          cancelUrl: `${buyerAppUrl}/checkout/cancel?orderId=${encodeURIComponent(order.id)}&displayOrderNumber=${encodeURIComponent(order.orderNumber || order.id)}&provider=stripe`,
         });
         externalId = session.id;
         checkoutUrl = session.url;
@@ -1352,7 +1352,7 @@ export class CheckoutService {
     );
 
     this.emailService.sendNewOrderAdminNotification({
-      orderId: order.id,
+      orderId: order.orderNumber || order.id,
       totalAmount: order.totalAmount,
       currency: order.currency,
       buyerEmail: user.email,
@@ -1415,7 +1415,7 @@ export class CheckoutService {
     if (email) {
       notifications.push(
         this.emailService.sendOrderConfirmation(email, {
-          orderId: order.id,
+          orderId: order.orderNumber || order.id,
           totalAmount: order.totalAmount,
           currency: order.currency,
           items,
@@ -1426,7 +1426,7 @@ export class CheckoutService {
     if (phone) {
       notifications.push(
         this.smsGlobalService.sendOrderConfirmationSms(phone, {
-          orderId: order.id,
+          orderId: order.orderNumber || order.id,
           totalAmount: order.totalAmount,
           currency: order.currency,
         }),

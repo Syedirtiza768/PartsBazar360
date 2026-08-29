@@ -193,7 +193,7 @@ function SupportForm() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
-                label="Order ID"
+                label="Order number"
                 hint="Optional — from your confirmation email"
                 value={form.orderId}
                 onChange={updateField("orderId")}

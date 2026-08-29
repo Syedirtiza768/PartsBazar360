@@ -34,7 +34,7 @@ interface TicketDetail {
   assignedTo?: { id: string; name: string | null; email: string | null } | null;
   createdAt: string;
   messages: TicketMessage[];
-  order?: { id: string } | null;
+  order?: { id: string; orderNumber?: string | null } | null;
   shippingCountry?: string | null;
   estimatedWeightKg?: number | null;
   cartSummary?: string | null;
@@ -253,7 +253,7 @@ export default function TicketDetailPage() {
         <Badge tone={ticket.assignedTo ? "brand" : "outline"} size="sm">
           {ticket.assignedTo ? `Assigned to ${ticket.assignedTo.name || ticket.assignedTo.email}` : "Unassigned"}
         </Badge>
-        {ticket.order && <span>Order {ticket.order.id}</span>}
+        {ticket.order && <span>Order {ticket.order.orderNumber || ticket.order.id}</span>}
         <a href={`mailto:${ticket.customerEmail}`} className="text-blue-700 hover:underline">
           {ticket.customerEmail}
         </a>

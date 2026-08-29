@@ -1,6 +1,22 @@
 # Decision log
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-29
+
+## 2026-08-29 — Add additive public order numbers
+
+**Decision:** New parent orders receive a public `orderNumber` starting at
+`PB1110`, incrementing by one per order, with an unpadded numeric suffix that
+can grow beyond four digits. A singleton Postgres counter is incremented inside
+the same transaction as order creation.
+
+**Why:** Buyers, sellers, operations staff, and notifications need a readable
+order reference without exposing UUID fragments. The public number is separate
+from `Order.id`, so existing orders, payment-provider references, webhook
+callbacks, internal routes, and support relationships remain unchanged.
+Historical rows stay nullable and display their existing UUID fallback.
+
+**Revisit when:** Public order-number lookup or a different numbering scope
+(for example, per seller or per market) is required.
 
 ## 2026-08-26 — Give SEO users an isolated blog-CMS role
 

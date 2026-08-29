@@ -8,6 +8,7 @@ import { buttonClasses } from "@repo/ui/button";
 function CancelContent() {
   const params = useSearchParams();
   const orderId = params.get("orderId");
+  const displayOrderNumber = params.get("displayOrderNumber") || orderId;
   const provider = params.get("provider") === "tamara" ? "Tamara" : "Stripe";
   const failed = params.get("reason") === "failed";
 
@@ -24,7 +25,7 @@ function CancelContent() {
         {orderId ? (
           <>
             {" "}
-            (order <span className="part-number text-slate-800">{orderId}</span>
+            (order <span className="part-number text-slate-800">{displayOrderNumber}</span>
             )
           </>
         ) : null}

@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-28
+**Last reviewed:** 2026-08-29
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -92,6 +92,14 @@ guest-first `Customer` identity as well as the legacy linked `User`, so a
 guest checkout is not skipped. Notification delivery is best-effort and does
 not roll back a paid order; payment-claim idempotency prevents webhook races
 from sending duplicate confirmations.
+
+New orders also receive a public `orderNumber` such as `PB1110`. The number
+is allocated from a singleton Postgres counter inside the same transaction as
+the parent order, so concurrent checkouts cannot collide and failed/idempotent
+replays do not consume a number. The numeric suffix is unpadded and may grow
+beyond four digits. The existing UUID `Order.id` remains the internal,
+payment-provider, callback, route, and legacy-order identifier; historical
+orders are not backfilled and continue to fall back to that UUID in displays.
 
 ## Guest-first checkout
 

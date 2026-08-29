@@ -22,11 +22,12 @@ export default function PurchaseDetailsPage() {
   if (!order) return <div className="border-2 border-slate-950 bg-white p-8"><h2 className="font-display text-2xl font-black uppercase text-slate-950">Order not found on this device</h2><p className="mt-2 text-sm text-slate-600">Open purchase history from the same browser used at checkout, or contact support with your confirmation email.</p><Link href="/account/purchases" className={`${buttonClasses({ variant: "outline" })} mt-5`}><ArrowLeftIcon className="h-4 w-4" />Purchase history</Link></div>;
 
   const breakdown = orderMoneyBreakdown(order);
+  const displayOrderNumber = order.orderNumber || order.id;
 
   return (
     <section>
       <Link href="/account/purchases" className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><ArrowLeftIcon className="h-4 w-4" />All purchases</Link>
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b-2 border-graphite-950 pb-4"><div className="min-w-0"><p className="eyebrow">Order detail</p><h2 className="part-number mt-1 break-anywhere text-base font-bold text-graphite-950 sm:text-xl">{order.id}</h2><p className="mt-1 text-sm text-graphite-600">Placed {new Date(order.createdAt).toLocaleString()}</p></div><p className="price text-2xl">{formatPrice(order.totalAmount, order.currency)}</p></div>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b-2 border-graphite-950 pb-4"><div className="min-w-0"><p className="eyebrow">Order detail</p><h2 className="part-number mt-1 break-anywhere text-base font-bold text-graphite-950 sm:text-xl">{displayOrderNumber}</h2><p className="mt-1 text-sm text-graphite-600">Placed {new Date(order.createdAt).toLocaleString()}</p></div><p className="price text-2xl">{formatPrice(order.totalAmount, order.currency)}</p></div>
 
       <ol className="mt-5 grid border-l border-t border-stone-300 sm:grid-cols-3" aria-label="Order status">
         {[
@@ -71,8 +72,8 @@ export default function PurchaseDetailsPage() {
             </dl>
           </div>
           <div className="border-2 border-slate-950 bg-white p-4"><p className="eyebrow">Delivery address</p><p className="mt-3 text-sm leading-relaxed text-slate-700">{order.shippingAddress.name}<br />{order.shippingAddress.line1}{order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}<br />{order.shippingAddress.city} {order.shippingAddress.postalCode}<br />{order.shippingAddress.country}</p></div>
-          <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent(`Question about order ${order.id}`)}`} className={`${buttonClasses()} w-full`}><MessageIcon className="h-4 w-4" />Contact seller / support</Link>
-          <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=RETURNS&subject=${encodeURIComponent(`Return request for order ${order.id}`)}`} className={`${buttonClasses({ variant: "outline" })} w-full`}><RotateCcwIcon className="h-4 w-4" />Start a return</Link>
+          <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=ORDER_ISSUE&subject=${encodeURIComponent(`Question about order ${displayOrderNumber}`)}`} className={`${buttonClasses()} w-full`}><MessageIcon className="h-4 w-4" />Contact seller / support</Link>
+          <Link href={`/support?orderId=${encodeURIComponent(order.id)}&category=RETURNS&subject=${encodeURIComponent(`Return request for order ${displayOrderNumber}`)}`} className={`${buttonClasses({ variant: "outline" })} w-full`}><RotateCcwIcon className="h-4 w-4" />Start a return</Link>
         </aside>
       </div>
     </section>
