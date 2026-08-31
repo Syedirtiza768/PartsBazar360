@@ -83,8 +83,7 @@ describe('CheckoutService idempotent payment handling', () => {
       } as any,
       { isConfigured: () => true } as any,
       prisma as any,
-      {} as any,
-      {} as any,
+      { notifyOrderUpdated: jest.fn().mockResolvedValue(undefined) } as any,
       { authorize: authorizeCheckout, trackEvent: jest.fn() } as any,
     );
 
@@ -202,6 +201,7 @@ describe('CheckoutService idempotent payment handling', () => {
       'checkout-token',
       'cart-1',
       true,
+      buyer.phone,
     );
     expect(reserveStock).toHaveBeenCalledWith('cart-1', 'offer-1', 1, 4);
     expect(createStripeSession).toHaveBeenCalledTimes(1);

@@ -1,6 +1,23 @@
 # Decision log
 
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-08-31
+
+## 2026-08-31 — Fan out order lifecycle updates to customer and operations
+
+**Decision:** Persist `SellerOrder.trackingUrl` and route order creation,
+payment, cancellation/refund, fulfillment, delivery, and shipment-detail
+changes through one `OrderNotificationService`. Customer notifications use
+SMSGlobal and SendGrid when the corresponding contact is available; every
+event is also emailed to `info@partsbazar360.com`.
+
+**Why:** Order updates were previously split between checkout confirmation and
+one admin-only shipment email, so guest buyers and non-shipment state changes
+could miss important information. A single post-mutation fan-out keeps contact
+fallbacks and provider-failure handling consistent while preserving the
+existing compare-and-update and payment-claim duplicate guards.
+
+**Revisit when:** delivery reliability requires a durable notification outbox,
+per-channel retry state, or customer notification preferences.
 
 ## 2026-08-29 — Add additive public order numbers
 

@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { SellerId } from '../auth/seller-id.decorator';
+import { OrderNotificationService } from '../order/order-notification.service';
 
 @Controller('merchant/orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,6 +25,7 @@ export class OrdersController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tamaraService: TamaraService,
+    private readonly orderNotifications: OrderNotificationService,
   ) {}
 
   @Get()
@@ -79,7 +81,8 @@ export class OrdersController {
   async fulfillOrder(
     @Param('sellerOrderId') sellerOrderId: string,
     @SellerId() sellerId: string,
-    @Body() body: { trackingNumber: string; carrier: string },
+    @Body()
+    body: { trackingNumber: string; carrier: string; trackingUrl?: string },
   ) {
     const order = await this.prisma.sellerOrder.findFirst({
       where: { id: sellerOrderId, sellerId },
@@ -97,6 +100,13 @@ export class OrdersController {
 
     if (!order) throw new NotFoundException('Order not found');
     if (order.status === 'SHIPPED') return order;
+
+    const trackingUrl = body.trackingUrl?.trim() || null;
+    if (trackingUrl && !/^https?:\/\/\S+$/i.test(trackingUrl)) {
+      throw new BadRequestException(
+        'Tracking URL must be a valid HTTP or HTTPS URL',
+      );
+    }
 
     const payment = order.parentOrder.paymentIntent;
     if (payment?.provider === 'tamara') {
@@ -162,13 +172,30 @@ export class OrdersController {
       });
     }
 
-    return this.prisma.sellerOrder.update({
+    const updated = await this.prisma.sellerOrder.update({
       where: { id: sellerOrderId },
       data: {
         status: 'SHIPPED',
         trackingNumber: body.trackingNumber,
         carrier: body.carrier,
+        trackingUrl,
       },
     });
+
+    void this.orderNotifications
+      .notifyOrderUpdated(order.parentOrderId, {
+        type: 'SELLER_ORDER_UPDATED',
+        previousStatus: order.status,
+        status: updated.status,
+        sellerOrderId: updated.id,
+        trackingNumber: updated.trackingNumber,
+        trackingUrl: updated.trackingUrl,
+        carrier: updated.carrier,
+      })
+      .catch((err) =>
+        console.error(`Seller order notification failed: ${err}`),
+      );
+
+    return updated;
   }
 }

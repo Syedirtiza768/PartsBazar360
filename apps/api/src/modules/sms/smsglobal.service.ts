@@ -177,4 +177,21 @@ export class SmsGlobalService {
       'Failed to send order confirmation SMS',
     );
   }
+
+  async sendOrderUpdateSms(
+    phone: string,
+    update: {
+      orderNumber: string;
+      message: string;
+      trackingUrl?: string | null;
+    },
+  ): Promise<void> {
+    const tracking = update.trackingUrl ? ` Track: ${update.trackingUrl}` : '';
+    await this.sendMessage(
+      phone,
+      `PartsBazar360: Order ${update.orderNumber} - ${update.message}${tracking}`,
+      'Order update SMS is temporarily unavailable',
+      'Failed to send order update SMS',
+    );
+  }
 }

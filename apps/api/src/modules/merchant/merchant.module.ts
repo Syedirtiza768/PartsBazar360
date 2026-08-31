@@ -11,6 +11,7 @@ import { SellerOnboardingService } from './onboarding.service';
 import { MerchantPricingController } from './pricing.controller';
 import { CatalogImportModule } from '../catalog-import/catalog-import.module';
 import { CheckoutModule } from '../checkout/checkout.module';
+import { OrderModule } from '../order/order.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { AuthModule } from '../auth/auth.module';
     PricingModule,
     CatalogImportModule,
     CheckoutModule,
+    OrderModule,
     AuthModule,
   ],
   controllers: [

@@ -11,7 +11,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
@@ -27,7 +33,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { EmailService } from '../email/email.service';
+import { OrderNotificationService } from '../order/order-notification.service';
 import { OrderStatusService } from '../order/order-status.service';
 import { StripeService } from '../checkout/stripe.service';
 import { TamaraService, type TamaraCurrency } from '../checkout/tamara.service';
@@ -51,6 +57,14 @@ class UpdateSellerOrderFulfillmentDto {
   @IsString()
   @MaxLength(80)
   carrier?: string;
+
+  @IsOptional()
+  @IsUrl(
+    { protocols: ['http', 'https'], require_protocol: true },
+    { message: 'Tracking URL must be a valid HTTP or HTTPS URL' },
+  )
+  @MaxLength(2048)
+  trackingUrl?: string;
 }
 
 @Controller('operations')
@@ -63,7 +77,7 @@ export class OperationsController {
   constructor(
     @InjectQueue('ingestion') private readonly ingestionQueue: Queue,
     private readonly prisma: PrismaService,
-    private readonly emailService: EmailService,
+    private readonly orderNotifications: OrderNotificationService,
     private readonly orderStatus: OrderStatusService,
     private readonly stripeService: StripeService,
     private readonly tamaraService: TamaraService,
@@ -232,7 +246,8 @@ export class OperationsController {
         })
       : null;
 
-    const buyer = accountBuyer ||
+    const buyer =
+      accountBuyer ||
       (order.customer
         ? {
             id: order.customer.id,
@@ -319,6 +334,17 @@ export class OperationsController {
       metadata: { refunded },
     });
 
+    void this.orderNotifications
+      .notifyOrderUpdated(orderId, {
+        type: 'ORDER_STATUS_CHANGED',
+        previousStatus: order.status,
+        status: OrderStatus.CANCELLED,
+        reason: refunded ? 'Payment refunded' : undefined,
+      })
+      .catch((err) =>
+        this.logger.error(`Order cancellation notification failed: ${err}`),
+      );
+
     return { ...updatedOrder, refunded };
   }
 
@@ -363,6 +389,17 @@ export class OperationsController {
       normalizedValue: { status: OrderStatus.REFUNDED },
       metadata: { reason: body.reason },
     });
+
+    void this.orderNotifications
+      .notifyOrderUpdated(orderId, {
+        type: 'ORDER_STATUS_CHANGED',
+        previousStatus: order.status,
+        status: OrderStatus.REFUNDED,
+        reason: body.reason,
+      })
+      .catch((err) =>
+        this.logger.error(`Order refund notification failed: ${err}`),
+      );
 
     return updated;
   }
@@ -413,14 +450,22 @@ export class OperationsController {
     if (
       body.status === undefined &&
       body.trackingNumber === undefined &&
-      body.carrier === undefined
+      body.carrier === undefined &&
+      body.trackingUrl === undefined
     ) {
-      throw new BadRequestException('Provide a delivery status or shipment details');
+      throw new BadRequestException(
+        'Provide a delivery status or shipment details',
+      );
     }
 
     const current = await this.prisma.sellerOrder.findUniqueOrThrow({
       where: { id: sellerOrderId },
-      select: { status: true },
+      select: {
+        status: true,
+        trackingNumber: true,
+        carrier: true,
+        trackingUrl: true,
+      },
     });
 
     if (body.status) {
@@ -433,6 +478,17 @@ export class OperationsController {
         : body.trackingNumber.trim() || null;
     const carrier =
       body.carrier === undefined ? undefined : body.carrier.trim() || null;
+    const trackingUrl =
+      body.trackingUrl === undefined
+        ? undefined
+        : body.trackingUrl.trim() || null;
+    const statusChanged =
+      body.status !== undefined && current.status !== body.status;
+    const shipmentChanged =
+      (trackingNumber !== undefined &&
+        trackingNumber !== current.trackingNumber) ||
+      (carrier !== undefined && carrier !== current.carrier) ||
+      (trackingUrl !== undefined && trackingUrl !== current.trackingUrl);
     const updated = await this.prisma.sellerOrder.updateMany({
       where: {
         id: sellerOrderId,
@@ -442,6 +498,7 @@ export class OperationsController {
         status: body.status,
         trackingNumber,
         carrier,
+        trackingUrl,
       },
     });
     if (updated.count !== 1) {
@@ -475,52 +532,25 @@ export class OperationsController {
         metadata: {
           trackingNumber: body.trackingNumber,
           carrier: body.carrier,
+          trackingUrl: body.trackingUrl,
         },
       });
     }
 
-    // Send shipment notification to buyer when tracking number is provided
-    if (
-      body.status === SellerOrderStatus.SHIPPED &&
-      current.status !== SellerOrderStatus.SHIPPED &&
-      sellerOrder.parentOrder
-    ) {
-      const buyer = sellerOrder.parentOrder.buyerId
-        ? await this.prisma.user.findUnique({
-            where: { id: sellerOrder.parentOrder.buyerId },
-            select: { email: true },
-          })
-        : null;
-      const shippingAddress = sellerOrder.parentOrder.shippingAddress as Record<
-        string,
-        string
-      > | null;
-      const buyerEmail =
-        buyer?.email ||
-        sellerOrder.parentOrder.customer?.email ||
-        shippingAddress?.email;
-      if (body.trackingNumber && buyerEmail) {
-        void this.emailService
-          .sendShipmentNotification(buyerEmail, {
-            orderId: sellerOrder.parentOrderId,
-            orderNumber:
-              sellerOrder.parentOrder.orderNumber ||
-              sellerOrder.parentOrderId,
-            sellerName: sellerOrder.seller?.name || 'Marketplace seller',
-            trackingNumber: body.trackingNumber,
-            carrier: body.carrier,
-            items: sellerOrder.items.map((item) => ({
-              name:
-                item.sellerOffer.canonicalPart?.title ||
-                item.sellerOffer.sellerTitle ||
-                'Auto part',
-              quantity: item.quantity,
-            })),
-          })
-          .catch((err) =>
-            this.logger.error(`Shipment notification failed: ${err}`),
-          );
-      }
+    if (statusChanged || shipmentChanged) {
+      void this.orderNotifications
+        .notifyOrderUpdated(sellerOrder.parentOrderId, {
+          type: 'SELLER_ORDER_UPDATED',
+          previousStatus: current.status,
+          status: sellerOrder.status,
+          sellerOrderId,
+          trackingNumber: sellerOrder.trackingNumber,
+          trackingUrl: sellerOrder.trackingUrl,
+          carrier: sellerOrder.carrier,
+        })
+        .catch((err) =>
+          this.logger.error(`Seller order notification failed: ${err}`),
+        );
     }
 
     return sellerOrder;
@@ -606,7 +636,8 @@ export class OperationsController {
         name: s.name,
         storeId: s.storeId,
       })),
-      monitor: 'GET /operations/sync/progress/:syncRunId (runId appears in worker logs)',
+      monitor:
+        'GET /operations/sync/progress/:syncRunId (runId appears in worker logs)',
     };
   }
 

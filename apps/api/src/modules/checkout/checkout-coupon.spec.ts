@@ -23,8 +23,7 @@ describe('CheckoutService coupons', () => {
       {
         discountCoupon: { findUnique: jest.fn().mockResolvedValue(coupon) },
       } as any,
-      {} as any,
-      {} as any,
+      { notifyOrderUpdated: jest.fn().mockResolvedValue(undefined) } as any,
       {} as any,
     );
   }

@@ -54,6 +54,20 @@ export class EmailService {
       .trim();
   }
 
+  private escapeHtml(value: string | null | undefined): string {
+    return String(value || '').replace(
+      /[&<>"']/g,
+      (character) =>
+        ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        })[character] || character,
+    );
+  }
+
   private layout(content: string): string {
     return `<!DOCTYPE html>
 <html lang="en">
@@ -216,6 +230,74 @@ export class EmailService {
     await this.send(
       to,
       `Order shipped � ${shipment.orderNumber || shipment.orderId} (tracking: ${shipment.trackingNumber})`,
+      html,
+    );
+  }
+
+  async sendOrderUpdateNotification(
+    to: string,
+    update: {
+      orderId: string;
+      orderNumber: string;
+      heading: string;
+      message: string;
+      status: string;
+      sellerName?: string;
+      trackingNumber?: string | null;
+      trackingUrl?: string | null;
+      carrier?: string | null;
+    },
+  ): Promise<void> {
+    const tracking = update.trackingUrl
+      ? `<p class="field"><strong>Tracking URL:</strong> <a href="${this.escapeHtml(update.trackingUrl)}">${this.escapeHtml(update.trackingUrl)}</a></p>`
+      : '';
+    const html = this.layout(`
+      <h1>${this.escapeHtml(update.heading)}</h1>
+      <p>${this.escapeHtml(update.message)}</p>
+      <p class="field"><strong>Order:</strong> ${this.escapeHtml(update.orderNumber)}</p>
+      <p class="field"><strong>Status:</strong> ${this.escapeHtml(update.status)}</p>
+      ${update.sellerName ? `<p class="field"><strong>Seller:</strong> ${this.escapeHtml(update.sellerName)}</p>` : ''}
+      ${update.trackingNumber ? `<p class="field"><strong>Tracking number:</strong> ${this.escapeHtml(update.trackingNumber)}</p>` : ''}
+      ${update.carrier ? `<p class="field"><strong>Carrier:</strong> ${this.escapeHtml(update.carrier)}</p>` : ''}
+      ${tracking}
+      <a href="${this.buyerAppUrl}/account/purchases/${encodeURIComponent(update.orderId)}" class="btn">View order details</a>
+    `);
+    await this.send(to, `${update.heading} - ${update.orderNumber}`, html);
+  }
+
+  async sendAdminOrderUpdateNotification(update: {
+    orderNumber: string;
+    heading: string;
+    message: string;
+    status: string;
+    previousStatus?: string | null;
+    buyerEmail?: string;
+    buyerPhone?: string;
+    sellerName?: string;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
+    carrier?: string | null;
+  }): Promise<void> {
+    const tracking = update.trackingUrl
+      ? `<p class="field"><strong>Tracking URL:</strong> <a href="${this.escapeHtml(update.trackingUrl)}">${this.escapeHtml(update.trackingUrl)}</a></p>`
+      : '';
+    const html = this.layout(`
+      <span class="badge badge-info">Order update</span>
+      <h1 style="margin-top:16px;">${this.escapeHtml(update.heading)}</h1>
+      <p>${this.escapeHtml(update.message)}</p>
+      <p class="field"><strong>Order:</strong> ${this.escapeHtml(update.orderNumber)}</p>
+      <p class="field"><strong>Status:</strong> ${this.escapeHtml(update.previousStatus ? `${update.previousStatus} -> ${update.status}` : update.status)}</p>
+      ${update.buyerEmail ? `<p class="field"><strong>Customer email:</strong> ${this.escapeHtml(update.buyerEmail)}</p>` : ''}
+      ${update.buyerPhone ? `<p class="field"><strong>Customer phone:</strong> ${this.escapeHtml(update.buyerPhone)}</p>` : ''}
+      ${update.sellerName ? `<p class="field"><strong>Seller:</strong> ${this.escapeHtml(update.sellerName)}</p>` : ''}
+      ${update.trackingNumber ? `<p class="field"><strong>Tracking number:</strong> ${this.escapeHtml(update.trackingNumber)}</p>` : ''}
+      ${update.carrier ? `<p class="field"><strong>Carrier:</strong> ${this.escapeHtml(update.carrier)}</p>` : ''}
+      ${tracking}
+      <a href="${this.adminAppUrl}/orders/" class="btn">View in Admin Console</a>
+    `);
+    await this.send(
+      'info@partsbazar360.com',
+      `[Order update] ${update.heading} - ${update.orderNumber}`,
       html,
     );
   }

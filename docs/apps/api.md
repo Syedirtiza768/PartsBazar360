@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-08-31
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -92,6 +92,15 @@ guest-first `Customer` identity as well as the legacy linked `User`, so a
 guest checkout is not skipped. Notification delivery is best-effort and does
 not roll back a paid order; payment-claim idempotency prevents webhook races
 from sending duplicate confirmations.
+
+`OrderNotificationService` also fans out the full order lifecycle: creation,
+payment success/failure/retry, cancellation, refund, seller shipment/delivery
+status, and tracking-detail changes. Each event is sent to the customer by
+SMSGlobal and SendGrid when a channel is available and is always copied to
+`info@partsbazar360.com`. `SellerOrder.trackingUrl` is validated as an HTTP(S)
+URL and included in customer/admin messages. Database writes complete before
+notification delivery; provider failures are logged independently and do not
+roll back the order mutation.
 
 New orders also receive a public `orderNumber` such as `PB1110`. The number
 is allocated from a singleton Postgres counter inside the same transaction as

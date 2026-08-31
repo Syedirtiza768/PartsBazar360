@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Button } from '@repo/ui/button';
-import { Badge } from '@repo/ui/badge';
-import { PageBody } from '@repo/ui/container';
-import { DataTable, type Column } from '@repo/ui/data-table';
-import { EmptyState } from '@repo/ui/empty-state';
-import { Input } from '@repo/ui/field';
-import { PageHeader, StatCard, StatGrid } from '@repo/ui/page-header';
-import { Sheet } from '@repo/ui/sheet';
-import { AlertCircleIcon } from '@repo/ui/icons';
-import { useAdminAuth } from '@/lib/auth-context';
-import { API_BASE_URL, apiFetch } from '@/lib/api';
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Button } from "@repo/ui/button";
+import { Badge } from "@repo/ui/badge";
+import { PageBody } from "@repo/ui/container";
+import { DataTable, type Column } from "@repo/ui/data-table";
+import { EmptyState } from "@repo/ui/empty-state";
+import { Input } from "@repo/ui/field";
+import { PageHeader, StatCard, StatGrid } from "@repo/ui/page-header";
+import { Sheet } from "@repo/ui/sheet";
+import { AlertCircleIcon } from "@repo/ui/icons";
+import { useAdminAuth } from "@/lib/auth-context";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
 
 interface SyncResult {
   message: string;
@@ -67,14 +67,15 @@ interface QueueRow {
   customerEmail?: string;
   status: string;
   seller?: { name?: string };
+  trackingUrl?: string | null;
   items?: unknown[];
   [key: string]: unknown;
 }
 
 export default function OperationsCommandCenterPage() {
   const { token } = useAdminAuth();
-  const [storeId, setStoreId] = useState('');
-  const [page, setPage] = useState('1');
+  const [storeId, setStoreId] = useState("");
+  const [page, setPage] = useState("1");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,16 +89,22 @@ export default function OperationsCommandCenterPage() {
   // on exactly the devices operators use on the warehouse floor.
   const [shipping, setShipping] = useState<QueueRow | null>(null);
 
-  const fulfillmentQueue = useMemo<QueueRow[]>(() => (
-    orders.flatMap((order) => (order.sellerOrders || []).map((sellerOrder: QueueRow) => ({
-      ...sellerOrder,
-      parentOrderId: order.id,
-      parentOrderNumber: order.orderNumber,
-      customerEmail: order.customerEmail,
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-    }))).filter((sellerOrder: QueueRow) => sellerOrder.status === 'PROCESSING')
-  ), [orders]);
+  const fulfillmentQueue = useMemo<QueueRow[]>(
+    () =>
+      orders
+        .flatMap((order) =>
+          (order.sellerOrders || []).map((sellerOrder: QueueRow) => ({
+            ...sellerOrder,
+            parentOrderId: order.id,
+            parentOrderNumber: order.orderNumber,
+            customerEmail: order.customerEmail,
+            totalAmount: order.totalAmount,
+            currency: order.currency,
+          })),
+        )
+        .filter((sellerOrder: QueueRow) => sellerOrder.status === "PROCESSING"),
+    [orders],
+  );
 
   const loadOperations = async () => {
     setLoading(true);
@@ -119,7 +126,9 @@ export default function OperationsCommandCenterPage() {
       );
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not load operations data.');
+      setError(
+        err instanceof Error ? err.message : "Could not load operations data.",
+      );
     } finally {
       setLoading(false);
     }
@@ -134,7 +143,7 @@ export default function OperationsCommandCenterPage() {
   const handleTriggerSync = async (event: FormEvent) => {
     event.preventDefault();
     if (!storeId.trim()) {
-      setError('Store ID is required.');
+      setError("Store ID is required.");
       return;
     }
 
@@ -143,15 +152,21 @@ export default function OperationsCommandCenterPage() {
     setResult(null);
 
     try {
-      const res = await apiFetch(token, `${API_BASE_URL}/operations/sync/realtrack/${encodeURIComponent(storeId.trim())}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: Number(page) || 1 }),
-      });
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/sync/realtrack/${encodeURIComponent(storeId.trim())}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page: Number(page) || 1 }),
+        },
+      );
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Request failed with status ${res.status}`);
+        throw new Error(
+          body.message || `Request failed with status ${res.status}`,
+        );
       }
 
       const data: SyncResult = await res.json();
@@ -159,7 +174,9 @@ export default function OperationsCommandCenterPage() {
       setHistory((prev) => [data, ...prev].slice(0, 10));
       await loadOperations();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to queue sync job.');
+      setError(
+        err instanceof Error ? err.message : "Failed to queue sync job.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -169,23 +186,33 @@ export default function OperationsCommandCenterPage() {
     sellerOrderId: string,
     trackingNumber: string,
     carrier?: string,
+    trackingUrl?: string,
   ) => {
-    const res = await apiFetch(token, `${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'SHIPPED', trackingNumber, carrier }),
-    });
+    const res = await apiFetch(
+      token,
+      `${API_BASE_URL}/operations/seller-orders/${sellerOrderId}/fulfillment`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "SHIPPED",
+          trackingNumber,
+          carrier,
+          trackingUrl,
+        }),
+      },
+    );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Could not update delivery status.');
+      throw new Error(body.message || "Could not update delivery status.");
     }
     await loadOperations();
   };
 
   const updateTicket = async (ticketId: string, status: string) => {
     await apiFetch(token, `${API_BASE_URL}/support/tickets/${ticketId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
     await loadOperations();
@@ -200,29 +227,44 @@ export default function OperationsCommandCenterPage() {
 
   const queueColumns: Column<QueueRow>[] = [
     {
-      key: 'order',
-      header: 'Order',
-      priority: 'primary',
+      key: "order",
+      header: "Order",
+      priority: "primary",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="part-number break-anywhere text-graphite-700">{row.parentOrderNumber || row.parentOrderId}</p>
+          <p className="part-number break-anywhere text-graphite-700">
+            {row.parentOrderNumber || row.parentOrderId}
+          </p>
           <p className="mt-0.5 break-anywhere text-xs text-graphite-600">
-            {row.customerEmail || 'Customer email missing'}
+            {row.customerEmail || "Customer email missing"}
           </p>
         </div>
       ),
     },
     {
-      key: 'seller',
-      header: 'Seller',
-      cell: (row) => <span className="font-medium text-slate-900">{row.seller?.name || 'Seller'}</span>,
+      key: "seller",
+      header: "Seller",
+      cell: (row) => (
+        <span className="font-medium text-slate-900">
+          {row.seller?.name || "Seller"}
+        </span>
+      ),
     },
-    { key: 'items', header: 'Items', align: 'right', cell: (row) => row.items?.length || 0 },
     {
-      key: 'status',
-      header: 'Status',
-      priority: 'secondary',
-      cell: (row) => <Badge tone="warning" size="sm">{row.status}</Badge>,
+      key: "items",
+      header: "Items",
+      align: "right",
+      cell: (row) => row.items?.length || 0,
+    },
+    {
+      key: "status",
+      header: "Status",
+      priority: "secondary",
+      cell: (row) => (
+        <Badge tone="warning" size="sm">
+          {row.status}
+        </Badge>
+      ),
     },
   ];
 
@@ -250,16 +292,40 @@ export default function OperationsCommandCenterPage() {
       )}
 
       <StatGrid>
-        <StatCard label="Open support tickets" value={loading ? '—' : metrics.openTickets} tone="warning" loading={loading} />
-        <StatCard label="Uploads needing ops" value={loading ? '—' : metrics.uploadJobs} loading={loading} />
-        <StatCard label="Seller orders pending" value={loading ? '—' : metrics.pendingSellerOrders} tone="success" loading={loading} />
-        <StatCard label="Recent orders" value={loading ? '—' : metrics.recentOrderCount} loading={loading} />
+        <StatCard
+          label="Open support tickets"
+          value={loading ? "—" : metrics.openTickets}
+          tone="warning"
+          loading={loading}
+        />
+        <StatCard
+          label="Uploads needing ops"
+          value={loading ? "—" : metrics.uploadJobs}
+          loading={loading}
+        />
+        <StatCard
+          label="Seller orders pending"
+          value={loading ? "—" : metrics.pendingSellerOrders}
+          tone="success"
+          loading={loading}
+        />
+        <StatCard
+          label="Recent orders"
+          value={loading ? "—" : metrics.recentOrderCount}
+          loading={loading}
+        />
       </StatGrid>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <section className="min-w-0 xl:col-span-2" aria-labelledby="queue-heading">
+        <section
+          className="min-w-0 xl:col-span-2"
+          aria-labelledby="queue-heading"
+        >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 id="queue-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            <h2
+              id="queue-heading"
+              className="text-sm font-semibold uppercase tracking-wider text-graphite-600"
+            >
               Fulfilment queue
             </h2>
             <span className="text-xs font-semibold text-graphite-600">
@@ -273,7 +339,11 @@ export default function OperationsCommandCenterPage() {
             getRowKey={(row) => row.id}
             tableFrom="lg"
             actions={(row) => (
-              <Button size="sm" variant="secondary" onClick={() => setShipping(row)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShipping(row)}
+              >
                 Mark shipped
               </Button>
             )}
@@ -290,11 +360,15 @@ export default function OperationsCommandCenterPage() {
           className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-card"
           aria-labelledby="sync-heading"
         >
-          <h2 id="sync-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+          <h2
+            id="sync-heading"
+            className="text-sm font-semibold uppercase tracking-wider text-graphite-600"
+          >
             RealTrack catalogue sync
           </h2>
           <p className="mt-1 text-xs text-graphite-600">
-            Queue an ingestion job for a source store without leaving operations.
+            Queue an ingestion job for a source store without leaving
+            operations.
           </p>
           <form onSubmit={handleTriggerSync} className="mt-4 space-y-3.5">
             <Input
@@ -320,19 +394,25 @@ export default function OperationsCommandCenterPage() {
               hint="Ingestion resumes from this page of the source feed."
             />
             <Button type="submit" fullWidth loading={submitting}>
-              {submitting ? 'Queuing job…' : 'Trigger sync'}
+              {submitting ? "Queuing job…" : "Trigger sync"}
             </Button>
           </form>
           {result && (
             <p className="mt-3 text-sm text-emerald-700" role="status">
-              Queued job <span className="part-number break-anywhere">{result.jobId}</span>.
+              Queued job{" "}
+              <span className="part-number break-anywhere">{result.jobId}</span>
+              .
             </p>
           )}
           {history.length > 0 && (
             <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
               {history.slice(0, 3).map((item, idx) => (
-                <li key={`${item.jobId}-${idx}`} className="break-anywhere text-xs text-graphite-600">
-                  Store {item.storeId}: <span className="part-number">{item.jobId}</span>
+                <li
+                  key={`${item.jobId}-${idx}`}
+                  className="break-anywhere text-xs text-graphite-600"
+                >
+                  Store {item.storeId}:{" "}
+                  <span className="part-number">{item.jobId}</span>
                 </li>
               ))}
             </ul>
@@ -346,27 +426,44 @@ export default function OperationsCommandCenterPage() {
           aria-labelledby="tickets-heading"
         >
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
-            <h2 id="tickets-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            <h2
+              id="tickets-heading"
+              className="text-sm font-semibold uppercase tracking-wider text-graphite-600"
+            >
               Support tickets
             </h2>
           </div>
           <ul className="divide-y divide-slate-100">
             {tickets.slice(0, 8).map((ticket) => (
-              <li key={ticket.id} className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5">
+              <li
+                key={ticket.id}
+                className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5"
+              >
                 {/* Stacks on phones: side-by-side text + actions squeezed the
                     subject to two characters per line at 320px. */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-900">{ticket.subject}</p>
+                    <p className="font-semibold text-slate-900">
+                      {ticket.subject}
+                    </p>
                     <p className="mt-1 break-anywhere text-xs text-graphite-600">
-                      {ticket.category} / {ticket.priority} / {ticket.customerEmail}
+                      {ticket.category} / {ticket.priority} /{" "}
+                      {ticket.customerEmail}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button size="sm" variant="outline" onClick={() => updateTicket(ticket.id, 'IN_PROGRESS')}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateTicket(ticket.id, "IN_PROGRESS")}
+                    >
                       Start
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => updateTicket(ticket.id, 'RESOLVED')}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => updateTicket(ticket.id, "RESOLVED")}
+                    >
                       Resolve
                     </Button>
                   </div>
@@ -386,27 +483,39 @@ export default function OperationsCommandCenterPage() {
           aria-labelledby="uploads-heading"
         >
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
-            <h2 id="uploads-heading" className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            <h2
+              id="uploads-heading"
+              className="text-sm font-semibold uppercase tracking-wider text-graphite-600"
+            >
               Seller upload exceptions
             </h2>
           </div>
           <ul className="divide-y divide-slate-100">
             {(dashboard?.recentUploads || []).map((job) => (
-              <li key={job.id} className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5">
+              <li
+                key={job.id}
+                className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5"
+              >
                 <div className="flex items-start justify-between gap-3">
                   {/* break-anywhere, not truncate: an operator needs the whole
                       filename to find the upload, and it is often 60+ chars. */}
-                  <p className="min-w-0 break-anywhere font-semibold text-slate-900">{job.fileName}</p>
-                  <Badge size="sm" className="shrink-0">{job.status}</Badge>
+                  <p className="min-w-0 break-anywhere font-semibold text-slate-900">
+                    {job.fileName}
+                  </p>
+                  <Badge size="sm" className="shrink-0">
+                    {job.status}
+                  </Badge>
                 </div>
                 <p className="mt-1 text-xs text-graphite-600">
-                  {job.seller?.name || 'Seller'}: {job.insertedRows} imported, {job.reviewRows} review,{' '}
-                  {job.invalidRows} invalid
+                  {job.seller?.name || "Seller"}: {job.insertedRows} imported,{" "}
+                  {job.reviewRows} review, {job.invalidRows} invalid
                 </p>
               </li>
             ))}
             {(dashboard?.recentUploads || []).length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">No upload jobs yet.</li>
+              <li className="px-4 py-10 text-center text-sm text-graphite-600 sm:px-5">
+                No upload jobs yet.
+              </li>
             )}
           </ul>
         </section>
@@ -433,17 +542,24 @@ function ShipmentSheet({
 }: {
   row: QueueRow | null;
   onClose: () => void;
-  onSubmit: (id: string, trackingNumber: string, carrier?: string) => Promise<void>;
+  onSubmit: (
+    id: string,
+    trackingNumber: string,
+    carrier?: string,
+    trackingUrl?: string,
+  ) => Promise<void>;
 }) {
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [carrier, setCarrier] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Reset between orders so a previous tracking number can't be submitted
   // against the next one.
   useEffect(() => {
-    setTrackingNumber('');
-    setCarrier('');
+    setTrackingNumber("");
+    setCarrier("");
+    setTrackingUrl("");
   }, [row?.id]);
 
   async function submit(event: FormEvent) {
@@ -451,7 +567,12 @@ function ShipmentSheet({
     if (!row || !trackingNumber.trim()) return;
     setSaving(true);
     try {
-      await onSubmit(row.id, trackingNumber.trim(), carrier.trim() || undefined);
+      await onSubmit(
+        row.id,
+        trackingNumber.trim(),
+        carrier.trim() || undefined,
+        trackingUrl.trim() || undefined,
+      );
       onClose();
     } finally {
       setSaving(false);
@@ -463,11 +584,18 @@ function ShipmentSheet({
       open={Boolean(row)}
       onClose={onClose}
       title="Mark shipped"
-      description={row ? `Order ${row.parentOrderNumber || row.parentOrderId}` : undefined}
+      description={
+        row ? `Order ${row.parentOrderNumber || row.parentOrderId}` : undefined
+      }
       size="sm"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose} fullWidth className="sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            fullWidth
+            className="sm:w-auto"
+          >
             Cancel
           </Button>
           <Button
@@ -498,6 +626,17 @@ function ShipmentSheet({
           value={carrier}
           onChange={(e) => setCarrier(e.target.value)}
           hint="Optional."
+        />
+        <Input
+          label="Shipment tracking URL"
+          type="url"
+          value={trackingUrl}
+          onChange={(e) => setTrackingUrl(e.target.value)}
+          placeholder="https://carrier.example/track/…"
+          hint="Optional. Sent to the customer when saved."
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
         />
       </form>
     </Sheet>

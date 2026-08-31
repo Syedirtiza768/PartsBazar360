@@ -35,6 +35,7 @@ import { clearRecentSearches, getRecentSearches, pushRecentSearch } from "@/lib/
 import { useSearchSuggestions } from "@/lib/use-search-suggestions";
 import { useCurrency } from "@/lib/currency-context";
 import { CurrencySwitcher } from "@/components/CurrencySwitcher";
+import { EbayStoreLink } from "@/components/EbayStoreLink";
 import type { Facet } from "@/lib/types";
 
 type HeaderFacet = Facet & { href?: string };
@@ -715,6 +716,7 @@ export function Header({ categories }: { categories: HeaderFacet[] }) {
               Fitment evidence shown on every listing
             </p>
             <nav className="flex items-center gap-5" aria-label="Utility navigation">
+              <EbayStoreLink variant="header" />
               <CurrencySwitcher compact />
               <Link href="/account/purchases" className="hover:text-brand-200">Purchases</Link>
               <Link href="/account/messages" className="hover:text-brand-200">Messages</Link>
@@ -860,6 +862,7 @@ export function Header({ categories }: { categories: HeaderFacet[] }) {
             Sell parts
             <ChevronRightIcon className="h-4 w-4 shrink-0 text-slate-400" />
           </a>
+          <EbayStoreLink variant="menu" className="mt-4" />
 
           <p className="eyebrow mb-2 mt-7">Parts systems</p>
           <div className="grid grid-cols-2 border-l border-t border-stone-300">

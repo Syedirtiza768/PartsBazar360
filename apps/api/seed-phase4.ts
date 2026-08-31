@@ -51,6 +51,9 @@ async function main() {
   const shippingService = new ShippingService();
   const stripeService = new StripeService();
   const tamaraService = new TamaraService();
+  const orderNotifications = {
+    notifyOrderUpdated: async () => undefined,
+  } as any;
   const checkoutService = new CheckoutService(
     cartService,
     reservationService,
@@ -59,8 +62,7 @@ async function main() {
     stripeService,
     tamaraService,
     prisma as any,
-    null as any,
-    null as any,
+    orderNotifications,
     null as any,
   );
 

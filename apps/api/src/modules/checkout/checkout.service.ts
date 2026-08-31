@@ -27,13 +27,9 @@ import {
   roundMoney,
   type ChargeCurrency,
 } from './currency.util';
-import { EmailService } from '../email/email.service';
-import { SmsGlobalService } from '../sms/smsglobal.service';
 import { CheckoutIdentityService } from './checkout-identity.service';
-import {
-  normalizePhone,
-  normalizeUnvalidatedPhone,
-} from '../auth/phone.util';
+import { OrderNotificationService } from '../order/order-notification.service';
+import { normalizePhone, normalizeUnvalidatedPhone } from '../auth/phone.util';
 
 @Injectable()
 export class CheckoutService {
@@ -48,8 +44,7 @@ export class CheckoutService {
     private stripeService: StripeService,
     private tamaraService: TamaraService,
     private prisma: PrismaService,
-    private emailService: EmailService,
-    private smsGlobalService: SmsGlobalService,
+    private orderNotifications: OrderNotificationService,
     private checkoutIdentity: CheckoutIdentityService,
   ) {
     this.buyerAppUrl = process.env.BUYER_APP_URL || 'http://localhost:3000';
@@ -373,6 +368,15 @@ export class CheckoutService {
       throw error;
     }
 
+    void this.orderNotifications
+      .notifyOrderUpdated(order.id, {
+        type: 'ORDER_CREATED',
+        status: order.status,
+      })
+      .catch((err) =>
+        this.logger.error(`Order creation notification failed: ${err}`),
+      );
+
     // 4. Create the local payment record and the selected hosted checkout.
     const paymentIntent = await this.prisma.paymentIntent.create({
       data: {
@@ -470,6 +474,17 @@ export class CheckoutService {
         where: { id: order.id },
         data: { status: 'PAYMENT_FAILED' },
       });
+      void this.orderNotifications
+        .notifyOrderUpdated(order.id, {
+          type: 'PAYMENT_STATUS_CHANGED',
+          previousStatus: order.status,
+          status: 'PAYMENT_FAILED',
+        })
+        .catch((notificationError) =>
+          this.logger.error(
+            `Payment failure notification failed: ${notificationError}`,
+          ),
+        );
       await this.prisma.paymentAttempt.update({
         where: { id: paymentAttempt.id },
         data: { status: 'FAILED', failureCode: 'provider_session_failed' },
@@ -768,7 +783,7 @@ export class CheckoutService {
       );
     }
 
-    await this.prisma.$transaction([
+    const [, , pendingOrderUpdate] = await this.prisma.$transaction([
       this.prisma.paymentIntent.updateMany({
         where: { id: paymentIntent.id, status: { not: 'SUCCEEDED' } },
         data: { externalId },
@@ -782,6 +797,17 @@ export class CheckoutService {
         data: { status: 'PENDING_PAYMENT' },
       }),
     ]);
+    if (pendingOrderUpdate.count === 1 && order.status !== 'PENDING_PAYMENT') {
+      void this.orderNotifications
+        .notifyOrderUpdated(order.id, {
+          type: 'PAYMENT_STATUS_CHANGED',
+          previousStatus: order.status,
+          status: 'PENDING_PAYMENT',
+        })
+        .catch((err) =>
+          this.logger.error(`Payment retry notification failed: ${err}`),
+        );
+    }
     const finalPayment = await this.prisma.paymentIntent.findUniqueOrThrow({
       where: { id: paymentIntent.id },
     });
@@ -1127,6 +1153,8 @@ export class CheckoutService {
       return payment;
     }
 
+    const previousOrderStatus = payment.order.status;
+
     let paymentStatusClaimed = false;
     const updated = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.paymentIntent.updateMany({
@@ -1228,12 +1256,15 @@ export class CheckoutService {
           }
         }
       }
-      void this.sendOrderConfirmationNotifications(payment.orderId).catch(
-        (err) => this.logger.error(`Order confirmation failed: ${err}`),
-      );
-      void this.sendAdminOrderNotification(payment.orderId).catch((err) =>
-        this.logger.error(`Order admin notification failed: ${err}`),
-      );
+      void this.orderNotifications
+        .notifyOrderUpdated(payment.orderId, {
+          type: 'PAYMENT_STATUS_CHANGED',
+          previousStatus: previousOrderStatus,
+          status: 'PAID',
+        })
+        .catch((err) =>
+          this.logger.error(`Order payment notification failed: ${err}`),
+        );
       if (payment.order.checkoutSessionId) {
         await this.checkoutIdentity.trackEvent(
           payment.order.checkoutSessionId,
@@ -1242,6 +1273,19 @@ export class CheckoutService {
         );
       }
     } else {
+      if (status === 'FAILED' && paymentStatusClaimed) {
+        void this.orderNotifications
+          .notifyOrderUpdated(payment.orderId, {
+            type: 'PAYMENT_STATUS_CHANGED',
+            previousStatus: previousOrderStatus,
+            status: 'PAYMENT_FAILED',
+          })
+          .catch((err) =>
+            this.logger.error(
+              `Order payment failure notification failed: ${err}`,
+            ),
+          );
+      }
       if (payment.order.checkoutSession?.cartId) {
         for (const sellerOrder of payment.order.sellerOrders) {
           for (const item of sellerOrder.items) {
@@ -1335,117 +1379,6 @@ export class CheckoutService {
     }
     if (!authorized) throw new UnauthorizedException('Order access denied');
     return order;
-  }
-
-  private async sendAdminOrderNotification(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        sellerOrders: { include: { seller: true, items: true } },
-      },
-    });
-    if (!order?.buyerId) return;
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: order.buyerId },
-    });
-    if (!user?.email) return;
-
-    const sellerCount = new Set(order.sellerOrders.map((so) => so.sellerId))
-      .size;
-    const itemCount = order.sellerOrders.reduce(
-      (sum, so) => sum + so.items.reduce((s, i) => s + i.quantity, 0),
-      0,
-    );
-
-    this.emailService.sendNewOrderAdminNotification({
-      orderId: order.orderNumber || order.id,
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-      buyerEmail: user.email,
-      itemCount,
-      sellerCount,
-    });
-  }
-
-  private async sendOrderConfirmationNotifications(
-    orderId: string,
-  ): Promise<void> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        customer: { select: { email: true, phoneNormalized: true } },
-        sellerOrders: {
-          include: {
-            items: {
-              include: {
-                sellerOffer: {
-                  include: { canonicalPart: { select: { title: true } } },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (!order) return;
-
-    const user = order.buyerId
-      ? await this.prisma.user.findUnique({
-          where: { id: order.buyerId },
-          select: { email: true },
-        })
-      : null;
-
-    const items = order.sellerOrders.flatMap((so) =>
-      so.items.map((item) => ({
-        name:
-          item.sellerOffer.canonicalPart?.title ||
-          `Part ${item.sellerOfferId.slice(0, 8)}`,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      })),
-    );
-
-    const address = order.shippingAddress as Record<string, string> | null;
-    const shippingStr = address
-      ? [address.line1, address.city, address.state, address.country]
-          .filter(Boolean)
-          .join(', ')
-      : undefined;
-
-    const email = user?.email || order.customer?.email || address?.email;
-    const phone =
-      order.verifiedPhone || order.customer?.phoneNormalized || address?.phone;
-    const notifications: Promise<void>[] = [];
-
-    if (email) {
-      notifications.push(
-        this.emailService.sendOrderConfirmation(email, {
-          orderId: order.orderNumber || order.id,
-          totalAmount: order.totalAmount,
-          currency: order.currency,
-          items,
-          shippingAddress: shippingStr,
-        }),
-      );
-    }
-    if (phone) {
-      notifications.push(
-        this.smsGlobalService.sendOrderConfirmationSms(phone, {
-          orderId: order.orderNumber || order.id,
-          totalAmount: order.totalAmount,
-          currency: order.currency,
-        }),
-      );
-    }
-
-    const results = await Promise.allSettled(notifications);
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        this.logger.error(`Order confirmation channel failed: ${result.reason}`);
-      }
-    }
   }
 
   private getDestinationCountry(shippingAddress: Record<string, unknown>) {

@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-08-31
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -115,7 +115,7 @@ as redirects/canonical aliases after slug collision and legacy-link coverage are
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-31
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -135,6 +135,10 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   the browse query, refinements stay on the current taxonomy URL, and pagination preserves
   those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support.
+- eBay store CTA — the homepage hero, desktop utility navigation, and mobile
+  menu expose the local four-color eBay wordmark with a prominent link to the
+  external store at `https://ebay.io/m/7vngBN`. External navigation opens in a
+  new tab with `noopener noreferrer`.
 - Guest-first checkout — SMS verification happens before delivery/payment; no
   password or login is required. Drafts survive refresh and payment failure,
   OTP supports paste/autofill/auto-submit, and account creation is offered only

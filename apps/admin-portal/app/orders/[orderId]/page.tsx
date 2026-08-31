@@ -48,7 +48,13 @@ function shippingAddressLines(address?: Record<string, unknown> | null) {
     .filter(Boolean)
     .join(", ");
 
-  return [text("name"), text("line1"), text("line2"), locality, text("country")].filter(Boolean);
+  return [
+    text("name"),
+    text("line1"),
+    text("line2"),
+    locality,
+    text("country"),
+  ].filter(Boolean);
 }
 
 interface OrderDetail {
@@ -59,7 +65,12 @@ interface OrderDetail {
   currency: string;
   createdAt: string;
   shippingAddress?: Record<string, unknown> | null;
-  buyer?: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  buyer?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   paymentIntent?: {
     id: string;
     provider: string;
@@ -74,13 +85,17 @@ interface OrderDetail {
     subTotal: number;
     shippingTotal: number;
     trackingNumber?: string | null;
+    trackingUrl?: string | null;
     carrier?: string | null;
     seller?: { name?: string };
     items: Array<{
       id: string;
       quantity: number;
       unitPrice: number;
-      sellerOffer: { canonicalPart?: { title?: string } | null; sellerTitle?: string | null };
+      sellerOffer: {
+        canonicalPart?: { title?: string } | null;
+        sellerTitle?: string | null;
+      };
     }>;
   }>;
 }
@@ -93,15 +108,23 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [acting, setActing] = useState<"cancel" | "refund" | string | null>(null);
+  const [acting, setActing] = useState<"cancel" | "refund" | string | null>(
+    null,
+  );
 
   const load = async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch(token, `${API_BASE_URL}/operations/orders/${params.orderId}`);
-      if (!res.ok) throw new Error(res.status === 404 ? "Order not found." : "Could not load order.");
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/orders/${params.orderId}`,
+      );
+      if (!res.ok)
+        throw new Error(
+          res.status === 404 ? "Order not found." : "Could not load order.",
+        );
       setOrder(await res.json());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not load order.");
@@ -117,23 +140,38 @@ export default function OrderDetailPage() {
   }, [token, params.orderId]);
 
   const canCancel =
-    order && !["CANCELLED", "REFUNDED"].includes(order.status) &&
-    !order.sellerOrders.some((so) => ["SHIPPED", "DELIVERED"].includes(so.status));
+    order &&
+    !["CANCELLED", "REFUNDED"].includes(order.status) &&
+    !order.sellerOrders.some((so) =>
+      ["SHIPPED", "DELIVERED"].includes(so.status),
+    );
   const canRefund = order?.paymentIntent?.status === "SUCCEEDED";
   const displayOrderNumber = order?.orderNumber || order?.id;
 
   const cancelOrder = async () => {
-    if (!order || !confirm(`Cancel order ${displayOrderNumber}? This can't be undone.`)) return;
+    if (
+      !order ||
+      !confirm(`Cancel order ${displayOrderNumber}? This can't be undone.`)
+    )
+      return;
     setActing("cancel");
     setError(null);
     setMessage(null);
     try {
-      const res = await apiFetch(token, `${API_BASE_URL}/operations/orders/${order.id}/cancel`, {
-        method: "POST",
-      });
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/orders/${order.id}/cancel`,
+        {
+          method: "POST",
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Could not cancel order.");
-      setMessage(data.refunded ? "Order cancelled and payment refunded." : "Order cancelled.");
+      setMessage(
+        data.refunded
+          ? "Order cancelled and payment refunded."
+          : "Order cancelled.",
+      );
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not cancel order.");
@@ -145,16 +183,25 @@ export default function OrderDetailPage() {
   const refundOrder = async () => {
     if (!order) return;
     const reason = prompt("Reason for refund (optional):") ?? undefined;
-    if (!confirm(`Refund order ${displayOrderNumber}? This charges the refund back to the buyer.`)) return;
+    if (
+      !confirm(
+        `Refund order ${displayOrderNumber}? This charges the refund back to the buyer.`,
+      )
+    )
+      return;
     setActing("refund");
     setError(null);
     setMessage(null);
     try {
-      const res = await apiFetch(token, `${API_BASE_URL}/operations/orders/${order.id}/refund`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
+      const res = await apiFetch(
+        token,
+        `${API_BASE_URL}/operations/orders/${order.id}/refund`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Could not refund order.");
       setMessage("Payment refunded.");
@@ -171,6 +218,7 @@ export default function OrderDetailPage() {
     status: string,
     trackingNumber?: string,
     carrier?: string,
+    trackingUrl?: string,
   ) => {
     setActing(`fulfillment:${sellerOrderId}`);
     setError(null);
@@ -186,15 +234,23 @@ export default function OrderDetailPage() {
             status,
             trackingNumber: trackingNumber || undefined,
             carrier: carrier || undefined,
+            trackingUrl: trackingUrl || undefined,
           }),
         },
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "Could not update delivery status.");
-      setMessage(`Delivery status updated to ${fulfillmentStatusLabel(status)}.`);
+      if (!res.ok)
+        throw new Error(data.message || "Could not update delivery status.");
+      setMessage(
+        `Delivery status updated to ${fulfillmentStatusLabel(status)}.`,
+      );
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not update delivery status.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not update delivery status.",
+      );
     } finally {
       setActing(null);
     }
@@ -213,10 +269,16 @@ export default function OrderDetailPage() {
   if (!order) {
     return (
       <PageBody className="space-y-4">
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
           {error || "Order not found."}
         </p>
-        <Link href="/orders" className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700">
+        <Link
+          href="/orders"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700"
+        >
           <ArrowLeftIcon className="h-4 w-4" /> Back to orders
         </Link>
       </PageBody>
@@ -241,14 +303,26 @@ export default function OrderDetailPage() {
         description={`Placed ${new Date(order.createdAt).toLocaleString()}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Badge tone={orderStatusTone(order.status)}>{order.status.replace(/_/g, " ")}</Badge>
+            <Badge tone={orderStatusTone(order.status)}>
+              {order.status.replace(/_/g, " ")}
+            </Badge>
             {canCancel && (
-              <Button variant="outline" size="sm" loading={acting === "cancel"} onClick={cancelOrder}>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={acting === "cancel"}
+                onClick={cancelOrder}
+              >
                 Cancel order
               </Button>
             )}
             {canRefund && (
-              <Button variant="dark" size="sm" loading={acting === "refund"} onClick={refundOrder}>
+              <Button
+                variant="dark"
+                size="sm"
+                loading={acting === "refund"}
+                onClick={refundOrder}
+              >
                 Refund payment
               </Button>
             )}
@@ -257,42 +331,73 @@ export default function OrderDetailPage() {
       />
 
       {error && (
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <p
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+        >
           {error}
         </p>
       )}
       {message && (
-        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+        >
           {message}
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5" aria-label="Buyer">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Buyer</h2>
-          <p className="mt-2 font-semibold text-slate-900">{order.buyer?.name || "Guest"}</p>
+        <section
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5"
+          aria-label="Buyer"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            Buyer
+          </h2>
+          <p className="mt-2 font-semibold text-slate-900">
+            {order.buyer?.name || "Guest"}
+          </p>
           {order.buyer?.email && (
             <p className="mt-1 text-sm text-graphite-600">
-              <a href={`mailto:${order.buyer.email}`} className="text-blue-700 hover:underline">
+              <a
+                href={`mailto:${order.buyer.email}`}
+                className="text-blue-700 hover:underline"
+              >
                 {order.buyer.email}
               </a>
             </p>
           )}
-          {order.buyer?.phone && <p className="mt-1 text-sm text-graphite-600">{order.buyer.phone}</p>}
+          {order.buyer?.phone && (
+            <p className="mt-1 text-sm text-graphite-600">
+              {order.buyer.phone}
+            </p>
+          )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5" aria-label="Payment">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Payment</h2>
+        <section
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5"
+          aria-label="Payment"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            Payment
+          </h2>
           {order.paymentIntent ? (
             <>
               <div className="mt-2 flex items-center gap-2">
-                <Badge tone={orderStatusTone(order.paymentIntent.status)} size="sm">
+                <Badge
+                  tone={orderStatusTone(order.paymentIntent.status)}
+                  size="sm"
+                >
                   {order.paymentIntent.status}
                 </Badge>
-                <span className="text-sm text-graphite-600 capitalize">{order.paymentIntent.provider}</span>
+                <span className="text-sm text-graphite-600 capitalize">
+                  {order.paymentIntent.provider}
+                </span>
               </div>
               <p className="mt-2 price text-lg text-slate-900">
-                {order.paymentIntent.currency} {order.paymentIntent.amount.toFixed(2)}
+                {order.paymentIntent.currency}{" "}
+                {order.paymentIntent.amount.toFixed(2)}
               </p>
             </>
           ) : (
@@ -300,35 +405,55 @@ export default function OrderDetailPage() {
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5" aria-label="Order total">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Order total</h2>
+        <section
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5"
+          aria-label="Order total"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+            Order total
+          </h2>
           <p className="mt-2 price text-2xl font-bold text-slate-900">
             {order.currency} {order.totalAmount.toFixed(2)}
           </p>
           <p className="mt-1 text-sm text-graphite-600">
-            {order.sellerOrders.length} seller{order.sellerOrders.length === 1 ? "" : "s"}
+            {order.sellerOrders.length} seller
+            {order.sellerOrders.length === 1 ? "" : "s"}
           </p>
         </section>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5" aria-label="Shipping address">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Shipping address</h2>
+      <section
+        className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5"
+        aria-label="Shipping address"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+          Shipping address
+        </h2>
         {shippingAddressLines(order.shippingAddress).length > 0 ? (
           <address className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 not-italic">
             {shippingAddressLines(order.shippingAddress).join("\n")}
           </address>
         ) : (
-          <p className="mt-2 text-sm text-graphite-600">No shipping address provided.</p>
+          <p className="mt-2 text-sm text-graphite-600">
+            No shipping address provided.
+          </p>
         )}
       </section>
 
       <section aria-label="Seller orders" className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">Seller orders</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-600">
+          Seller orders
+        </h2>
         {order.sellerOrders.map((so) => (
-          <div key={so.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+          <div
+            key={so.id}
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
               <div>
-                <p className="font-semibold text-slate-900">{so.seller?.name || "Seller"}</p>
+                <p className="font-semibold text-slate-900">
+                  {so.seller?.name || "Seller"}
+                </p>
                 <p className="part-number text-xs text-graphite-600">{so.id}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -340,17 +465,33 @@ export default function OrderDetailPage() {
                     {so.carrier} {so.trackingNumber}
                   </span>
                 )}
+                {so.trackingUrl && (
+                  <a
+                    href={so.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold text-blue-700 hover:underline"
+                  >
+                    Track shipment
+                  </a>
+                )}
               </div>
             </div>
             <ul className="divide-y divide-slate-100">
               {so.items.map((item) => (
-                <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"
+                >
                   <span className="min-w-0 text-sm text-slate-700">
                     <span className="font-semibold">{item.quantity}×</span>{" "}
-                    {item.sellerOffer.canonicalPart?.title || item.sellerOffer.sellerTitle || "Part"}
+                    {item.sellerOffer.canonicalPart?.title ||
+                      item.sellerOffer.sellerTitle ||
+                      "Part"}
                   </span>
                   <span className="shrink-0 price text-sm">
-                    {order.currency} {(item.unitPrice * item.quantity).toFixed(2)}
+                    {order.currency}{" "}
+                    {(item.unitPrice * item.quantity).toFixed(2)}
                   </span>
                 </li>
               ))}
@@ -379,38 +520,67 @@ function SellerOrderFulfillmentEditor({
     status: string,
     trackingNumber?: string,
     carrier?: string,
+    trackingUrl?: string,
   ) => Promise<void>;
 }) {
   const [status, setStatus] = useState(sellerOrder.status);
-  const [trackingNumber, setTrackingNumber] = useState(sellerOrder.trackingNumber || "");
+  const [trackingNumber, setTrackingNumber] = useState(
+    sellerOrder.trackingNumber || "",
+  );
   const [carrier, setCarrier] = useState(sellerOrder.carrier || "");
+  const [trackingUrl, setTrackingUrl] = useState(sellerOrder.trackingUrl || "");
   const nextStatuses = NEXT_FULFILLMENT_STATUSES[sellerOrder.status] || [];
-  const options = [sellerOrder.status, ...nextStatuses.filter((value) => value !== sellerOrder.status)];
+  const options = [
+    sellerOrder.status,
+    ...nextStatuses.filter((value) => value !== sellerOrder.status),
+  ];
   const dirty =
     status !== sellerOrder.status ||
     trackingNumber !== (sellerOrder.trackingNumber || "") ||
-    carrier !== (sellerOrder.carrier || "");
+    carrier !== (sellerOrder.carrier || "") ||
+    trackingUrl !== (sellerOrder.trackingUrl || "");
 
   useEffect(() => {
     setStatus(sellerOrder.status);
     setTrackingNumber(sellerOrder.trackingNumber || "");
     setCarrier(sellerOrder.carrier || "");
-  }, [sellerOrder.id, sellerOrder.status, sellerOrder.trackingNumber, sellerOrder.carrier]);
+    setTrackingUrl(sellerOrder.trackingUrl || "");
+  }, [
+    sellerOrder.id,
+    sellerOrder.status,
+    sellerOrder.trackingNumber,
+    sellerOrder.trackingUrl,
+    sellerOrder.carrier,
+  ]);
 
-  if (options.length <= 1 && !sellerOrder.trackingNumber && !sellerOrder.carrier) {
+  if (
+    options.length <= 1 &&
+    sellerOrder.status !== "SHIPPED" &&
+    !sellerOrder.trackingNumber &&
+    !sellerOrder.carrier &&
+    !sellerOrder.trackingUrl
+  ) {
     return null;
   }
 
   return (
     <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
       <div className="mb-3">
-        <h3 className="text-sm font-semibold text-slate-900">Update delivery</h3>
+        <h3 className="text-sm font-semibold text-slate-900">
+          Update delivery
+        </h3>
         <p className="mt-1 text-xs text-graphite-600">
-          Move this seller shipment through its next valid step. Completed and cancelled shipments are locked.
+          Move this seller shipment through its next valid step. Completed and
+          cancelled shipments are locked.
         </p>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
-        <Select label="Delivery status" value={status} onChange={(event) => setStatus(event.target.value)} disabled={saving}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:items-end">
+        <Select
+          label="Delivery status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          disabled={saving}
+        >
           {options.map((option) => (
             <option key={option} value={option}>
               {fulfillmentStatusLabel(option)}
@@ -434,13 +604,34 @@ function SellerOrderFulfillmentEditor({
           disabled={saving}
           autoComplete="organization"
         />
+        <Input
+          label="Shipment tracking URL"
+          type="url"
+          value={trackingUrl}
+          onChange={(event) => setTrackingUrl(event.target.value)}
+          disabled={saving}
+          placeholder="https://carrier.example/track/…"
+          hint="Optional. Sent to the customer when saved."
+          autoComplete="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
       </div>
       <div className="mt-3 flex justify-end">
         <Button
           size="sm"
           loading={saving}
           disabled={!dirty || saving}
-          onClick={() => onSave(sellerOrder.id, status, trackingNumber.trim(), carrier.trim())}
+          onClick={() =>
+            onSave(
+              sellerOrder.id,
+              status,
+              trackingNumber.trim(),
+              carrier.trim(),
+              trackingUrl.trim(),
+            )
+          }
         >
           Save delivery update
         </Button>

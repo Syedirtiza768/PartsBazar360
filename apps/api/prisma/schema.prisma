@@ -942,6 +942,7 @@ model SellerOrder {
   status              SellerOrderStatus @default(AWAITING_PAYMENT)
   trackingNumber      String?
   carrier             String?
+  trackingUrl         String?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 

@@ -1,10 +1,15 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-27
+**Last reviewed:** 2026-08-31
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
 ## Order fulfillment
+
+The order detail and operations screens allow staff to save an HTTP(S)
+shipment tracking URL alongside the tracking number and carrier. Saving a
+status or shipment-detail change notifies the customer by SMS and email and
+copies `info@partsbazar360.com`; tracking links are included in those updates.
 
 ## 2026-08-26 blog CMS
 

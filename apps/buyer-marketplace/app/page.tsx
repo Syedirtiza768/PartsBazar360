@@ -14,6 +14,7 @@ import {
 } from "@repo/ui/icons";
 import { INTERNAL_API_URL } from "@/lib/api";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { EbayStoreLink } from "@/components/EbayStoreLink";
 import { HeroSearch } from "@/components/HeroSearch";
 import { ProductCard } from "@/components/ProductCard";
 import { RecentlyViewed } from "@/components/RecentlyViewed";
@@ -147,6 +148,10 @@ export default async function Home() {
             <div className="mt-7 sm:mt-8">
               <HeroSearch />
             </div>
+            <EbayStoreLink
+              variant="prominent"
+              className="mt-5 max-w-full sm:mt-6 sm:max-w-md"
+            />
 
             <ul className="mt-5 flex flex-col gap-2.5 text-xs font-semibold text-slate-300 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3">
               <li className="flex items-center gap-2">
