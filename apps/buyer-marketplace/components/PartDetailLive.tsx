@@ -5,6 +5,7 @@ import { ImageGallery } from "./ImageGallery";
 import { BuyBox, StickyMobileBar } from "./BuyBox";
 import { useEnrichmentReconcile } from "@/lib/use-enrichment-reconcile";
 import type { Part } from "@/lib/types";
+import { ViewItemTracker } from "./ViewItemTracker";
 
 /**
  * Client shell around the gallery and buy box so a background enrichment job
@@ -36,6 +37,7 @@ export function PartDetailLive({
 
   return (
     <>
+      <ViewItemTracker part={livePart} />
       {/*
         Grid placement keeps a sensible mobile order (gallery → buy box →
         details) while the buy box occupies a sticky right rail on desktop.

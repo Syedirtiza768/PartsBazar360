@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { API_BASE_URL } from './api';
+import { useCurrency } from './currency-context';
+import { ecommerceMoney, pushAddToCart } from './ecommerce-tracking';
 
 const SESSION_STORAGE_KEY = 'pb360_session_id';
 
@@ -51,6 +53,7 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartState>({ id: null, items: [] });
   const [loading, setLoading] = useState(false);
+  const { currency, convert } = useCurrency();
 
   const refresh = useCallback(async () => {
     const sessionId = getSessionId();
@@ -93,12 +96,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
         throw new Error(err.message || 'Failed to add item to cart');
       }
 
-      const data = await res.json();
-      setCart({ id: data.id, items: data.items ?? [] });
+      const data = (await res.json()) as { id: string; items?: CartItem[] };
+      const nextItems = data.items ?? [];
+      setCart({ id: data.id, items: nextItems });
+
+      // The response is the server-confirmed cart state, so a rejected add can
+      // never reach this event.
+      const addedLine = nextItems.find(
+        (item) => item.sellerOffer?.id === offerId,
+      );
+      const product = addedLine?.sellerOffer?.canonicalPart;
+      if (addedLine && product?.id && product.title) {
+        const price = ecommerceMoney(
+          convert(
+            Number(addedLine.sellerOffer.price),
+            addedLine.sellerOffer.currency,
+          ),
+        );
+        pushAddToCart({
+          currency,
+          value: ecommerceMoney(price * quantity),
+          items: [
+            {
+              item_id: product.id,
+              item_name: product.title,
+              price,
+              quantity,
+            },
+          ],
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [ensureCartId]);
+  }, [convert, currency, ensureCartId]);
 
   const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     const cartId = await ensureCartId();

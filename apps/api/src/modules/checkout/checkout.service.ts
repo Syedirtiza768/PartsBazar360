@@ -30,6 +30,7 @@ import {
 import { CheckoutIdentityService } from './checkout-identity.service';
 import { OrderNotificationService } from '../order/order-notification.service';
 import { normalizePhone, normalizeUnvalidatedPhone } from '../auth/phone.util';
+import { buildPurchaseTrackingPayload } from './purchase-tracking.util';
 
 @Injectable()
 export class CheckoutService {
@@ -1378,7 +1379,10 @@ export class CheckoutService {
       authorized = true;
     }
     if (!authorized) throw new UnauthorizedException('Order access denied');
-    return order;
+    return {
+      ...order,
+      ecommerce: buildPurchaseTrackingPayload(order),
+    };
   }
 
   private getDestinationCountry(shippingAddress: Record<string, unknown>) {

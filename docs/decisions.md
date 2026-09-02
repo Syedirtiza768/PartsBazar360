@@ -1,6 +1,25 @@
 # Decision log
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-09-02
+
+## 2026-09-02 — Gate purchase analytics on authoritative payment state
+
+**Decision:** The API, rather than the confirmation-page URL or browser order
+cache, builds the GTM purchase payload. It returns that payload only when both
+`Order.status=PAID` and `PaymentIntent.status=SUCCEEDED`. The storefront
+pushes it once per backend-generated transaction ID and persists that marker
+in localStorage to prevent refresh duplicates. Product, add-to-cart, and
+checkout events share the canonical product identity and buyer-facing/charge
+currency conversion path.
+
+**Why:** A payment-provider redirect only means the buyer returned to the
+site; it does not prove the webhook was valid or the order was settled.
+Deriving revenue and item data from the database snapshot prevents cancelled
+or failed payments, query-string tampering, stale cart prices, multi-item loss,
+and refresh-driven duplicate conversions.
+
+**Revisit when:** purchase dispatch moves to a server-side Measurement
+Protocol/outbox flow or the order schema gains a first-class tax total.
 
 ## 2026-08-31 — Fan out order lifecycle updates to customer and operations
 

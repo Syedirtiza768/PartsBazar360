@@ -26,7 +26,7 @@ import { API_BASE_URL } from "@/lib/api";
 import { humanize } from "@/lib/format";
 import { partTypeFromLegacy, partTypeLabel } from "@repo/catalog-contracts";
 import { useCurrency } from "@/lib/currency-context";
-import { SETTLEMENT_CURRENCY } from "@/lib/currency";
+import { convertAmount, SETTLEMENT_CURRENCY } from "@/lib/currency";
 import { CartLineFitment } from "@/components/CartLineFitment";
 import { ReturnsPolicyNote } from "@/components/ReturnsPolicyNote";
 import { OtpCodeInput } from "@/components/OtpCodeInput";
@@ -52,6 +52,10 @@ import {
 } from "@/lib/shipping-destination";
 import { useShippingQuote, type ShippingQuote } from "@/lib/use-shipping-quote";
 import { tamaraMarket } from "@/lib/tamara";
+import {
+  ecommerceMoney,
+  pushBeginCheckoutOnce,
+} from "@/lib/ecommerce-tracking";
 
 type FormState = {
   name: string;
@@ -347,6 +351,7 @@ function CheckoutContent() {
     format,
     currency: displayCurrency,
     settlementCurrency,
+    ready: currencyReady,
   } = useCurrency();
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -428,6 +433,54 @@ function CheckoutContent() {
   const freightSellers = (shippingQuote?.sellerQuotes ?? []).filter(
     (quote) => quote.requiresFreightQuote,
   );
+
+  useEffect(() => {
+    if (
+      !currencyReady ||
+      !checkoutReady ||
+      !checkoutSessionId ||
+      items.length === 0
+    ) {
+      return;
+    }
+
+    const ecommerceItems = items.flatMap((item) => {
+      const product = item.sellerOffer.canonicalPart;
+      if (!product?.id || !product.title) return [];
+      return [
+        {
+          item_id: product.id,
+          item_name: product.title,
+          price: ecommerceMoney(
+            convertAmount(
+              Number(item.sellerOffer.price),
+              item.sellerOffer.currency,
+              checkoutCurrency,
+            ),
+          ),
+          quantity: item.quantity,
+        },
+      ];
+    });
+    if (ecommerceItems.length === 0) return;
+
+    pushBeginCheckoutOnce(checkoutSessionId, {
+      currency: checkoutCurrency,
+      value: ecommerceMoney(
+        ecommerceItems.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0,
+        ),
+      ),
+      items: ecommerceItems,
+    });
+  }, [
+    checkoutCurrency,
+    checkoutReady,
+    checkoutSessionId,
+    currencyReady,
+    items,
+  ]);
 
   useEffect(() => {
     if (!cart.id || checkoutReady) return;

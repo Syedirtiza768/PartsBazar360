@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-09-02
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -10,6 +10,21 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
 - [[../packages/catalog-contracts]] — shared types
 - [[api]] — all data (search, cart, checkout, orders) comes from here
 - `libphonenumber-js` — phone input/validation (checkout, WhatsApp contact)
+
+## Ecommerce dataLayer contract
+
+The buyer app emits the GTM ecommerce events `view_item`, `add_to_cart`,
+`begin_checkout`, and `purchase` through `lib/ecommerce-tracking.ts`.
+Product, cart, and checkout events use the API-backed canonical part ID/title
+and convert offer prices into the currency the buyer is viewing or will be
+charged in. Add-to-cart is emitted only after the cart POST succeeds.
+
+The success page never builds a purchase from URL parameters or stale browser
+history. It polls the authorized order endpoint and emits only the
+server-produced `ecommerce` payload returned for a paid, successfully settled
+order. A localStorage marker keyed by the backend transaction ID prevents the
+same browser from pushing the purchase again on refresh; downstream GTM/GA4
+should also use `transaction_id` as its idempotency key.
 
 ## Known feature areas
 

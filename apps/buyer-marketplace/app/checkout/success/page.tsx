@@ -19,6 +19,10 @@ import {
 } from "@/lib/checkout-session";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
+import {
+  pushPurchaseOnce,
+  type PurchaseEcommercePayload,
+} from "@/lib/ecommerce-tracking";
 
 function SuccessContent() {
   const params = useSearchParams();
@@ -77,6 +81,7 @@ function SuccessContent() {
           const current = (await response.json()) as {
             status?: string;
             orderNumber?: string | null;
+            ecommerce?: PurchaseEcommercePayload | null;
           };
           if (cancelled) return;
           setOrder((previous) =>
@@ -90,7 +95,10 @@ function SuccessContent() {
           );
           if (current.status === "PAID") {
             setPaymentState("paid");
-            return;
+            if (current.ecommerce) {
+              pushPurchaseOnce(current.ecommerce);
+              return;
+            }
           }
           if (current.status === "PAYMENT_FAILED") {
             setPaymentState("failed");

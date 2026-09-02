@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-09-02
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -35,6 +35,17 @@ queries and reports as `No space left on device` even when the host disk has
 free capacity.
 
 Run modes: `start:dev` (web process, watch), `start:worker` (background job worker — separate process, see `src/worker.js`).
+
+## Purchase tracking payload
+
+`GET /checkout/orders/:orderId` includes `ecommerce: null` until both the
+parent order is `PAID` and its payment intent is `SUCCEEDED`. Once both are
+true, the API builds the purchase payload from the immutable order snapshot:
+the public order number (UUID fallback), charge currency and total, every
+order item's canonical part identity/unit price/quantity, and seller-order
+shipping totals. Tax is derived from the charged total after item subtotal,
+coupon discount, and shipping because tax is not currently stored as a
+separate order column.
 
 ## Modules (`src/modules/*`)
 
