@@ -16,6 +16,7 @@
 
 import { parseQuery, isPartNumberQuery, type ParsedQuery } from './query-parser';
 import { partNumberVariants } from './part-number.util';
+import { PAYMENT_TEST_PART_ID } from '@repo/catalog-contracts';
 
 /**
  * Ranking weights, highest first. Ordered exactly as the brief §5 lists them.
@@ -72,7 +73,12 @@ export interface SearchFilters {
 
 /** Clauses that require at least one indexed, buyer-visible offer. */
 function visibilityFilters(): any[] {
-  return [{ nested: { path: 'offers', query: { exists: { field: 'offers.sellerId' } } } }];
+  return [
+    { nested: { path: 'offers', query: { exists: { field: 'offers.sellerId' } } } },
+    // Defend against a stale OpenSearch document. The indexer deletes this
+    // internal item, but query-time exclusion keeps search safe during cleanup.
+    { bool: { must_not: [{ ids: { values: [PAYMENT_TEST_PART_ID] } }] } },
+  ];
 }
 
 /**

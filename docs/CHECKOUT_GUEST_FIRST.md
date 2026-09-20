@@ -1,6 +1,6 @@
 # Guest-first checkout
 
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-09-20
 
 PartsBazar360 checkout treats a verified phone as a commerce identity, not as
 an account login. Buying never requires a password.
@@ -148,13 +148,13 @@ Tamara's production notification endpoint is
 
 ### Verifying with real money
 
-`payment:test-product` creates a 1 AED purchasable item at
-`/buyer/parts/payment-verification-item/`. It is flagged
-`_hiddenFromCatalog`, so it never appears in browse, search, related products,
-or any sitemap, and is `noindex` — see [[SEO_ARCHITECTURE]] §11c. Buy it with a
-real card and a real Tamara plan to confirm the full round trip: session →
-redirect → webhook → order marked paid. Refund afterwards from the respective
-dashboard.
+`payment:test-product` creates a 1 AED backend offer with the
+`_hiddenFromCatalog` flag. It never appears in browse, search, related products,
+or any sitemap, and the buyer storefront returns a real 404 for its product URL
+— see [[SEO_ARCHITECTURE]] §11c. Payment verification must therefore be driven
+through the internal checkout flow rather than a public product page. Use a real
+card and a real Tamara plan to confirm the full round trip: session → redirect →
+webhook → order marked paid. Refund afterwards from the respective dashboard.
 
 Take the offer down without deleting the order history:
 

@@ -12,7 +12,8 @@
  *     facets, related products, or fitment results),
  *   - `noindex` (so a crawler that finds the URL will not index it),
  *   - absent from every sitemap,
- *   - still reachable by its own URL, so checkout can be driven end to end.
+ *   - returns a storefront 404 even when someone knows its URL; it remains in
+ *     the backend so internal payment verification can keep using it.
  *
  * Lives outside `seo/` because it is a catalog concept the search indexers
  * consume too, and importing it from there would make the SEO engine a

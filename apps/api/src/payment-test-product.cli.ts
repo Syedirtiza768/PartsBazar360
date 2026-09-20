@@ -11,7 +11,7 @@
  * It must not become a buyer-visible listing. The part is flagged
  * `_hiddenFromCatalog`, which (via `isCatalogHidden`) removes it from both
  * search indexes, forces `noindex`, and excludes it from every sitemap — while
- * leaving its own URL reachable so a real checkout can be driven end to end.
+ * keeping the backend offer available for internal payment verification.
  *
  * Idempotent: keyed on a fixed part id and a fixed offer `sourceKey`, so
  * re-running updates the same rows instead of accumulating duplicates.

@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-09-20
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -130,7 +130,7 @@ as redirects/canonical aliases after slug collision and legacy-link coverage are
 - Map out the page/route structure (App Router layout).
 - Document the buyer session/auth model vs seller/admin.
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-09-20
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -188,6 +188,11 @@ Full detail in [[../SEO_ARCHITECTURE]]. What lives in this app:
 - `lib/product-specs.ts` — the PDP spec table. This is _presentation_; it was
   split out of the old `lib/product-seo.ts` (now deleted) so a display tweak and
   a metadata rule no longer share a file.
+
+Catalog-hidden parts (`itemSpecifics._hiddenFromCatalog = true`) are excluded
+from all public catalog surfaces and return a real 404 from the canonical PDP,
+even when a visitor knows the exact slug. Their backend rows can remain active
+for internal operational flows such as payment verification.
 
 `lib/part-resolve.ts` degrades safely when the API has no `/seo/resolve` route
 (mid-rollout or rollback): a UUID segment renders directly rather than 404ing.

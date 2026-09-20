@@ -1,6 +1,6 @@
 # SEO Architecture
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-09-20
 
 How PartsBazar360 generates SEO. The governing idea: **SEO is a property of the
 domain, not of the page templates.** Nothing about a listing's URL, metadata,
@@ -347,11 +347,16 @@ One flag, consulted everywhere, via `isCatalogHidden()` in
 
 - both search indexers *delete* rather than write it, so it cannot appear in
   browse, search, facets, related products, or fitment results;
+- every OpenSearch query also excludes its fixed id as a stale-index defense,
+  keeping result cards, totals, autocomplete, and facet counts clean while an
+  index cleanup is in flight;
 - `decidePartIndexability` returns `noindex` and — unlike every other rule —
   **no admin override can unhide it**;
 - the sitemap SQL predicate excludes it (alongside any admin `noindex`
   override, which a sitemap must never advertise);
-- its own URL still resolves, so checkout can be driven end to end.
+- the buyer storefront returns a real 404 for its URL, so the operational item
+  cannot be viewed as a public product even when someone knows the slug; the
+  backend row and offer remain available for internal payment verification.
 
 Deactivate the offer without deleting history:
 `node dist/src/payment-test-product.cli.js --deactivate`
