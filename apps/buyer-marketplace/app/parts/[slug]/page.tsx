@@ -13,7 +13,7 @@ import {
 import { SeoLinkCloud } from "@/components/SeoLinkCloud";
 import { SalvagePanel } from "@/components/SalvagePanel";
 import { humanize } from "@/lib/format";
-import { partTypeFromLegacy, partPath } from "@repo/catalog-contracts";
+import { isCatalogHidden, partTypeFromLegacy, partPath } from "@repo/catalog-contracts";
 import { sanitizeProductHtml } from "@/lib/sanitize-html";
 import { getPartById, resolvePartSegment } from "@/lib/part-resolve";
 import { partSeo, toMetadata } from "@/lib/seo";
@@ -54,6 +54,14 @@ async function loadPart(
 
   const part = await getPartById(resolved.id);
   if (!part) return null;
+  // Catalog-hidden parts are internal operational items. They may still exist
+  // for backend payment verification, but they must never render as a public
+  // buyer-facing product page, even when someone knows the exact URL.
+  if (isCatalogHidden({
+    itemSpecifics: part.itemSpecifics as Record<string, unknown> | null,
+  })) {
+    return null;
+  }
   // The API's part payload predates slugs on some paths; the resolver is
   // authoritative, so stamp the canonical slug on before SEO generation.
   return { ...part, slug: part.slug ?? resolved.slug };

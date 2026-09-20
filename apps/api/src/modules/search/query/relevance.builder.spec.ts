@@ -5,6 +5,7 @@ import {
   buildFilters,
   buildSort,
 } from './relevance.builder';
+import { PAYMENT_TEST_PART_ID } from '@repo/catalog-contracts';
 
 /** Collect every clause carrying `_name`, keyed by name, with its boost. */
 function namedClauses(node: any, out: Record<string, number[]> = {}) {
@@ -260,6 +261,10 @@ describe('buildFilters', () => {
 
   it('always requires at least one buyer-visible offer', () => {
     expect(jsonOf(buildFilters({}))).toContain('offers.sellerId');
+  });
+
+  it('always excludes the internal payment-verification item', () => {
+    expect(jsonOf(buildFilters({}))).toContain(PAYMENT_TEST_PART_ID);
   });
 
   it('constrains condition and price against the same offer', () => {

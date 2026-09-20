@@ -9,7 +9,10 @@ import {
   sanitizeIdentifier,
   sanitizeIdentifierList,
 } from './identifier-sanitize.util';
-import { isCatalogHidden } from '@repo/catalog-contracts';
+import {
+  isCatalogHidden,
+  PAYMENT_TEST_PART_ID,
+} from '@repo/catalog-contracts';
 import {
   canonicalizeCatalogBrand,
   canonicalizeVehicleMakes,
@@ -18,6 +21,14 @@ import {
 } from '../catalog-import/catalog-identity.util';
 
 export type BrowseSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
+
+function paymentTestPartIdsQuery() {
+  return { ids: { values: [PAYMENT_TEST_PART_ID] } };
+}
+
+function paymentTestPartFilter() {
+  return { bool: { must_not: [paymentTestPartIdsQuery()] } };
+}
 
 export interface BrowseFacets {
   brands: Array<{ name: string; count: number }>;
@@ -291,7 +302,7 @@ export class OpenSearchService implements OnModuleInit {
     try {
       // Catalog-hidden parts (the payment-verification item) are removed
       // rather than indexed, so they never appear in any buyer-facing list
-      // while remaining reachable by their own URL for checkout testing.
+      // while remaining available to backend checkout verification.
       if (isCatalogHidden(part)) {
         try {
           await this.client.delete({ index: this.INDEX_NAME, id: part.id });
@@ -484,6 +495,7 @@ export class OpenSearchService implements OnModuleInit {
           query: {
             bool: {
               must,
+              must_not: [paymentTestPartIdsQuery()],
             },
           },
           // Imaged listings first here too: a verified-fit result the buyer
@@ -669,6 +681,7 @@ export class OpenSearchService implements OnModuleInit {
     const baseFilters: any[] = [
       // Browse only parts that still have at least one indexed offer.
       matchingOffersFilter,
+      paymentTestPartFilter(),
     ];
     if (cats.length) baseFilters.push({ terms: { 'category.keyword': cats } });
     if (groups.length)
@@ -768,6 +781,7 @@ export class OpenSearchService implements OnModuleInit {
             query: { bool: { filter: scopedOffers } },
           },
         },
+        paymentTestPartFilter(),
       ];
       if (!skip('category') && cats.length)
         f.push({ terms: { 'category.keyword': cats } });
@@ -1203,6 +1217,7 @@ export class OpenSearchService implements OnModuleInit {
                   },
                 },
               ],
+              must_not: [paymentTestPartIdsQuery()],
             },
           },
           aggs: {
@@ -1308,6 +1323,7 @@ export class OpenSearchService implements OnModuleInit {
         index: this.INDEX_NAME,
         body: {
           size: 0,
+          query: { bool: { must_not: [paymentTestPartIdsQuery()] } },
           aggs: {
             brands: {
               terms: {
