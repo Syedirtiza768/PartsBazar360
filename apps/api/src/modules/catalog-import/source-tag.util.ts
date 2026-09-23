@@ -13,6 +13,7 @@
  *   TNRU — TRADE_UNION          (spreadsheet)
  *   SAL  — RealTrack Salvage Auto Parts (eBay)
  *   BLK  — RealTrack Blackline Auto Parts (eBay)
+ *   STX  — RealTrack Superior Auto Parts (eBay)
  *   GEN  — GENERIC / unclassified spreadsheet uploads
  */
 
@@ -24,7 +25,7 @@ import {
 
 export const SOURCE_TAGS = [
   'BST', 'AAP', 'YNTD', 'PSRC', 'TNRU',
-  'SAL', 'BLK', 'GEN',
+  'SAL', 'BLK', 'STX', 'GEN',
 ] as const;
 
 export type SourceTag = (typeof SOURCE_TAGS)[number];
@@ -37,6 +38,7 @@ export const SOURCE_TAG_LABELS: Record<SourceTag, string> = {
   TNRU: 'Trade Union',
   SAL: 'Salvage',
   BLK: 'Blackline',
+  STX: 'Superior',
   GEN: 'General',
 };
 

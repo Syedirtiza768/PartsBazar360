@@ -9,6 +9,8 @@
 
 export const SALVAGE_STORE_ID = '3b84b063-3811-481f-a61d-f7846a03558f';
 export const BLACKLINE_STORE_ID = 'd16199c4-55b5-429e-ad27-892bed94e00d';
+export const SUPERIOR_REALTRACK_STORE_ID =
+  'c6e35671-50d4-4920-a5f7-8dc870a157c7';
 
 export type MarketplaceSellerKey = 'salvage' | 'blackline' | 'superior';
 
@@ -69,6 +71,41 @@ export const REALTRACK_MARKETPLACE_SELLERS = [
   MARKETPLACE_SELLERS.blackline,
   MARKETPLACE_SELLERS.salvage,
 ] as const;
+
+/**
+ * Explicit report-driven reconciliation scopes.
+ *
+ * Superior remains spreadsheet-only for ordinary marketplace syncs. Its
+ * RealTrack store is included here only when the operator supplies the
+ * matching active-listings report, which prevents a partial RealTrack mirror
+ * from deactivating spreadsheet-backed Superior offers.
+ */
+export const REALTRACK_RECONCILIATION_SCOPES = {
+  BLK: {
+    key: 'BLK',
+    sellerKey: 'blackline',
+    sellerId: MARKETPLACE_SELLERS.blackline.id,
+    storeId: BLACKLINE_STORE_ID,
+    sourceTag: 'BLK',
+    fileEnv: 'BLACKLINE_FILE',
+  },
+  SAL: {
+    key: 'SAL',
+    sellerKey: 'salvage',
+    sellerId: MARKETPLACE_SELLERS.salvage.id,
+    storeId: SALVAGE_STORE_ID,
+    sourceTag: 'SAL',
+    fileEnv: 'SALVAGE_FILE',
+  },
+  STX: {
+    key: 'STX',
+    sellerKey: 'superior',
+    sellerId: MARKETPLACE_SELLERS.superior.id,
+    storeId: SUPERIOR_REALTRACK_STORE_ID,
+    sourceTag: 'STX',
+    fileEnv: 'SUPERIOR_FILE',
+  },
+} as const;
 
 export function findMarketplaceSellerByStoreId(
   storeId: string | null | undefined,

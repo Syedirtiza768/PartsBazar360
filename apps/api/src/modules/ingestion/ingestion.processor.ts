@@ -374,6 +374,24 @@ export class IngestionProcessor extends WorkerHost {
     };
   }
 
+  /**
+   * Import a listing discovered by an operator-supplied RealTrack/eBay
+   * reconciliation report. The seller and source tag are explicit so a
+   * report-backed Superior run can use its spreadsheet seller row without
+   * making Superior a default RealTrack sync target.
+   */
+  async processReconciliationListing(
+    listing: any,
+    expectedStoreId: string,
+    sellerId: string,
+    sourceTag: string,
+  ) {
+    return this.processListing(listing, expectedStoreId, {
+      sellerIdOverride: sellerId,
+      sourceTagOverride: sourceTag,
+    });
+  }
+
   private async syncStore(
     storeId: string,
     startPage: number,
@@ -580,6 +598,10 @@ export class IngestionProcessor extends WorkerHost {
   private async processListing(
     listing: any,
     expectedStoreId: string,
+    options?: {
+      sellerIdOverride?: string;
+      sourceTagOverride?: string;
+    },
   ): Promise<
     | 'imported'
     | 'skipped_wrong_store'
@@ -612,6 +634,8 @@ export class IngestionProcessor extends WorkerHost {
     }
 
     const stockQty = stockQuantityForImport(listing);
+    // Reuse the source gallery URLs. This path never downloads or uploads
+    // image binaries, so shared RealTrack/S3 objects are not duplicated.
     const imageUrls = extractListingImages(listing);
     if (hasEbayMagImages(listing)) {
       this.logger.warn(
@@ -700,7 +724,9 @@ export class IngestionProcessor extends WorkerHost {
     });
 
     const seller = await this.prisma.seller.findFirst({
-      where: { storeId: expectedStoreId },
+      where: options?.sellerIdOverride
+        ? { id: options.sellerIdOverride }
+        : { storeId: expectedStoreId },
       include: { warehouses: true },
     });
 
@@ -826,7 +852,8 @@ export class IngestionProcessor extends WorkerHost {
           partType: 'SALVAGE_OEM',
           partSource: 'OEM',
           qualityTier: 'USED',
-          sourceTag: tagFromStoreId(expectedStoreId),
+          sourceTag:
+            options?.sourceTagOverride ?? tagFromStoreId(expectedStoreId),
         },
       });
     } else {
@@ -851,7 +878,8 @@ export class IngestionProcessor extends WorkerHost {
           partType: 'SALVAGE_OEM',
           partSource: 'OEM',
           qualityTier: 'USED',
-          sourceTag: tagFromStoreId(expectedStoreId),
+          sourceTag:
+            options?.sourceTagOverride ?? tagFromStoreId(expectedStoreId),
         },
       });
     }
