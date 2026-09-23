@@ -23,8 +23,10 @@
  *   CONFIRM=1 ... node dist/src/reconcile-realtrack-reports.cli.js
  */
 import 'dotenv/config';
+import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma.service';
@@ -51,6 +53,88 @@ function asScope(value: string): value is Scope {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === ',' && !quoted) {
+      values.push(value);
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  values.push(value);
+  return values;
+}
+
+async function readCsvReport(filePath: string) {
+  const reader = createInterface({
+    input: createReadStream(filePath, { encoding: 'utf8' }),
+    crlfDelay: Infinity,
+  });
+  let headers: string[] | null = null;
+  let itemIndex = -1;
+  let skuIndex = -1;
+  let rowCount = 0;
+  let missingSkuRows = 0;
+  const skus = new Set<string>();
+
+  for await (const line of reader) {
+    const values = parseCsvLine(line);
+    if (!headers) {
+      headers = values.map((header) =>
+        header.replace(/^\\uFEFF/, '').trim(),
+      );
+      itemIndex = headers.indexOf('Item number');
+      skuIndex = headers.indexOf('Custom label (SKU)');
+      if (itemIndex < 0) {
+        throw new Error('"Item number" column not found in ' + filePath);
+      }
+      if (skuIndex < 0) {
+        throw new Error('"Custom label (SKU)" column not found in ' + filePath);
+      }
+      continue;
+    }
+    const itemNumber = String(values[itemIndex] || '').trim();
+    if (!itemNumber) continue;
+    rowCount++;
+    const sku = normalizeSku(values[skuIndex]);
+    if (sku) skus.add(sku);
+    else missingSkuRows++;
+  }
+
+  return { rowCount, skus, missingSkuRows };
+}
+
+async function readReport(filePath: string) {
+  if (filePath.toLowerCase().endsWith('.csv')) {
+    return readCsvReport(filePath);
+  }
+  const fileRows = await readActiveItemNumbers(filePath);
+  const skus = new Set(
+    [...fileRows.values()]
+      .map(normalizeSku)
+      .filter((sku) => sku.length > 0),
+  );
+  return {
+    rowCount: fileRows.size,
+    skus,
+    missingSkuRows: [...fileRows.values()].filter(
+      (sku) => normalizeSku(sku).length === 0,
+    ).length,
+  };
 }
 
 async function scanRealTrack(
@@ -183,17 +267,11 @@ async function main() {
       }
 
       console.log(`\n=== ${scopeKey} — ${sellerConfig.name} — ${filePath}`);
-      const fileRows = await readActiveItemNumbers(filePath);
-      const reportSkus = new Set(
-        [...fileRows.values()]
-          .map(normalizeSku)
-          .filter((sku) => sku.length > 0),
-      );
-      const missingSkuRows = [...fileRows.values()].filter(
-        (sku) => normalizeSku(sku).length === 0,
-      ).length;
+      const report = await readReport(filePath);
+      const reportSkus = report.skus;
+      const missingSkuRows = report.missingSkuRows;
       console.log(
-        `Report rows=${fileRows.size} reportSkus=${reportSkus.size} missingSkuRows=${missingSkuRows}`,
+        `Report rows=${report.rowCount} reportSkus=${reportSkus.size} missingSkuRows=${missingSkuRows}`,
       );
 
       const seller =
@@ -305,7 +383,7 @@ async function main() {
       const deactivationAllowed =
         !sourceError &&
         !!sourceScan?.complete &&
-        fileRows.size > 0 &&
+        report.rowCount > 0 &&
         reportSkus.size > 0 &&
         missingSkuRows === 0 &&
         sourceListings.length > 0;
@@ -340,7 +418,7 @@ async function main() {
           ? 'realtrack_scan_failed'
           : !sourceScan?.complete
             ? 'realtrack_scan_incomplete'
-            : fileRows.size === 0
+            : report.rowCount === 0
               ? 'empty_report'
               : reportSkus.size === 0
                 ? 'no_report_skus'
@@ -350,7 +428,7 @@ async function main() {
 
       summary[scopeKey] = {
         seller: seller.name,
-        reportRows: fileRows.size,
+        reportRows: report.rowCount,
         reportSkus: reportSkus.size,
         missingSkuRows,
         matchingMode: 'store-scoped SKU fallback',
