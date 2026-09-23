@@ -280,6 +280,10 @@ truncated item IDs. Deactivation is blocked unless the report is non-empty,
 every row has a SKU, the complete store scan succeeds, and at least one source
 listing matches.
 
+RealTrack authentication has a bounded timeout and retry backoff so a
+transient gateway or network failure does not turn a complete reconciliation
+into a false empty-source result.
+
 The importer stores and deduplicates image URLs only. It does not download or
 upload image binaries, so RealTrack and PartsBazar can continue referencing the
 same shared S3 objects without redundant copies. Long runs belong in the
