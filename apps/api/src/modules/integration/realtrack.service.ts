@@ -39,25 +39,55 @@ export class RealTrackService {
       );
     }
     this.logger.log('Authenticating with RealTrack API...');
-    try {
-      const response = await fetch(`${this.baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: this.email, password: this.password }),
-      });
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
+        try {
+          const response = await fetch(
+            `${this.baseUrl}/auth/login`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: this.email,
+                password: this.password,
+              }),
+              signal: controller.signal,
+            },
+          );
 
-      if (!response.ok) {
-        throw new Error(`Auth failed: ${response.statusText}`);
+          if (!response.ok) {
+            throw new Error('Auth failed: ' + response.statusText);
+          }
+
+          const data = await response.json();
+          if (!data.accessToken) {
+            throw new Error('Auth response did not include an access token');
+          }
+          this.accessToken = data.accessToken;
+          this.tokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
+          this.logger.log('Successfully authenticated with RealTrack API');
+          return;
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(15_000, 2_000 * 2 ** attempt)),
+          );
+        }
       }
-
-      const data = await response.json();
-      this.accessToken = data.accessToken;
-      this.tokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
-      this.logger.log('Successfully authenticated with RealTrack API');
-    } catch (error) {
-      this.logger.error(`Authentication error: ${error.message}`, error.stack);
-      throw error;
     }
+    const error =
+      lastError instanceof Error
+        ? lastError
+        : new Error(String(lastError || 'RealTrack authentication failed'));
+    this.logger.error('Authentication error: ' + error.message, error.stack);
+    throw error;
   }
 
   private async requestJson(path: string, retry = 0): Promise<any> {
