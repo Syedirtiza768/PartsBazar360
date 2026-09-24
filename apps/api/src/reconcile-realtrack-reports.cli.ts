@@ -50,6 +50,7 @@ type ReportMatch = {
 
 type ReportData = {
   rowCount: number;
+  filteredOutRows: number;
   skus: Set<string>;
   missingSkuRows: number;
   rowsBySku: Map<string, ReportMatch[]>;
@@ -137,7 +138,9 @@ async function readCsvReport(filePath: string) {
   let titleIndex = -1;
   let quantityIndex = -1;
   let priceIndex = -1;
+  let listingSiteIndex = -1;
   let rowCount = 0;
+  let filteredOutRows = 0;
   let missingSkuRows = 0;
   const skus = new Set<string>();
   const rowsBySku = new Map<string, ReportMatch[]>();
@@ -153,16 +156,25 @@ async function readCsvReport(filePath: string) {
       quantityIndex = headers.indexOf('Available quantity');
       priceIndex = headers.indexOf('Current price');
       skuIndex = headers.indexOf('Custom label (SKU)');
+      listingSiteIndex = headers.indexOf('Listing site');
       if (itemIndex < 0) {
         throw new Error('"Item number" column not found in ' + filePath);
       }
       if (skuIndex < 0) {
         throw new Error('"Custom label (SKU)" column not found in ' + filePath);
       }
+      if (listingSiteIndex < 0) {
+        throw new Error('"Listing site" column not found in ' + filePath);
+      }
       continue;
     }
     const itemNumber = String(values[itemIndex] || '').trim();
     if (!itemNumber) continue;
+    const listingSite = String(values[listingSiteIndex] || '').trim().toUpperCase();
+    if (listingSite !== 'US' && listingSite !== 'EBAY_US') {
+      filteredOutRows++;
+      continue;
+    }
     rowCount++;
     const sku = normalizeSku(values[skuIndex]);
     if (sku) {
@@ -177,7 +189,7 @@ async function readCsvReport(filePath: string) {
     } else missingSkuRows++;
   }
 
-  return { rowCount, skus, missingSkuRows, rowsBySku };
+  return { rowCount, filteredOutRows, skus, missingSkuRows, rowsBySku };
 }
 
 async function readReport(filePath: string) {
@@ -200,6 +212,7 @@ async function readReport(filePath: string) {
   }
   return {
     rowCount: fileRows.size,
+    filteredOutRows: 0,
     skus,
     rowsBySku,
     missingSkuRows: [...fileRows.values()].filter(
@@ -213,17 +226,20 @@ async function readRealTrackSnapshot(
   scope: ReconciliationScope,
   report: ReportData,
 ) {
-  const reader = createInterface({
-    input: createReadStream(filePath, { encoding: 'utf8' }),
-    crlfDelay: Infinity,
-  });
   const listings = new Map<string, any>();
   let scanned = 0;
+  const content = await fs.readFile(filePath, 'utf8');
 
-  for await (const line of reader) {
+  for (const line of content.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const listing = JSON.parse(line);
     scanned++;
+    if (
+      String(listing.marketplaceId || '').trim().toUpperCase() !==
+      BUYER_MARKETPLACE_ID
+    ) {
+      continue;
+    }
     if (listing.storeId && listing.storeId !== scope.storeId) continue;
     const sku = normalizeSku(listing.sku);
     if (!listingMatchesReport(listing, report) || !listing.id) continue;
@@ -384,7 +400,10 @@ async function main() {
       const reportSkus = report.skus;
       const missingSkuRows = report.missingSkuRows;
       console.log(
-        `Report rows=${report.rowCount} reportSkus=${reportSkus.size} missingSkuRows=${missingSkuRows}`,
+        'Report rows=' + report.rowCount +
+          ' filteredOutNonUsRows=' + report.filteredOutRows +
+          ' reportSkus=' + reportSkus.size +
+          ' missingSkuRows=' + missingSkuRows,
       );
 
       const seller =
@@ -463,21 +482,50 @@ async function main() {
       let importSkipped = 0;
       const importErrors: Array<{ listingId?: string; message: string }> = [];
       if (apply && sourceScan?.complete) {
-        for (const listing of importCandidates) {
-          try {
-            const outcome = await ingestion.processReconciliationListing(
-              listing,
-              scope.storeId,
-              seller.id,
-              scope.sourceTag,
+        const importConcurrency = Math.max(
+          1,
+          Math.min(8, Number(process.env.RECONCILE_IMPORT_CONCURRENCY || 4)),
+        );
+        for (
+          let offset = 0;
+          offset < importCandidates.length;
+          offset += importConcurrency
+        ) {
+          const batch = importCandidates.slice(offset, offset + importConcurrency);
+          await Promise.all(
+            batch.map(async (listing) => {
+              try {
+                const outcome = await ingestion.processReconciliationListing(
+                  listing,
+                  scope.storeId,
+                  seller.id,
+                  scope.sourceTag,
+                );
+                if (outcome === 'imported') imported++;
+                else importSkipped++;
+              } catch (error) {
+                importErrors.push({
+                  listingId: listing.id,
+                  message: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }),
+          );
+          const processed = Math.min(
+            offset + batch.length,
+            importCandidates.length,
+          );
+          if (
+            processed === importCandidates.length ||
+            processed % (importConcurrency * 100) === 0
+          ) {
+            console.log(
+              '  ... imported ' +
+                processed +
+                '/' +
+                importCandidates.length +
+                ' candidates',
             );
-            if (outcome === 'imported') imported++;
-            else importSkipped++;
-          } catch (error) {
-            importErrors.push({
-              listingId: listing.id,
-              message: error instanceof Error ? error.message : String(error),
-            });
           }
         }
       }
@@ -552,6 +600,7 @@ async function main() {
       summary[scopeKey] = {
         seller: seller.name,
         reportRows: report.rowCount,
+        filteredOutNonUsRows: report.filteredOutRows,
         reportSkus: reportSkus.size,
         missingSkuRows,
         matchingMode: 'store-scoped SKU + report title/price/quantity fingerprint',
