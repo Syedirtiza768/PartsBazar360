@@ -389,6 +389,7 @@ export class IngestionProcessor extends WorkerHost {
     return this.processListing(listing, expectedStoreId, {
       sellerIdOverride: sellerId,
       sourceTagOverride: sourceTag,
+      skipSiblingImageMerge: true,
     });
   }
 
@@ -601,6 +602,7 @@ export class IngestionProcessor extends WorkerHost {
     options?: {
       sellerIdOverride?: string;
       sourceTagOverride?: string;
+      skipSiblingImageMerge?: boolean;
     },
   ): Promise<
     | 'imported'
@@ -739,7 +741,7 @@ export class IngestionProcessor extends WorkerHost {
 
     // Merge sibling images only within the same RealTrack store (never cross-seller).
     let mergedImages = imageUrls;
-    if (listing.sku) {
+    if (listing.sku && !options?.skipSiblingImageMerge) {
       const siblings = await this.prisma.rawStagingListing.findMany({
         where: { sku: listing.sku, storeId: expectedStoreId },
         select: { imageUrls: true },

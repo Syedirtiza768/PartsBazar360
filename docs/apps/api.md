@@ -282,6 +282,16 @@ truncated item IDs. Deactivation is blocked unless the report is non-empty,
 every row has a SKU, the complete store scan succeeds, and at least one source
 listing matches.
 
+CSV reports are filtered at the file boundary using the `Listing site` column;
+only `US`/`EBAY_US` rows are admitted. Snapshot rows are independently
+restricted to `EBAY_MOTORS_US`. Apply runs use bounded parallel ingestion
+(`RECONCILE_IMPORT_CONCURRENCY`, default 4 and capped at 8) while retaining
+the normal description, item-specifics, image URL, inventory, pricing, and
+compatibility/fitment processing path.
+During this bulk path, sibling-image aggregation is skipped because each
+source listing already supplies its complete image URL array; the canonical
+part still receives those source URLs and no image binaries are copied.
+
 RealTrack authentication has a bounded timeout and retry backoff so a
 transient gateway or network failure does not turn a complete reconciliation
 into a false empty-source result. When the API is unavailable, an operator may
