@@ -282,7 +282,11 @@ listing matches.
 
 RealTrack authentication has a bounded timeout and retry backoff so a
 transient gateway or network failure does not turn a complete reconciliation
-into a false empty-source result.
+into a false empty-source result. When the API is unavailable, an operator may
+set REALTRACK_SNAPSHOT_DIR to a mounted directory containing sal.jsonl,
+blk.jsonl, and stx.jsonl. These snapshots are produced by a read-only
+store-scoped database join against the report SKUs; they are complete only
+when the source query finishes, and the same deactivation guard applies.
 
 The importer stores and deduplicates image URLs only. It does not download or
 upload image binaries, so RealTrack and PartsBazar can continue referencing the

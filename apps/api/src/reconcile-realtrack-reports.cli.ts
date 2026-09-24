@@ -137,11 +137,51 @@ async function readReport(filePath: string) {
   };
 }
 
+async function readRealTrackSnapshot(
+  filePath: string,
+  scope: ReconciliationScope,
+  reportSkus: Set<string>,
+) {
+  const reader = createInterface({
+    input: createReadStream(filePath, { encoding: 'utf8' }),
+    crlfDelay: Infinity,
+  });
+  const listings = new Map<string, any>();
+  let scanned = 0;
+
+  for await (const line of reader) {
+    if (!line.trim()) continue;
+    const listing = JSON.parse(line);
+    scanned++;
+    if (listing.storeId && listing.storeId !== scope.storeId) continue;
+    const sku = normalizeSku(listing.sku);
+    if (!sku || !reportSkus.has(sku) || !listing.id) continue;
+    listings.set(String(listing.id), listing);
+  }
+
+  return {
+    listings: [...listings.values()],
+    scanned,
+    total: scanned,
+    pages: 1,
+    complete: true,
+    activeStatus: 'database-snapshot',
+    source: 'database-snapshot',
+  };
+}
+
 async function scanRealTrack(
   realTrack: RealTrackService,
   scope: ReconciliationScope,
   reportSkus: Set<string>,
 ) {
+  const snapshotDir = process.env.REALTRACK_SNAPSHOT_DIR;
+  if (snapshotDir) {
+    const snapshotPath = path.join(snapshotDir, scope.key.toLowerCase() + '.jsonl');
+    console.log(scope.key + ': using read-only RealTrack database snapshot ' + snapshotPath);
+    return readRealTrackSnapshot(snapshotPath, scope, reportSkus);
+  }
+
   const listings = new Map<string, any>();
   const pageLimit = Math.max(
     50,
@@ -200,6 +240,7 @@ async function scanRealTrack(
     pages: page,
     complete,
     activeStatus,
+    source: 'api',
   };
 }
 
@@ -434,6 +475,7 @@ async function main() {
         matchingMode: 'store-scoped SKU fallback',
         realTrackStoreId: scope.storeId,
         realTrackStatus: sourceScan?.activeStatus || null,
+        realTrackSource: sourceScan?.source || null,
         realTrackScanned: sourceScan?.scanned || 0,
         realTrackTotal: sourceScan?.total || 0,
         realTrackPages: sourceScan?.pages || 0,
