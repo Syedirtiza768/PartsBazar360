@@ -5,7 +5,7 @@
  * The CSV exports used by this job contain scientific-notation item numbers,
  * so their item IDs are not treated as authoritative. Matching is:
  *   1. RealTrack store scope
- *   2. report SKU (Custom label / SKU)
+ *   2. report row fingerprint (SKU + title/price/quantity when available)
  *
  * The job is dry-run by default. CONFIRM=1 imports missing/reactivated
  * listings and deactivates stale ACTIVE offers. Deactivation is blocked
@@ -42,11 +42,58 @@ import { BUYER_MARKETPLACE_ID } from './modules/ingestion/listing-eligibility.ut
 
 type Scope = keyof typeof REALTRACK_RECONCILIATION_SCOPES;
 type ReconciliationScope = (typeof REALTRACK_RECONCILIATION_SCOPES)[Scope];
+type ReportMatch = {
+  title: string;
+  price: number | null;
+  quantity: number | null;
+};
+
+type ReportData = {
+  rowCount: number;
+  skus: Set<string>;
+  missingSkuRows: number;
+  rowsBySku: Map<string, ReportMatch[]>;
+};
 
 function normalizeSku(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
 }
 
+function parseReportNumber(value: unknown): number | null {
+  const raw = String(value ?? '').trim().replace(/,/g, '');
+  if (!raw) return null;
+  const number = Number(raw.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeReportTitle(value: unknown): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function listingMatchesReport(listing: any, report: ReportData): boolean {
+  const sku = normalizeSku(listing.sku);
+  if (!sku) return false;
+  const candidates = report.rowsBySku.get(sku);
+  if (!candidates || candidates.length === 0) return false;
+
+  const hasDetailedRows = candidates.some(
+    (row) => row.title || row.price !== null || row.quantity !== null,
+  );
+  if (!hasDetailedRows) return true;
+
+  const title = normalizeReportTitle(listing.title);
+  const price = parseReportNumber(listing.price);
+  const quantity = parseReportNumber(
+    listing.quantityAvailable ?? listing.quantity,
+  );
+  return candidates.some((row) => {
+    if (row.title && normalizeReportTitle(row.title) !== title) return false;
+    if (row.price !== null && (price === null || Math.abs(row.price - price) > 0.0001))
+      return false;
+    if (row.quantity !== null && row.quantity !== quantity) return false;
+    return true;
+  });
+}
 function asScope(value: string): value is Scope {
   return value in REALTRACK_RECONCILIATION_SCOPES;
 }
@@ -87,9 +134,13 @@ async function readCsvReport(filePath: string) {
   let headers: string[] | null = null;
   let itemIndex = -1;
   let skuIndex = -1;
+  let titleIndex = -1;
+  let quantityIndex = -1;
+  let priceIndex = -1;
   let rowCount = 0;
   let missingSkuRows = 0;
   const skus = new Set<string>();
+  const rowsBySku = new Map<string, ReportMatch[]>();
 
   for await (const line of reader) {
     const values = parseCsvLine(line);
@@ -98,6 +149,9 @@ async function readCsvReport(filePath: string) {
         header.replace(/^\\uFEFF/, '').trim(),
       );
       itemIndex = headers.indexOf('Item number');
+      titleIndex = headers.indexOf('Title');
+      quantityIndex = headers.indexOf('Available quantity');
+      priceIndex = headers.indexOf('Current price');
       skuIndex = headers.indexOf('Custom label (SKU)');
       if (itemIndex < 0) {
         throw new Error('"Item number" column not found in ' + filePath);
@@ -111,11 +165,19 @@ async function readCsvReport(filePath: string) {
     if (!itemNumber) continue;
     rowCount++;
     const sku = normalizeSku(values[skuIndex]);
-    if (sku) skus.add(sku);
-    else missingSkuRows++;
+    if (sku) {
+      skus.add(sku);
+      const rows = rowsBySku.get(sku) || [];
+      rows.push({
+        title: titleIndex >= 0 ? String(values[titleIndex] || '') : '',
+        price: priceIndex >= 0 ? parseReportNumber(values[priceIndex]) : null,
+        quantity: quantityIndex >= 0 ? parseReportNumber(values[quantityIndex]) : null,
+      });
+      rowsBySku.set(sku, rows);
+    } else missingSkuRows++;
   }
 
-  return { rowCount, skus, missingSkuRows };
+  return { rowCount, skus, missingSkuRows, rowsBySku };
 }
 
 async function readReport(filePath: string) {
@@ -128,9 +190,18 @@ async function readReport(filePath: string) {
       .map(normalizeSku)
       .filter((sku) => sku.length > 0),
   );
+  const rowsBySku = new Map<string, ReportMatch[]>();
+  for (const value of fileRows.values()) {
+    const sku = normalizeSku(value);
+    if (!sku) continue;
+    const rows = rowsBySku.get(sku) || [];
+    rows.push({ title: '', price: null, quantity: null });
+    rowsBySku.set(sku, rows);
+  }
   return {
     rowCount: fileRows.size,
     skus,
+    rowsBySku,
     missingSkuRows: [...fileRows.values()].filter(
       (sku) => normalizeSku(sku).length === 0,
     ).length,
@@ -140,7 +211,7 @@ async function readReport(filePath: string) {
 async function readRealTrackSnapshot(
   filePath: string,
   scope: ReconciliationScope,
-  reportSkus: Set<string>,
+  report: ReportData,
 ) {
   const reader = createInterface({
     input: createReadStream(filePath, { encoding: 'utf8' }),
@@ -155,7 +226,7 @@ async function readRealTrackSnapshot(
     scanned++;
     if (listing.storeId && listing.storeId !== scope.storeId) continue;
     const sku = normalizeSku(listing.sku);
-    if (!sku || !reportSkus.has(sku) || !listing.id) continue;
+    if (!listingMatchesReport(listing, report) || !listing.id) continue;
     listings.set(String(listing.id), listing);
   }
 
@@ -173,13 +244,14 @@ async function readRealTrackSnapshot(
 async function scanRealTrack(
   realTrack: RealTrackService,
   scope: ReconciliationScope,
-  reportSkus: Set<string>,
+  report: ReportData,
 ) {
+  const reportSkus = report.skus;
   const snapshotDir = process.env.REALTRACK_SNAPSHOT_DIR;
   if (snapshotDir) {
     const snapshotPath = path.join(snapshotDir, scope.key.toLowerCase() + '.jsonl');
     console.log(scope.key + ': using read-only RealTrack database snapshot ' + snapshotPath);
-    return readRealTrackSnapshot(snapshotPath, scope, reportSkus);
+    return readRealTrackSnapshot(snapshotPath, scope, report);
   }
 
   const listings = new Map<string, any>();
@@ -215,7 +287,7 @@ async function scanRealTrack(
     for (const listing of result.items) {
       if (listing.storeId && listing.storeId !== scope.storeId) continue;
       const sku = normalizeSku(listing.sku);
-      if (!sku || !reportSkus.has(sku) || !listing.id) continue;
+      if (!listingMatchesReport(listing, report) || !listing.id) continue;
       listings.set(String(listing.id), listing);
     }
 
@@ -333,7 +405,7 @@ async function main() {
       let sourceScan: Awaited<ReturnType<typeof scanRealTrack>> | null = null;
       let sourceError: string | null = null;
       try {
-        sourceScan = await scanRealTrack(realTrack, scope, reportSkus);
+        sourceScan = await scanRealTrack(realTrack, scope, report);
       } catch (error) {
         sourceError = error instanceof Error ? error.message : String(error);
         console.error(`${scopeKey}: RealTrack scan failed: ${sourceError}`);
@@ -472,7 +544,7 @@ async function main() {
         reportRows: report.rowCount,
         reportSkus: reportSkus.size,
         missingSkuRows,
-        matchingMode: 'store-scoped SKU fallback',
+        matchingMode: 'store-scoped SKU + report title/price/quantity fingerprint',
         realTrackStoreId: scope.storeId,
         realTrackStatus: sourceScan?.activeStatus || null,
         realTrackSource: sourceScan?.source || null,
