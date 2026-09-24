@@ -263,7 +263,9 @@ All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal
 
 `reconcile-realtrack-reports.cli.ts` reconciles operator-supplied eBay
 active-listings CSVs with the store-scoped RealTrack mirror and PartsBazar
-offers. The configured report scopes are:
+offers. CSV rows are matched by store plus SKU, title, current price, and
+available quantity when those fields are present; this avoids importing
+unrelated same-SKU variants. The configured report scopes are:
 
 | Scope | Seller | RealTrack store | Report environment variable | Offer source tag |
 | --- | --- | --- | --- | --- |
