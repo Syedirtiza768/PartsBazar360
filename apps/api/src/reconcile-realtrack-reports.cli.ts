@@ -415,6 +415,9 @@ async function main() {
       const sourceMatchedExternalIds = new Set(
         sourceListings.map((listing) => String(listing.id)),
       );
+      const sourceMatchedSourceKeys = new Set(
+        sourceListings.map((listing) => 'rt:' + scope.storeId + ':' + listing.id),
+      );
       const sourceMatchedSkus = new Set(
         sourceListings.map((listing) => normalizeSku(listing.sku)),
       );
@@ -489,6 +492,7 @@ async function main() {
           id: true,
           canonicalPartId: true,
           externalOfferId: true,
+          sourceKey: true,
           sellerSku: true,
           canonicalPart: { select: { ebayItemId: true } },
         },
@@ -505,9 +509,15 @@ async function main() {
           !!normalizeSku(offer.sellerSku) &&
           reportSkus.has(normalizeSku(offer.sellerSku));
         const inScannedSource =
-          !!offer.externalOfferId &&
-          sourceMatchedExternalIds.has(String(offer.externalOfferId));
-        return !inReportBySku && !inScannedSource;
+          (!!offer.externalOfferId &&
+            sourceMatchedExternalIds.has(String(offer.externalOfferId))) ||
+          (!!offer.sourceKey && sourceMatchedSourceKeys.has(offer.sourceKey));
+        if (inScannedSource) return false;
+        // External RealTrack offers must match a current report row. Offers
+        // without an external ID may be manual/catalog offers and remain
+        // protected when their seller SKU is present in the report.
+        if (!offer.externalOfferId) return !inReportBySku;
+        return true;
       });
 
       let deactivated = 0;
