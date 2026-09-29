@@ -91,6 +91,10 @@ services:
       # Shared secret Omni Core's Parts Search portal presents to the internal
       # search (GET /api/integrations/realtrack/search*). Blank = 503 (off).
       REALTRACK_SEARCH_API_KEY: ${REALTRACK_SEARCH_API_KEY:-}
+      # Shared secret RealTrack presents when publishing listings into the
+      # marketplace (POST /api/integrations/realtrack/listings). Blank = the
+      # endpoint answers 503 (feature off), it is never open.
+      REALTRACK_PUSH_API_KEY: ${REALTRACK_PUSH_API_KEY:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
       CHECKOUT_OTP_BYPASS: ${CHECKOUT_OTP_BYPASS:-0}

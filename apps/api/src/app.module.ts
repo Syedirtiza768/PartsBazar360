@@ -24,6 +24,7 @@ import { RealtrackBridgeModule } from './modules/realtrack-bridge/realtrack-brid
 import { ContentModule } from './modules/content/content.module';
 import { DiscountCouponModule } from './modules/discount-coupon/discount-coupon.module';
 import { PaymentLinkModule } from './modules/payment-links/payment-link.module';
+import { RealtrackPublishModule } from './modules/realtrack-publish/realtrack-publish.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { PaymentLinkModule } from './modules/payment-links/payment-link.module';
     ContentModule,
     DiscountCouponModule,
     PaymentLinkModule,
+    RealtrackPublishModule,
   ],
   controllers: [AppController],
   providers: [AppService],
