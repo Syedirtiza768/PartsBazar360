@@ -1,6 +1,32 @@
 # Decision log
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-09-29
+
+## 2026-09-29 — Accept RealTrack pushes by queueing them into the existing ingestion pipeline
+
+**Decision:** RealTrack publishes listings to `POST /api/integrations/realtrack/listings`
+(shared-secret bearer, `REALTRACK_PUSH_API_KEY`; 503 when unset). The API container validates,
+then enqueues a `push-listing` job; the worker runs the same `IngestionProcessor.processListing`
+the pull sync uses, under a store-scoped `push:<storeId>:<listingId>` id. Rejected or ineligible
+re-pushes deactivate the offer they previously created. `processListing` gained optional
+provenance overrides (`qualityTier`, `partSource`, `partType`) and a `push` flag.
+
+**Why:** The HTTP API runs with `RUN_INGESTION_WORKER=0`, so `IngestionProcessor` does not exist
+there — queueing is the only way to reuse it without extracting a 500-line method. Reusing it
+keeps one set of catalog rules (USD, US Motors, English title, stock, pricing policy, MVL
+fitment, search outbox) instead of a second, drifting importer. The `push:` namespace keeps
+pushed offers out of the pull sync's tombstone sweep (a sweep that only sees its own feed would
+otherwise deactivate every pushed offer) and out of collisions between sellers. The pull path
+hard-coded `SALVAGE_OEM`/`OEM`/`USED`; a new aftermarket part pushed through it would have been
+sold as used salvage, hence the overrides (defaults unchanged, so the pull path is byte-for-byte
+the same). Status is a 7-day Redis key plus the catalog itself, not a new table, so there is no
+migration. Pushes bypass `SKIP_OS_INDEX_ON_INGEST` for the legacy index (that flag assumes a bulk
+reindex follows; a single push has none, so the part would not be searchable). A re-push replaces the image list
+instead of merging it (the pull sync merges), so RealTrack can swap hot-linked photos for S3 WebP copies.
+Deployed and verified with one live listing on 2026-09-29.
+
+**Revisit when:** pushes need a synchronous answer (extract the per-listing write into an
+always-available service), or volume makes the ingestion queue the bottleneck.
 
 ## 2026-09-02 — Gate purchase analytics on authoritative payment state
 

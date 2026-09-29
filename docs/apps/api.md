@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-09-24
+**Last reviewed:** 2026-09-29
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -36,6 +36,37 @@ free capacity.
 
 Run modes: `start:dev` (web process, watch), `start:worker` (background job worker — separate process, see `src/worker.js`).
 
+## RealTrack publish endpoint (`realtrack-publish`)
+
+RealTrack's "Publish to PartsBazar360" channel pushes listings here. Routes (public path is
+`/api/integrations/realtrack/listings…`; nginx strips `/api`), all behind `RealtrackPushGuard`
+(`Authorization: Bearer` or `x-api-key` = `REALTRACK_PUSH_API_KEY`, constant-time compare; **503 when
+the variable is unset** — the feature is off, never open):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health?storeId=` | Key check; with `storeId`, also that a seller is mapped to it |
+| POST | `/` | Upsert up to 20 listings `{ storeId, listings: [{ sourceListingId, listing, hints? }] }` → `202` with per-item `queued` / `rejected` |
+| POST | `/end` | Take listings off sale `{ storeId, sourceListingIds[] }` (scoped to that seller) |
+| GET | `/:storeId/:sourceListingId` | `queued` / `imported` / `rejected` (+`outcome`) / `failed` / `ended`, plus offer, part id and storefront URL once the SEO slug exists |
+
+`storeId` must equal a `Seller.storeId`; anything else is a 404, so the shared key cannot write
+into an unmapped seller. Structural problems (title, price, USD, quantity) are rejected up front,
+per item; business eligibility is decided by the worker.
+
+Flow: the API container cannot run `IngestionProcessor` (`RUN_INGESTION_WORKER=0`), so the endpoint
+validates and enqueues a `push-listing` job on the `ingestion` queue. The worker
+(`IngestionProcessor.processPushedListing`) runs the same `processListing` as the pull sync with
+`id = push:<storeId>:<sourceListingId>`, records the outcome in Redis (`rtpush:status:<storeId>:<id>`,
+7 days), and deactivates the offer if a re-push is no longer eligible (qty 0, ended, non-English…).
+A push also **replaces** the part's image list with the pushed gallery (the pull sync only adds), so re-hosted or removed photos do not linger. Unlike the bulk pull sync, a push also writes the legacy `canonical_parts` index immediately (the buyer's `/search/parts` reads it, and no bulk reindex follows a single push). Pushed offers are exempt from `tombstoneUnseenOffers`, and `hints.qualityTier/partSource/partType`
+override the salvage-OEM defaults so a new aftermarket part is not stored as used. Pushed
+`listing.price` is the seller base price; `PricingService.quote` applies the marketplace policy.
+
+Limits: Express' 100 kB JSON body (RealTrack trims its payload to 90 kB), batch ≤ 20 (RealTrack
+sends one per request). Client-side guide: RealTrack repo `docs/integrations/partsbazar360-publish.md`.
+Set `REALTRACK_PUSH_API_KEY` on the `api` service only; the worker never needs it.
+
 ## Purchase tracking payload
 
 `GET /checkout/orders/:orderId` includes `ecommerce: null` until both the
@@ -65,6 +96,7 @@ separate order column.
 - `operations`
 - `order`
 - `pricing`
+- `realtrack-publish` — inbound `/integrations/realtrack/listings` endpoint RealTrack publishes into (queues to the ingestion worker); see "RealTrack publish endpoint" above
 - `realtrack-bridge` — admin-only selection, pricing preview, and transfer of PartsBazar offers into the existing RealTrack listing API
 - `search` — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[../SEARCH_PHASE1_AUDIT]], [[../SEARCH_PHASE2_RESULTS]]
 - `seed` — marketplace seeding, see [[../SEEDING_AND_IMPORTS]]

@@ -295,3 +295,13 @@ After P0+P1 land, PartsBazar will re-run `seed:realtrack-dynatrade` / `syncStore
 Live probe timestamps: **2026-07-22 ~21:30–21:40 UTC**.  
 Reader user id: `2697aa94-2061-4cbd-a414-6b2bd4d63e6e`.  
 Baseline contract: `Published Listings Reader.docx` (verified ~314,076 global / ~71,512 K. Salvage at doc time — no longer true for Blackline/K. Salvage/SalvageA active).
+
+---
+
+## 9. Push publishing (RealTrack → PartsBazar360)
+
+Since 2026-09-29 the data can also flow the other way: RealTrack can publish a listing straight into
+the marketplace via `POST /api/integrations/realtrack/listings` (shared-secret auth,
+`REALTRACK_PUSH_API_KEY`). It reuses the same ingestion rules as the pull described above, so the
+payload-quality asks in §3 still apply to what RealTrack sends. Contract and behavior:
+[[apps/api]] → "RealTrack publish endpoint".
