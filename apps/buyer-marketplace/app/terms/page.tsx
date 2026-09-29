@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/terms/") },
   title: "Terms and Conditions | PartsBazar360",
   description:
     "General terms and conditions for using the PartsBazar360 marketplace and placing orders.",

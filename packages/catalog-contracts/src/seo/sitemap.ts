@@ -123,15 +123,24 @@ export function renderRobotsTxt(sitemapUrl: string): string {
   const { indexingEnabled, privatePathPrefixes, basePath } = seoConfig();
 
   if (!indexingEnabled) {
-    return ['User-agent: *', 'Disallow: /', ''].join('\n');
+    return [
+      'User-agent: *',
+      'Disallow: /',
+      '',
+      'User-agent: Googlebot',
+      'Disallow: /',
+      '',
+      'User-agent: Googlebot-Image',
+      'Disallow: /',
+      '',
+    ].join('\n');
   }
 
   const disallow = privatePathPrefixes.map(
     (prefix) => `Disallow: ${basePath}${prefix}`,
   );
 
-  return [
-    'User-agent: *',
+  const rules = [
     'Allow: /',
     ...disallow,
     // Faceted and sorted views are crawlable (they carry noindex,follow so
@@ -140,13 +149,22 @@ export function renderRobotsTxt(sitemapUrl: string): string {
     `Disallow: ${basePath}/search?*sort=price_desc*`,
     `Disallow: ${basePath}/search?*pageSize=*`,
     `Disallow: ${basePath}/*?*utm_`,
-    '',
     // Explicitly re-allow the render-critical assets that a broad Disallow
     // could otherwise catch.
     `Allow: ${basePath}/_next/static/`,
     `Allow: ${basePath}/_next/image`,
-    '',
+  ];
+
+  // Google Merchant Center checks for explicit groups. Keep the rules
+  // identical across all groups because a specific user-agent group does not
+  // inherit the wildcard group's directives.
+  return [
+    ['User-agent: *', ...rules],
+    ['User-agent: Googlebot', ...rules],
+    ['User-agent: Googlebot-Image', ...rules],
     `Sitemap: ${sitemapUrl}`,
     '',
-  ].join('\n');
+  ]
+    .map((section) => (Array.isArray(section) ? section.join('\n') : section))
+    .join('\n\n');
 }

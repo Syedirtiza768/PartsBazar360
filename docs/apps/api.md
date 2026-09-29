@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-09-24
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -258,6 +258,37 @@ part numbers where evidence exists, writes `REPAIR_MPN_DEDUP` audit events, and
 queues source and target parts for search indexing. Review the generated report
 before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
+
+## Report-driven RealTrack reconciliation
+
+`reconcile-realtrack-reports.cli.ts` reconciles operator-supplied eBay
+active-listings CSVs with the store-scoped RealTrack mirror and PartsBazar
+offers. The configured report scopes are:
+
+| Scope | Seller | RealTrack store | Report environment variable | Offer source tag |
+| --- | --- | --- | --- | --- |
+| `BLK` | Blackline Auto Parts | `d16199c4-55b5-429e-ad27-892bed94e00d` | `BLACKLINE_FILE` | `BLK` |
+| `SAL` | Salvage Auto Parts | `3b84b063-3811-481f-a61d-f7846a03558f` | `SALVAGE_FILE` | `SAL` |
+| `STX` | Superior Auto Parts | `c6e35671-50d4-4920-a5f7-8dc870a157c7` | `SUPERIOR_FILE` | `STX` |
+
+The job is dry-run by default. `CONFIRM=1` is required to import missing or
+reactivated listings and mark stale scoped offers `INACTIVE`; offers are never
+deleted, preserving order and audit history. The supplied CSVs render eBay
+item numbers in scientific notation, so this workflow uses the authoritative
+RealTrack store boundary and report SKU fallback rather than trusting
+truncated item IDs. Deactivation is blocked unless the report is non-empty,
+every row has a SKU, the complete store scan succeeds, and at least one source
+listing matches.
+
+RealTrack authentication has a bounded timeout and retry backoff so a
+transient gateway or network failure does not turn a complete reconciliation
+into a false empty-source result.
+
+The importer stores and deduplicates image URLs only. It does not download or
+upload image binaries, so RealTrack and PartsBazar can continue referencing the
+same shared S3 objects without redundant copies. Long runs belong in the
+dedicated worker/background container and should be started through the
+repository deployment workflow.
 
 ## RealTrack listing bridge
 

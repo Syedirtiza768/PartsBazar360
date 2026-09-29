@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 import { getPublishedPosts } from "@/lib/content";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/blog/") },
   title: "PartsBazar360 Blog",
   description:
     "Guides and updates about buying automotive parts with confidence.",

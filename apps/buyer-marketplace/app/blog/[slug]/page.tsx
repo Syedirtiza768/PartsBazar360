@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { absoluteUrl } from "@repo/catalog-contracts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BlogBody } from "@/components/BlogBody";
@@ -12,6 +13,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = await getPublishedPost(slug);
   if (!post) return { title: "Blog post | PartsBazar360" };
   return {
+    alternates: { canonical: absoluteUrl(`/blog/${slug}/`) },
     title: post.seoTitle || post.title + " | PartsBazar360",
     description: post.seoDescription || post.excerpt || undefined,
   };

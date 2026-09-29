@@ -50,6 +50,14 @@ import {
 } from '../seed/marketplace-sellers.config';
 import { tagFromStoreId } from '../catalog-import/source-tag.util';
 import { resolveVehicleConfiguration } from '../vehicle/vehicle-config-identity.util';
+import {
+  PUSH_ID_PREFIX,
+  PUSH_STATUS_TTL_SECONDS,
+  pushListingId,
+  pushStatusKey,
+  type PushListingJobData,
+  type PushListingStatusRecord,
+} from './realtrack-push.contract';
 
 @Processor('ingestion', {
   concurrency: 2,
@@ -94,6 +102,8 @@ export class IngestionProcessor extends WorkerHost {
       case 'sync-all-us':
       case 'sync-marketplace-realtrack':
         return this.syncMarketplaceRealTrackStores();
+      case 'push-listing':
+        return this.processPushedListing(job.data as PushListingJobData);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         return;
@@ -374,6 +384,80 @@ export class IngestionProcessor extends WorkerHost {
     };
   }
 
+  /**
+   * Import a listing discovered by an operator-supplied RealTrack/eBay
+   * reconciliation report. The seller and source tag are explicit so a
+   * report-backed Superior run can use its spreadsheet seller row without
+   * making Superior a default RealTrack sync target.
+   */
+  async processReconciliationListing(
+    listing: any,
+    expectedStoreId: string,
+    sellerId: string,
+    sourceTag: string,
+  ) {
+    return this.processListing(listing, expectedStoreId, {
+      sellerIdOverride: sellerId,
+      sourceTagOverride: sourceTag,
+      skipSiblingImageMerge: true,
+    });
+  }
+
+  /**
+   * Import a listing pushed by RealTrack. Runs the same `processListing`
+   * pipeline as the pull sync, under a `push:`-prefixed id so it never mixes
+   * with pull-synced offers. Any outcome other than `imported` (inactive,
+   * zero stock, non-English title, ...) also hides an offer this listing
+   * created earlier — the pull sync gets that from its tombstone sweep, a push
+   * has to do it itself or a re-push with quantity 0 would stay on sale.
+   */
+  async processPushedListing(data: PushListingJobData) {
+    const { sourceListingId, storeId, hints } = data;
+    const listing = {
+      ...data.listing,
+      id: pushListingId(storeId, sourceListingId),
+      storeId,
+    };
+    const record = async (entry: Omit<PushListingStatusRecord, 'at'>) => {
+      const value: PushListingStatusRecord = {
+        ...entry,
+        at: new Date().toISOString(),
+      };
+      await this.redis.set(
+        pushStatusKey(storeId, sourceListingId),
+        JSON.stringify(value),
+        'EX',
+        PUSH_STATUS_TTL_SECONDS,
+      );
+    };
+
+    let outcome: string;
+    try {
+      outcome = await this.processListing(listing, storeId, {
+        push: true,
+        skipSiblingImageMerge: true,
+        partType: hints?.partType,
+        partSource: hints?.partSource,
+        qualityTier: hints?.qualityTier,
+      });
+      if (outcome !== 'imported') {
+        await this.deactivateOfferForListing(listing, storeId);
+      }
+    } catch (error) {
+      await record({
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    await record({
+      status: outcome === 'imported' ? 'imported' : 'rejected',
+      outcome,
+    });
+    return { sourceListingId, outcome };
+  }
+
   private async syncStore(
     storeId: string,
     startPage: number,
@@ -580,6 +664,21 @@ export class IngestionProcessor extends WorkerHost {
   private async processListing(
     listing: any,
     expectedStoreId: string,
+    options?: {
+      sellerIdOverride?: string;
+      sourceTagOverride?: string;
+      skipSiblingImageMerge?: boolean;
+      /**
+       * Listing was pushed by RealTrack (see realtrack-push.contract.ts). Pushed
+       * listings usually carry no eBay item id, so a re-push must find its
+       * canonical part through the existing offer instead of creating a new one.
+       */
+      push?: boolean;
+      /** Provenance overrides; unset keeps the salvage-OEM pull defaults. */
+      partType?: string;
+      partSource?: string;
+      qualityTier?: string;
+    },
   ): Promise<
     | 'imported'
     | 'skipped_wrong_store'
@@ -591,6 +690,11 @@ export class IngestionProcessor extends WorkerHost {
     | 'skipped_duplicate'
     | 'skipped_excluded_brand'
   > {
+    const provenance = {
+      partType: options?.partType ?? 'SALVAGE_OEM',
+      partSource: options?.partSource ?? 'OEM',
+      qualityTier: options?.qualityTier ?? 'USED',
+    };
     const listingStoreId = listing.storeId || expectedStoreId;
     if (listing.storeId && listing.storeId !== expectedStoreId) {
       this.logger.warn(
@@ -612,6 +716,8 @@ export class IngestionProcessor extends WorkerHost {
     }
 
     const stockQty = stockQuantityForImport(listing);
+    // Reuse the source gallery URLs. This path never downloads or uploads
+    // image binaries, so shared RealTrack/S3 objects are not duplicated.
     const imageUrls = extractListingImages(listing);
     if (hasEbayMagImages(listing)) {
       this.logger.warn(
@@ -700,7 +806,9 @@ export class IngestionProcessor extends WorkerHost {
     });
 
     const seller = await this.prisma.seller.findFirst({
-      where: { storeId: expectedStoreId },
+      where: options?.sellerIdOverride
+        ? { id: options.sellerIdOverride }
+        : { storeId: expectedStoreId },
       include: { warehouses: true },
     });
 
@@ -713,7 +821,7 @@ export class IngestionProcessor extends WorkerHost {
 
     // Merge sibling images only within the same RealTrack store (never cross-seller).
     let mergedImages = imageUrls;
-    if (listing.sku) {
+    if (listing.sku && !options?.skipSiblingImageMerge) {
       const siblings = await this.prisma.rawStagingListing.findMany({
         where: { sku: listing.sku, storeId: expectedStoreId },
         select: { imageUrls: true },
@@ -729,11 +837,33 @@ export class IngestionProcessor extends WorkerHost {
         })
       : null;
 
+    if (!canonicalPart && options?.push) {
+      const existingOffer = await this.prisma.sellerOffer.findFirst({
+        where: {
+          OR: [
+            { externalOfferId: listing.id },
+            { sourceKey: `rt:${expectedStoreId}:${listing.id}` },
+          ],
+        },
+        select: { canonicalPartId: true },
+      });
+      if (existingOffer) {
+        canonicalPart = await this.prisma.canonicalPart.findUnique({
+          where: { id: existingOffer.canonicalPartId },
+        });
+      }
+    }
+
     if (canonicalPart) {
-      const combinedImages = prioritizeEbayImages([
-        ...(canonicalPart.imageUrls || []),
-        ...mergedImages,
-      ]);
+      // The pull sync only ever adds photos. A push carries the seller's full,
+      // current gallery, so it replaces the list — otherwise photos the seller
+      // removed or re-hosted (e.g. hot-linked → S3 WebP) would stay forever.
+      const combinedImages = options?.push
+        ? prioritizeEbayImages(mergedImages)
+        : prioritizeEbayImages([
+            ...(canonicalPart.imageUrls || []),
+            ...mergedImages,
+          ]);
       canonicalPart = await this.prisma.canonicalPart.update({
         where: { id: canonicalPart.id },
         data: {
@@ -745,9 +875,9 @@ export class IngestionProcessor extends WorkerHost {
           description: description || canonicalPart.description,
           imageUrls: combinedImages,
           listingUrl: listing.listingUrl || canonicalPart.listingUrl,
-          partType: 'SALVAGE_OEM',
-          partSource: 'OEM',
-          qualityTier: 'USED',
+          partType: provenance.partType,
+          partSource: provenance.partSource,
+          qualityTier: provenance.qualityTier,
           compatibility:
             compatibility.length > 0
               ? (compatibility as unknown as Prisma.InputJsonValue)
@@ -769,9 +899,9 @@ export class IngestionProcessor extends WorkerHost {
           imageUrls: mergedImages,
           listingUrl: listing.listingUrl || null,
           ebayItemId: listing.ebayItemId || null,
-          partType: 'SALVAGE_OEM',
-          partSource: 'OEM',
-          qualityTier: 'USED',
+          partType: provenance.partType,
+          partSource: provenance.partSource,
+          qualityTier: provenance.qualityTier,
           compatibility:
             compatibility.length > 0
               ? (compatibility as unknown as Prisma.InputJsonValue)
@@ -823,10 +953,12 @@ export class IngestionProcessor extends WorkerHost {
           sourceKey,
           sellerSku: listing.sku || offer.sellerSku,
           sellerTitle: title,
-          partType: 'SALVAGE_OEM',
-          partSource: 'OEM',
-          qualityTier: 'USED',
-          sourceTag: tagFromStoreId(expectedStoreId),
+          partType: provenance.partType,
+          partSource: provenance.partSource,
+          qualityTier: provenance.qualityTier,
+          ...(options?.qualityTier ? { condition: options.qualityTier } : {}),
+          sourceTag:
+            options?.sourceTagOverride ?? tagFromStoreId(expectedStoreId),
         },
       });
     } else {
@@ -842,16 +974,17 @@ export class IngestionProcessor extends WorkerHost {
           pricingPolicyVersion: priceQuote.pricingPolicyVersion,
           pricedAt: new Date(),
           currency: MARKETPLACE_CURRENCY,
-          condition: 'USED',
+          condition: provenance.qualityTier,
           externalOfferId: listing.id,
           sourceKey,
           sellerSku: listing.sku || null,
           sellerTitle: title,
           status: 'ACTIVE',
-          partType: 'SALVAGE_OEM',
-          partSource: 'OEM',
-          qualityTier: 'USED',
-          sourceTag: tagFromStoreId(expectedStoreId),
+          partType: provenance.partType,
+          partSource: provenance.partSource,
+          qualityTier: provenance.qualityTier,
+          sourceTag:
+            options?.sourceTagOverride ?? tagFromStoreId(expectedStoreId),
         },
       });
     }
@@ -1021,7 +1154,9 @@ export class IngestionProcessor extends WorkerHost {
 
     // Skip per-listing OpenSearch indexing during bulk sync — a single
     // bulk reindex runs after all stores finish (much faster overall).
-    if (!process.env.SKIP_OS_INDEX_ON_INGEST) {
+    // A pushed listing is a single item with no bulk pass coming after it, and
+    // the buyer's /search/parts reads this legacy index, so index it right away.
+    if (!process.env.SKIP_OS_INDEX_ON_INGEST || options?.push) {
       await this.searchService.indexPart({
         id: canonicalPart.id,
         title: canonicalPart.title,
@@ -1164,8 +1299,13 @@ export class IngestionProcessor extends WorkerHost {
       where: { sellerId: seller.id, status: 'ACTIVE' },
       select: { id: true, canonicalPartId: true, externalOfferId: true },
     });
+    // Pushed offers (RealTrack → PartsBazar360) are never part of the pull feed,
+    // so "not seen in this sweep" says nothing about them.
     const toDeactivate = active.filter(
-      (o) => o.externalOfferId && !seenIds.has(o.externalOfferId),
+      (o) =>
+        o.externalOfferId &&
+        !o.externalOfferId.startsWith(PUSH_ID_PREFIX) &&
+        !seenIds.has(o.externalOfferId),
     );
     if (toDeactivate.length === 0) return 0;
 
