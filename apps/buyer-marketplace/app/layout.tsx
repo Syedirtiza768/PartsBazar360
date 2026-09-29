@@ -61,7 +61,6 @@ export const metadata: Metadata = {
   },
   description:
     "Search new, used and OEM automotive parts by vehicle, part number or category with visible fitment evidence and seller terms.",
-  alternates: { canonical: absoluteUrl("/") },
   verification: {
     google: "d6ZMoEJKI-bpEj4mmvDKIGkSi0rVs68Kx-PkpLJHGNk",
   },
