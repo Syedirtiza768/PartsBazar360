@@ -14,6 +14,7 @@ import {
   MessageIcon,
   FileTextIcon,
   TagIcon,
+  CreditCardIcon,
 } from "@repo/ui/icons";
 import { useAdminAuth } from "@/lib/auth-context";
 
@@ -41,6 +42,12 @@ const NAV_ITEMS: NavItem[] = [
   },
   { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
   { label: "Coupons", href: "/coupons", icon: TagIcon, matchPrefix: true },
+  {
+    label: "Payment links",
+    href: "/payment-links",
+    icon: CreditCardIcon,
+    matchPrefix: true,
+  },
   { label: "Blog CMS", href: "/blog", icon: FileTextIcon, matchPrefix: true },
 ];
 
@@ -63,18 +70,23 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const isBlogRoute = pathname === "/blog" || pathname.startsWith("/blog/");
   const isCouponRoute =
     pathname === "/coupons" || pathname.startsWith("/coupons/");
+  const isPaymentLinksRoute =
+    pathname === "/payment-links" || pathname.startsWith("/payment-links/");
+  const isPlatformAdminRoute = isCouponRoute || isPaymentLinksRoute;
   const isPlatformAdmin = user?.role === "ADMIN";
   const nav = isSeoEditor
     ? NAV_ITEMS.filter((item) => item.href === "/blog")
     : isPlatformAdmin
       ? NAV_ITEMS
-      : NAV_ITEMS.filter((item) => item.href !== "/coupons");
+      : NAV_ITEMS.filter(
+          (item) => item.href !== "/coupons" && item.href !== "/payment-links",
+        );
 
   useEffect(() => {
     if (!ready || isLogin) return;
     if (!isAdmin) router.replace("/login");
     else if (isSeoEditor && !isBlogRoute) router.replace("/blog");
-    else if (!isPlatformAdmin && isCouponRoute) router.replace("/");
+    else if (!isPlatformAdmin && isPlatformAdminRoute) router.replace("/");
   }, [
     ready,
     isAdmin,
@@ -82,7 +94,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     isSeoEditor,
     isBlogRoute,
     isPlatformAdmin,
-    isCouponRoute,
+    isPlatformAdminRoute,
     router,
   ]);
 

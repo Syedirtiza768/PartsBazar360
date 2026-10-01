@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-10-01
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -39,6 +39,16 @@ supports creating or editing a code, discount percentage, enabled state, and
 optional start/end dates. Disabling a coupon keeps its order history while the
 checkout API rejects it for new orders. The API remains authoritative for all
 validation and the acting admin is recorded in the audit log.
+
+## Stripe Payment Links
+
+`/payment-links` is a platform-admin-only workspace for generating a fixed
+amount, one-time Stripe Payment Link in AED or USD. Admins can add checkout
+details and a reconciliation reference, then copy or open the hosted Stripe
+checkout URL. Each link accepts one completed payment. The API uses the
+configured `STRIPE_SECRET_KEY` and records link creation in the audit log;
+standalone link payments are visible in Stripe and are not attached to
+marketplace orders.
 
 ## Depends on
 

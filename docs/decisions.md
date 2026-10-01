@@ -696,3 +696,20 @@ used by strict account-authentication flows.
 **Run order matters:** (1) `node scripts/dedupe-vehicle-configs.mjs` then `APPLY=1` (dry-run default; merges each duplicate group into the config with the most fitments, re-points `UserVehicle`, re-points or evidence-merges `Fitment` rows, writes AuditEvents and SearchOutbox reindex rows), (2) `prisma migrate deploy` for the unique index — it fails while duplicates remain, (3) deploy the API/worker with the resolver. The resolver degrades gracefully pre-migration, so code-first is safe but index-last is not.
 
 **Revisit when:** MVL ingestion starts writing trim/engine consistently — the dedupe report's `droppedEpids` entries show which provenance links were sacrificed and could be re-attached as aliases.
+
+## 2026-10-01 — Keep admin-generated Stripe Payment Links standalone
+
+**Decision:** The admin console creates fixed-amount Stripe Payment Links for
+one completed payment, with an optional reconciliation reference in Stripe
+metadata and the audit log. These links do not mutate marketplace orders.
+
+**Why:** The existing order checkout depends on an internal `PaymentIntent`,
+idempotent order creation, and webhook metadata to transition an `Order` to
+`PAID`. A manually generated link creates a Stripe Checkout Session but has no
+internal order or `PaymentIntent` identity to authorize that transition.
+Keeping it standalone avoids treating an unrelated Stripe payment as order
+fulfillment; staff reconcile it in Stripe.
+
+**Revisit when:** A requirement needs links tied to marketplace orders; then
+create them from the order's existing payment attempt and preserve its webhook,
+authorization, and idempotency checks.

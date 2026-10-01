@@ -90,6 +90,64 @@ export class StripeService {
     return session;
   }
 
+  /** Create a single-use, fixed-amount Stripe Payment Link for an admin payment. */
+  async createPaymentLink(input: {
+    name: string;
+    description?: string;
+    amount: number;
+    currency: 'AED' | 'USD';
+    reference?: string;
+  }): Promise<Stripe.PaymentLink> {
+    const stripe = this.getClient();
+    const name = input.name.trim();
+    const description = input.description?.trim();
+    const reference = input.reference?.trim();
+    const currency = input.currency.toLowerCase();
+    const unitAmount = this.toStripeAmount(input.amount);
+    const minimumAmount = input.currency === 'AED' ? 2 : 0.5;
+
+    if (!name) {
+      throw new BadRequestException('A payment description is required');
+    }
+    if (
+      !Number.isSafeInteger(unitAmount) ||
+      input.amount < minimumAmount
+    ) {
+      throw new BadRequestException(
+        `The minimum payment is ${minimumAmount.toFixed(2)} ${input.currency}`,
+      );
+    }
+
+    const metadata: Record<string, string> = {
+      source: 'partsbazar_admin',
+      ...(reference ? { reference } : {}),
+    };
+    const product = await stripe.products.create({
+      name,
+      ...(description ? { description } : {}),
+      metadata,
+    });
+    const price = await stripe.prices.create({
+      product: product.id,
+      currency,
+      unit_amount: unitAmount,
+      metadata,
+    });
+    const paymentLink = await stripe.paymentLinks.create({
+      line_items: [{ price: price.id, quantity: 1 }],
+      allow_promotion_codes: false,
+      after_completion: { type: 'hosted_confirmation' },
+      restrictions: { completed_sessions: { limit: 1 } },
+      metadata,
+      payment_intent_data: { metadata },
+    });
+
+    this.logger.log(
+      `Stripe Payment Link ${paymentLink.id} created (${currency.toUpperCase()} ${input.amount})`,
+    );
+    return paymentLink;
+  }
+
   /**
    * Refunds the payment behind a completed Checkout Session. The session id
    * (what we store as PaymentIntent.externalId) isn't itself refundable —

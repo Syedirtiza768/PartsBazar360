@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-10-01
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -84,6 +84,22 @@ Codes are normalized to uppercase, percentage discounts are constrained to
 0.01–100, and optional start/end dates must form a valid window. Admin writes
 are recorded as `COUPON_CREATED` or `COUPON_UPDATED` audit events. Coupons are
 deactivated rather than deleted so order history remains intact.
+
+## Admin Stripe Payment Links
+
+`POST /admin/payment-links` is restricted to `ADMIN` and creates a fixed-price
+Stripe Payment Link from the submitted description, amount, and AED/USD
+currency (Stripe's published minimums are 2.00 AED and 0.50 USD; settlement
+conversion can require more). The API creates the Stripe Product and Price,
+then caps the link at one completed checkout session. An optional reference is
+copied into Stripe metadata. The generated link, amount, currency, reference,
+and acting admin are recorded in `AuditEvent` as
+`STRIPE_PAYMENT_LINK_CREATED`.
+
+These are standalone payments: the Stripe webhook checkout flow only updates a
+marketplace order when its internal payment-intent metadata is present, so a
+manual link payment does not create, fulfill, or mark an `Order` paid. Reconcile
+these payments in Stripe unless a separate order-linked payment flow is added.
 
 ## Orders, fulfillment, and confirmations
 
