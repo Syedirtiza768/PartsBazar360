@@ -1,16 +1,22 @@
 import { ExternalLinkIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
+import Image from "next/image";
 
 export const EBAY_STORE_URL = "https://ebay.io/m/7vngBN";
 
-function EbayLogo({ className }: { className?: string }) {
+function EbayLogo({ size }: { size: "header" | "default" }) {
   return (
-    <span aria-hidden="true" className={cn("inline-flex font-sans font-black tracking-[-0.14em]", className)}>
-      <span className="text-[#e53238]">e</span>
-      <span className="text-[#0064d2]">b</span>
-      <span className="text-[#f5af02]">a</span>
-      <span className="text-[#86b817]">y</span>
-    </span>
+    <Image
+      src="/buyer/ebay-logo.png"
+      alt="eBay"
+      width={1100}
+      height={480}
+      sizes={size === "header" ? "38px" : "66px"}
+      className={cn(
+        "h-auto w-auto shrink-0 object-contain",
+        size === "header" ? "h-4" : "h-7",
+      )}
+    />
   );
 }
 
@@ -38,7 +44,7 @@ export function EbayStoreLink({
       className={cn(VARIANT_CLASSES[variant], className)}
       aria-label="Visit our Ebay Store (opens in a new tab)"
     >
-      <EbayLogo className={variant === "header" ? "text-lg" : "text-2xl"} />
+      <EbayLogo size={variant === "header" ? "header" : "default"} />
       <span>Visit our Ebay Store</span>
       <ExternalLinkIcon className="h-4 w-4 shrink-0" />
     </a>
