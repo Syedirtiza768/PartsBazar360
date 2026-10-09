@@ -50,6 +50,10 @@ export class OrderNotificationService {
     orderId: string,
     event: OrderUpdateEvent,
   ): Promise<void> {
+    // Checkout creation is not payment confirmation. Retain this guard for
+    // legacy callers so no channel notifies buyers or operations while unpaid.
+    if (event.type === 'ORDER_CREATED') return;
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
