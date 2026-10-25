@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -30,6 +31,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <AppShell
       brand="PartsBazar"
       brandAccent="360"
+      logo={<Image src="/workshop/brand/partsbazar360-horizontal-reversed.svg" alt="PartsBazar360" width={160} height={32} unoptimized className="h-8 w-auto" />}
       subtitle="Workshop"
       nav={NAV_ITEMS}
       currentPath={pathname}

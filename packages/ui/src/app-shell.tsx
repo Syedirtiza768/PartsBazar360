@@ -42,6 +42,8 @@ export interface AppShellProps {
   /** Product name; the trailing accent segment is coloured. */
   brand: string;
   brandAccent?: string;
+  /** Replaces the text brand with a logo image; the brand text stays the fallback. */
+  logo?: ReactNode;
   /** Small caps label under the brand, e.g. "Admin console". */
   subtitle?: string;
   nav: readonly NavItem[];
@@ -143,6 +145,7 @@ function NavList({
 export function AppShell({
   brand,
   brandAccent,
+  logo,
   subtitle,
   nav,
   currentPath,
@@ -164,8 +167,12 @@ export function AppShell({
   const Brand = (
     <div className="min-w-0">
       <p className={cn("truncate text-lg font-black tracking-tight", t.brand)}>
-        {brand}
-        {brandAccent && <span className={t.accent}>{brandAccent}</span>}
+        {logo ?? (
+          <>
+            {brand}
+            {brandAccent && <span className={t.accent}>{brandAccent}</span>}
+          </>
+        )}
       </p>
       {subtitle && (
         <p className={cn("mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wider", t.subtitle)}>
