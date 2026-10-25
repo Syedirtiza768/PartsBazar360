@@ -1,6 +1,7 @@
 # buyer-marketplace
 
 **Last reviewed:** 2026-10-02
+**Last reviewed:** 2026-10-25
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -150,6 +151,10 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   the browse query, refinements stay on the current taxonomy URL, and pagination preserves
   those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support.
+- Branded favicon — `app/icon.svg`, `app/favicon.ico` and `app/apple-icon.png` use
+  the Hex P symbol on petrol (see [[../brand/partsbazar360-logo]]). The header and
+  mobile drawer show the horizontal lockup from `public/brand/`, referenced with the
+  `/buyer/` base path.
 - eBay store CTA — the homepage hero, desktop utility navigation, and mobile
   menu use the supplied four-color eBay logo through one shared component, linking to
   external store at `https://ebay.io/m/7vngBN`. External navigation opens in a

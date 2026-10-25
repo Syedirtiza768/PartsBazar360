@@ -48,6 +48,24 @@ facets) lands on `main` — keep it out of the internal path, or the portal lose
 seller/source facets; or when the portal needs offers that are not attached to an indexed
 part (then search Postgres, not only the index).
 **Last reviewed:** 2026-09-29
+**Last reviewed:** 2026-10-25
+
+## 2026-10-25 — Show the logo through a shared AppShell prop and per-app public assets
+
+**Decision:** `@repo/ui` `AppShell` accepts an optional `logo` node that replaces
+the text brand. Each app serves the lockup from its own `public/brand/` folder and
+references it with its base path, following the buyer's existing `/buyer/ebay-logo.png`
+pattern. The favicon set is copied into each app's `app/` (`icon.svg`, `favicon.ico`,
+`apple-icon.png`), so Next.js serves it by file convention.
+
+**Why:** `basePath` applies to `next/image` and `<img>` only when the path includes it,
+so bare `/brand/...` URLs return 404 in every app. A `logo` slot keeps the shell
+text fallback for accessibility and avoids a logo-specific branch in the shared
+package. Copying assets per app keeps each deploy self-contained behind nginx.
+
+**Revisit when:** a fifth app or a second shell tone appears, or when the assets
+move to a CDN. Then move the lockup into one shared static origin and drop the
+per-app copies.
 
 ## 2026-09-29 — Accept RealTrack pushes by queueing them into the existing ingestion pipeline
 

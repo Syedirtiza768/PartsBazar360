@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
@@ -77,6 +78,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <AppShell
       brand="PartsBazar"
       brandAccent="360"
+      logo={<Image src="/seller/brand/partsbazar360-horizontal.svg" alt="PartsBazar360" width={160} height={32} unoptimized className="h-8 w-auto" />}
       subtitle="Seller"
       nav={NAV_ITEMS}
       currentPath={pathname}

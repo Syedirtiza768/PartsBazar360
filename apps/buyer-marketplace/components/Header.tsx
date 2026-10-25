@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { categoryGroupPath } from "@repo/catalog-contracts";
 import { usePathname, useRouter } from "next/navigation";
@@ -744,13 +745,8 @@ export function Header({ categories }: { categories: HeaderFacet[] }) {
             >
               <MenuIcon className="h-5 w-5" />
             </button>
-            <Link href="/" className="flex min-h-touch min-w-0 shrink-0 flex-col justify-center leading-none" aria-label="PartsBazar360 home">
-              <span className="block font-display text-lg font-black uppercase tracking-[-0.04em] text-graphite-950 xs:text-xl sm:text-2xl">
-                PartsBazar
-              </span>
-              <span className="block text-[9px] font-black uppercase tracking-[0.28em] text-brand-700 xs:text-[10px] xs:tracking-[0.32em]">
-                360 marketplace
-              </span>
+            <Link href="/" className="flex min-h-touch min-w-0 shrink-0 items-center" aria-label="PartsBazar360 home">
+              <Image src="/buyer/brand/partsbazar360-horizontal.svg" alt="" width={160} height={32} unoptimized priority className="h-7 w-auto xs:h-8 sm:h-9" />
             </Link>
             <div className="hidden min-w-0 flex-1 md:block">
               <SearchBox categories={categories} />
@@ -824,7 +820,7 @@ export function Header({ categories }: { categories: HeaderFacet[] }) {
         bodyClassName="px-0 py-0"
       >
         <div className="border-b-2 border-graphite-950 bg-white px-4 py-4">
-          <p className="font-display text-xl font-black uppercase text-graphite-950">PartsBazar360</p>
+          <Image src="/buyer/brand/partsbazar360-horizontal.svg" alt="PartsBazar360" width={160} height={32} unoptimized className="h-8 w-auto" />
         </div>
         <div className="px-4 py-4">
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-stone-300 bg-white px-3 py-2.5">
