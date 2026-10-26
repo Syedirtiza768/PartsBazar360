@@ -1,6 +1,26 @@
 # Decision log
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-10-26
+
+## 2026-10-26 — Internal search for Omni Core reuses v1 ranking and reloads offers from Postgres
+
+**Decision:** Omni Core's Parts Search portal gets a separate, key-guarded endpoint
+(`/integrations/realtrack/search`, `RealtrackSearchGuard`, `REALTRACK_SEARCH_API_KEY`)
+instead of extra flags on the public `/v1/search`. It calls `SearchV1Service.search`
+unchanged, then replaces each result's offers with every `SellerOffer` row for that part
+(any status, with seller, store, source, SKU, base price and warehouse stock), labelled
+`buyerVisible` / `outrankedBySuperior` using the same helpers buyer search uses.
+
+**Why:** The public endpoint is anonymous and shared-cacheable; staff data must never be
+one query-flag away from it. Reusing the v1 query keeps internal and public results in
+lock-step (same matching, same interpretation), while Postgres is authoritative for offers:
+the index only holds buyer-visible offers and drifts (outbox lag, deleted offers). A
+separate key from the publish key lets read access be revoked without stopping publishing.
+
+**Revisit when:** buyer search sanitisation (`sanitizeSearchItems`, blanked seller/source
+facets) lands on `main` — keep it out of the internal path, or the portal loses its
+seller/source facets; or when the portal needs offers that are not attached to an indexed
+part (then search Postgres, not only the index).
 
 ## 2026-09-02 — Gate purchase analytics on authoritative payment state
 

@@ -278,6 +278,23 @@ queues source and target parts for search indexing. Review the generated report
 before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
 
+## Internal search for Omni Core (2026-10-26)
+
+`src/modules/search/internal/` serves Omni Core's Parts Search portal (`/parts-search` in
+Omni Core). Machine-to-machine only:
+
+| Route (nginx adds `/api`) | Returns |
+|---|---|
+| `GET /integrations/realtrack/search` | Same params and envelope as `GET /v1/search` (`SearchQueryDto`, `SearchV1Service`), plus per result `internalOffers` (≤ 25) and `internalOfferCount`, and `meta.audience = "internal"` |
+| `GET /integrations/realtrack/search/parts/:id` | Part fields, every offer (`internalOffers`) and up to 100 `SourceRecord`s (no `rawPayload`), plus `publicUrl` |
+| `GET /integrations/realtrack/search/health` | `{ ok: true }` when the key is accepted |
+
+- Guard: `RealtrackSearchGuard` — `REALTRACK_SEARCH_API_KEY` as `Authorization: Bearer` or `x-api-key`, constant-time compare. Unset key ⇒ 503 (off, never open). Deliberately separate from `REALTRACK_PUSH_API_KEY`. Responses are `Cache-Control: private, no-store`.
+- Ranking, interpretation and facets come from the unchanged v1 path, so internal and public results always agree on *which* parts match. Offers are then reloaded from Postgres (`SellerOffer` + `Seller` + `Inventory`/`Warehouse`), any status, each flagged `buyerVisible` (same checks as `isBuyerVisibleIndexedOffer`) and `outrankedBySuperior` (same rule as `applySuperiorPriority`), sorted live-first then by price. Fields: seller name/store id/status, offer status, price, `sellerBasePrice`, currency, condition, source tag and key, seller SKU/title, external offer id, lead time, summed and per-warehouse stock, `updatedAt`.
+- Part detail reads Postgres directly, so a part whose offers all ended still resolves (public `/search/parts/:id` 404s with "has no active offers").
+- Tests: `internal/internal-search.spec.ts`.
+- Observed on production 2026-10-26 while building this: the public `/search/parts/:id` response includes `sellerBasePrice`, `marketplaceFee`, `sellerProceeds`, `sourceKey` and `sellerSku` on offers, and the public v1 search still returns `seller`/`sourceTag` facets. If those should be staff-only, the internal endpoint is now the place for them and the public responses can be trimmed.
+
 ## RealTrack listing bridge
 
 `realtrack-bridge` exposes `GET /admin/realtrack-bridge/offers` plus admin-only
