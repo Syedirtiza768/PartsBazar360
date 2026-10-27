@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-10-10
+**Last reviewed:** 2026-10-27
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -87,7 +87,7 @@ deactivated rather than deleted so order history remains intact.
 
 ## Admin Stripe Payment Links
 
-`POST /admin/payment-links` is restricted to `ADMIN` and creates a fixed-price
+`POST /admin/payment-links` accepts `ADMIN` and `PAYMENT_LINKS_ADMIN` and creates a fixed-price
 Stripe Payment Link from the submitted description, amount, and AED/USD
 currency (Stripe's published minimums are 2.00 AED and 0.50 USD; settlement
 conversion can require more). The API creates the Stripe Product and Price,
@@ -95,6 +95,12 @@ then caps the link at one completed checkout session. An optional reference is
 copied into Stripe metadata. The generated link, amount, currency, reference,
 and acting admin are recorded in `AuditEvent` as
 `STRIPE_PAYMENT_LINK_CREATED`.
+
+`PAYMENT_LINKS_ADMIN` is a scoped staff role that can use only the Payment Links
+page and endpoint. `npm run seed:payment-links-admin` grants it to an existing
+account only after its email is verified and a password is set. The command
+does not reset credentials, refuses to replace another scoped staff role, and
+records the grant in `AuditEvent`.
 
 These are standalone payments: the Stripe webhook checkout flow only updates a
 marketplace order when its internal payment-intent metadata is present, so a
