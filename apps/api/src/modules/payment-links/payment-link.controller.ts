@@ -14,7 +14,7 @@ import { PaymentLinkService } from './payment-link.service';
 
 @Controller('admin/payment-links')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'PAYMENT_LINKS_ADMIN')
 export class PaymentLinkController {
   constructor(private readonly paymentLinks: PaymentLinkService) {}
 
