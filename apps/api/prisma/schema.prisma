@@ -685,7 +685,8 @@ model User {
   phoneVerified       Boolean            @default(false)
   name                String?
   /**
-   * BUYER | SELLER | ADMIN
+   * BUYER | SELLER | ADMIN | SUPPORT_AGENT | FULFILLMENT_OPERATOR |
+   * SEO_EDITOR | PAYMENT_LINKS_ADMIN
    */
   role                String             @default("BUYER")
   passwordHash        String?
