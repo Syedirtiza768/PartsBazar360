@@ -17,9 +17,9 @@ import { MARKETPLACE_SELLERS } from '../seed/marketplace-sellers.config';
 import { normalizePhone } from './phone.util';
 
 /**
- * SUPPORT_AGENT, FULFILLMENT_OPERATOR, and SEO_EDITOR are scoped staff
- * roles narrower than ADMIN. Endpoint decorators and the admin portal
- * navigation enforce their separate capabilities.
+ * SUPPORT_AGENT, FULFILLMENT_OPERATOR, SEO_EDITOR, and PAYMENT_LINKS_ADMIN
+ * are scoped staff roles narrower than ADMIN. Endpoint decorators and the
+ * admin portal navigation enforce their separate capabilities.
  */
 export type AuthRole =
   | 'BUYER'
@@ -27,7 +27,8 @@ export type AuthRole =
   | 'ADMIN'
   | 'SUPPORT_AGENT'
   | 'FULFILLMENT_OPERATOR'
-  | 'SEO_EDITOR';
+  | 'SEO_EDITOR'
+  | 'PAYMENT_LINKS_ADMIN';
 export type SellerMemberRole = 'OWNER' | 'MANAGER' | 'STAFF';
 
 export interface AuthTokenPayload {
@@ -559,6 +560,85 @@ export class AuthService {
     });
 
     return { message: 'Password reset successfully' };
+  }
+
+  /**
+   * Grants Payment Links access to an existing verified buyer account without
+   * changing its password. More privileged or separately scoped staff roles
+   * must not be silently replaced.
+   */
+  async provisionPaymentLinksAdmin(input: { email: string; name?: string }) {
+    const email = input.email.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      throw new BadRequestException(
+        'A valid Payment Links admin email is required',
+      );
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (!existing) {
+      throw new BadRequestException(
+        'No account exists for this email. The user must register and verify their email first.',
+      );
+    }
+    if (existing.role === 'ADMIN') {
+      return {
+        id: existing.id,
+        email: existing.email,
+        name: existing.name,
+        role: existing.role,
+        changed: false,
+        passwordReset: false,
+      };
+    }
+    if (existing.role !== 'BUYER' && existing.role !== 'PAYMENT_LINKS_ADMIN') {
+      throw new BadRequestException(
+        'Account already has another staff role; refusing to replace it.',
+      );
+    }
+    if (!existing.passwordHash || !existing.emailVerified) {
+      throw new BadRequestException(
+        'The user must have a password and a verified email before access can be granted.',
+      );
+    }
+
+    const changed = existing.role !== 'PAYMENT_LINKS_ADMIN';
+    const user = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: existing.id },
+        data: {
+          role: 'PAYMENT_LINKS_ADMIN',
+          ...(!existing.name?.trim() && input.name?.trim()
+            ? { name: input.name.trim() }
+            : {}),
+        },
+      });
+      if (changed) {
+        await tx.auditEvent.create({
+          data: {
+            action: 'PAYMENT_LINKS_ACCESS_GRANTED',
+            entityType: 'User',
+            entityId: updated.id,
+            actorType: 'SYSTEM',
+            normalizedValue: {
+              email: updated.email,
+              role: updated.role,
+              passwordReset: false,
+            },
+          },
+        });
+      }
+      return updated;
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      changed,
+      passwordReset: false,
+    };
   }
 
   /**

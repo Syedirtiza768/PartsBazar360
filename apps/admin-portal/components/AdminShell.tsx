@@ -16,7 +16,7 @@ import {
   TagIcon,
   CreditCardIcon,
 } from "@repo/ui/icons";
-import { useAdminAuth } from "@/lib/auth-context";
+import { getStaffHomePath, useAdminAuth } from "@/lib/auth-context";
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/", icon: GaugeIcon },
@@ -62,7 +62,14 @@ function AuthGate({ message }: { message: string }) {
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { ready, isAdmin, isSeoEditor, user, logout } = useAdminAuth();
+  const {
+    ready,
+    isAdmin,
+    isSeoEditor,
+    isPaymentLinksAdmin,
+    user,
+    logout,
+  } = useAdminAuth();
   const pathname = usePathname();
   const router = useRouter();
   // `trailingSlash: true` means the live path carries the slash.
@@ -72,29 +79,39 @@ export function AdminShell({ children }: { children: ReactNode }) {
     pathname === "/coupons" || pathname.startsWith("/coupons/");
   const isPaymentLinksRoute =
     pathname === "/payment-links" || pathname.startsWith("/payment-links/");
-  const isPlatformAdminRoute = isCouponRoute || isPaymentLinksRoute;
   const isPlatformAdmin = user?.role === "ADMIN";
   const nav = isSeoEditor
     ? NAV_ITEMS.filter((item) => item.href === "/blog")
-    : isPlatformAdmin
-      ? NAV_ITEMS
-      : NAV_ITEMS.filter(
-          (item) => item.href !== "/coupons" && item.href !== "/payment-links",
-        );
+    : isPaymentLinksAdmin
+      ? NAV_ITEMS.filter((item) => item.href === "/payment-links")
+      : isPlatformAdmin
+        ? NAV_ITEMS
+        : NAV_ITEMS.filter(
+            (item) => item.href !== "/coupons" && item.href !== "/payment-links",
+          );
 
   useEffect(() => {
     if (!ready || isLogin) return;
     if (!isAdmin) router.replace("/login");
-    else if (isSeoEditor && !isBlogRoute) router.replace("/blog");
-    else if (!isPlatformAdmin && isPlatformAdminRoute) router.replace("/");
+    else if (isSeoEditor && !isBlogRoute)
+      router.replace(getStaffHomePath(user?.role));
+    else if (isPaymentLinksAdmin && !isPaymentLinksRoute)
+      router.replace(getStaffHomePath(user?.role));
+    else if (!isPlatformAdmin && isCouponRoute)
+      router.replace(getStaffHomePath(user?.role));
+    else if (!isPlatformAdmin && !isPaymentLinksAdmin && isPaymentLinksRoute)
+      router.replace(getStaffHomePath(user?.role));
   }, [
     ready,
     isAdmin,
     isLogin,
     isSeoEditor,
     isBlogRoute,
+    isPaymentLinksAdmin,
+    isPaymentLinksRoute,
+    isCouponRoute,
     isPlatformAdmin,
-    isPlatformAdminRoute,
+    user?.role,
     router,
   ]);
 
@@ -107,6 +124,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
   if (isSeoEditor && !isBlogRoute) {
     return <AuthGate message="Opening Blog CMS…" />;
   }
+  if (isPaymentLinksAdmin && !isPaymentLinksRoute) {
+    return <AuthGate message="Opening Payment Links workspace…" />;
+  }
+  if (!isPlatformAdmin && isCouponRoute) {
+    return <AuthGate message="Opening your staff workspace…" />;
+  }
+  if (!isPlatformAdmin && !isPaymentLinksAdmin && isPaymentLinksRoute) {
+    return <AuthGate message="Opening your staff workspace…" />;
+  }
 
   const initial = (user?.name || user?.email || "A").charAt(0).toUpperCase();
 
@@ -114,7 +140,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <AppShell
       brand="PartsBazar"
       brandAccent="360"
-      subtitle={isSeoEditor ? "SEO content workspace" : "Admin console"}
+      subtitle={
+        isSeoEditor
+          ? "SEO content workspace"
+          : isPaymentLinksAdmin
+            ? "Payment Links workspace"
+            : "Admin console"
+      }
       nav={nav}
       currentPath={pathname}
       LinkComponent={Link}
