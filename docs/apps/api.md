@@ -318,6 +318,24 @@ Omni Core). Machine-to-machine only:
 - **Response:** `summary.sentence` (e.g. "12 options: 4 in stock that fit your 2018 Audi Q5, …"), `didYouMean` (fuzzy on `searchNumbers`) when a number matches nothing, and per item `numbers` (normalized) so Omni Core can merge its own warehouse stock.
 - **Tests:** `options-rules.spec.ts` (rules) and `portal-options.service.spec.ts` (expansion against a mocked catalogue: separator forms, other-make exclusion, unverified hop, ended offers).
 
+### Production rollout (2026-10-27)
+
+**How it was deployed:** the server checkout (`/home/ubuntu/PartsBazar360`, branch `agent/realtrack-bridge-deploy-2026-08-17` plus uncommitted local changes, including the untracked `realtrack-publish` module) is what the live image is built from. So the options search was **not** deployed with `update.sh` (`git pull` + rebuild everything). Instead:
+- `git diff 93a6290..cea9dbc -- apps/api/src/modules/search` was applied to that working tree (patches in `/home/ubuntu/pb-search-options-20261027*.patch`).
+- `REALTRACK_SEARCH_API_KEY` was added to `docker-compose.yml` (api service) and `.env`.
+- Only `api` was rebuilt and recreated, then nginx was reloaded.
+
+**Images:** `partsbazar360-api:latest` = `11a96fd28c4c`. Rollback tags: `partsbazar360-api:search-options-20261027-r1` (first options build), `partsbazar360-api:rollback-pre-search-options-20261027` (before any of this). Backups: `/home/ubuntu/docker-compose.yml.pre-search-options-20261027`, `/home/ubuntu/.env.pb360.pre-search-options-20261027`.
+
+**Acceptance on production data:**
+- The three separator forms of `86401-12020` return identical results.
+- `13501711` returns 20 exact parts plus a Febest aftermarket equivalent.
+- `3815A195` for a 2010 Mitsubishi Montero gives "2 in stock that fit".
+- "front left headlight 2018 Audi Q5": right-side parts go to `does_not_fit`, non-headlights to `related`.
+- The four `86401-12020` offers that the index still shows are `INACTIVE` in Postgres, and are reported as not available.
+- `8640112029` gives `didYouMean` 8640112020.
+- **Timings (warm):** number queries 50–310 ms; text + vehicle 430–630 ms.
+
 ## RealTrack listing bridge
 
 `realtrack-bridge` exposes `GET /admin/realtrack-bridge/offers` plus admin-only
