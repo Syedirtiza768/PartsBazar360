@@ -1,6 +1,21 @@
 # Decision log
 
-**Last reviewed:** 2026-10-26
+**Last reviewed:** 2026-10-27
+
+## 2026-10-27 — Cross-references: read item specifics by role, look numbers up through one indexed function
+
+**Decision:**
+- **Item specifics are a first-class number source.** Number-bearing listing aspects (`ITEM_SPECIFIC_NUMBER_KEYS` in `number-graph.ts`: interchange, superseded, OE/OEM in en/de/fr/it/es, MPN) are read with their role. When the same number is also in `oeNumbers`, the role-tagged ref wins.
+- **One indexed lookup.** "Which parts carry number N" goes through one immutable SQL function, `pb_part_numbers(mpn, oeNumbers, itemSpecifics)`, with a GIN index (migration `20261027120000_part_numbers_lookup`). This replaces the separate whole-value MPN and `oeNumbers` matches.
+- **Structured fitment counts as compatibility data.** `Fitment` rows feed the make context and the documented-fitment summary next to the `compatibility` list.
+
+**Why:**
+- **Lost roles:** importers copied item specifics into `oeNumbers` (roughly 18k of 19k parts with superseded numbers), which turned superseded and interchange numbers into plain OE numbers. The "superseded" group was therefore always empty although the data existed.
+- **Unreachable numbers:** comma-joined `oeNumbers` entries were matched only as whole strings, so numbers inside them could not be found. Neither could ~5k numbers that exist only in item specifics. 21,312 part-number pairs on 9,268 parts became reachable.
+- **Speed:** a full scan to reach them costs ~5.5 s per search.
+- **Missing makes:** ~190k parts have `Fitment` rows, and some have no `compatibility` list, so their make was unknown to the make context.
+
+**Revisit when:** importers write role-typed `CatalogPartNumber` rows (then the function can shrink to MPN + catalogue), or the OpenSearch document builder indexes the same split numbers.
 
 ## 2026-10-27 — Staff options search: verdicts by evidence kind, expansion by number role
 

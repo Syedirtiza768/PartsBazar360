@@ -62,10 +62,13 @@ import {
   editDistance,
   expansionNumbers,
   isGenuinePart,
+  itemSpecificGenuine,
+  itemSpecificNumbers,
   makeFamilies,
   isSignificantNumber,
   numbersOfPart,
   sourceLabel,
+  strongestRef,
   type CatalogNumberRow,
   type NumberedPart,
   type PartNumberRef,
@@ -229,6 +232,7 @@ const PART_SELECT = {
   position: true,
   manufacturerPartNumber: true,
   oeNumbers: true,
+  itemSpecifics: true,
   imageUrls: true,
   slug: true,
   partNumbers: {
@@ -263,6 +267,8 @@ export class PortalOptionsService {
   private readonly logger = new Logger(PortalOptionsService.name);
   private readonly client: Client;
   private makeCache: { at: number; makes: Map<string, string> } | null = null;
+  /** When the pb_part_numbers() lookup last failed (0 = never). */
+  private partNumbersLookupFailedAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -728,7 +734,7 @@ export class PortalOptionsService {
       const next: Candidate[] = [];
       for (const part of parts) {
         const refs = numbersOfPart(part);
-        const hit = refs.find((r) => edges.has(r.number));
+        const hit = strongestRef(refs, edges);
         if (!hit) continue;
         const { ref: edgeRef, from } = edges.get(hit.number)!;
         const trail: TrailStep[] = [
@@ -811,10 +817,7 @@ export class PortalOptionsService {
       ...new Set(numbers.map(normalizePartNumber).filter((n) => n.length >= 3)),
     ];
     if (!normalized.length) return [];
-    const raw = [
-      ...new Set(rawStored.flatMap((value) => [value, value.toUpperCase()])),
-    ].filter(Boolean);
-    const [fromIndex, fromCatalog, fromMpn, fromOe] = await Promise.all([
+    const [fromIndex, fromCatalog, fromParts] = await Promise.all([
       this.client
         .search({
           index,
@@ -838,25 +841,52 @@ export class PortalOptionsService {
           take: MAX_DIRECT,
         })
         .then((rows) => rows.map((row) => row.canonicalPartId)),
-      this.prisma
-        .$queryRaw<Array<{ id: string }>>(
-          Prisma.sql`
-        SELECT id FROM "CanonicalPart"
-        WHERE regexp_replace(upper(COALESCE("manufacturerPartNumber", ''::text)), '[^A-Z0-9]'::text, ''::text, 'g'::text) = ANY(${normalized}::text[])
-        LIMIT ${MAX_DIRECT}`,
-        )
-        .then((rows) => rows.map((row) => row.id)),
-      raw.length
-        ? this.prisma
-            .$queryRaw<Array<{ id: string }>>(
-              Prisma.sql`
-            SELECT id FROM "CanonicalPart" WHERE "oeNumbers" && ${raw}::text[] LIMIT ${MAX_DIRECT}`,
-            )
-            .then((rows) => rows.map((row) => row.id))
-        : Promise.resolve([] as string[]),
+      this.idsByPartNumbers(normalized, rawStored),
     ]);
     // Order: index hits first (relevance), then database-only recoveries.
-    return [...new Set([...fromIndex, ...fromMpn, ...fromCatalog, ...fromOe])];
+    return [...new Set([...fromIndex, ...fromParts, ...fromCatalog])];
+  }
+
+  /**
+   * Parts whose MPN, any oeNumbers entry (also inside "A, B" lists) or any
+   * number-bearing item specific normalizes to one of the numbers. Uses the
+   * pb_part_numbers() GIN index (migration 20261027120000); until it exists,
+   * falls back to whole-value MPN / oeNumbers matching (re-checked every 10 min).
+   */
+  private async idsByPartNumbers(
+    normalized: string[],
+    rawStored: string[],
+  ): Promise<string[]> {
+    if (Date.now() - this.partNumbersLookupFailedAt > 10 * 60_000) {
+      try {
+        const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`
+          SELECT id FROM "CanonicalPart"
+          WHERE pb_part_numbers("manufacturerPartNumber", "oeNumbers", "itemSpecifics") && ${normalized}::text[]
+          LIMIT ${MAX_DIRECT}`,
+        );
+        return rows.map((row) => row.id);
+      } catch (error: any) {
+        this.partNumbersLookupFailedAt = Date.now();
+        this.logger.warn(
+          `pb_part_numbers() unavailable, using whole-value number lookup: ${error?.message}`,
+        );
+      }
+    }
+    const raw = [
+      ...new Set(rawStored.flatMap((value) => [value, value.toUpperCase()])),
+    ].filter(Boolean);
+    const [fromMpn, fromOe] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM "CanonicalPart"
+        WHERE regexp_replace(upper(COALESCE("manufacturerPartNumber", ''::text)), '[^A-Z0-9]'::text, ''::text, 'g'::text) = ANY(${normalized}::text[])
+        LIMIT ${MAX_DIRECT}`),
+      raw.length
+        ? this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT id FROM "CanonicalPart" WHERE "oeNumbers" && ${raw}::text[] LIMIT ${MAX_DIRECT}`)
+        : Promise.resolve([] as Array<{ id: string }>),
+    ]);
+    return [...fromMpn, ...fromOe].map((row) => row.id);
   }
 
   private async idsByPrefix(
@@ -1062,13 +1092,15 @@ export class PortalOptionsService {
       where: { id: { in: ids } },
       select: PART_SELECT,
     });
-    return rows.map((row) => ({
+    return rows.map(({ itemSpecifics, ...row }) => ({
       ...row,
       oeNumbers: row.oeNumbers ?? [],
       imageUrls: (row.imageUrls ?? []).filter(
         (url) => url && !/\.svg(\?|$)/i.test(url),
       ),
       catalogNumbers: row.partNumbers as CatalogNumberRow[],
+      specificNumbers: itemSpecificNumbers(itemSpecifics),
+      genuineFlag: itemSpecificGenuine(itemSpecifics),
     })) as PartRow[];
   }
 
@@ -1085,36 +1117,59 @@ export class PortalOptionsService {
     return makes;
   }
 
+  /**
+   * Vehicles each part is documented for, from both places fitment lives:
+   * the `compatibility` list on the part (~200k parts) and structured
+   * `Fitment` rows (1.6M rows on ~190k parts, many with no list). Both feed
+   * the make context and the "Fits: …" summary; only list rows count as
+   * "appears in the compatibility list" (Fitment rows for the vehicle are
+   * already weighed as evidence by decideVerdict).
+   */
   private async compatSummaries(
     ids: string[],
   ): Promise<Map<string, CompatRow[]>> {
     const map = new Map<string, CompatRow[]>();
     if (!ids.length) return map;
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        make: string;
-        model: string;
-        min_year: number;
-        max_year: number;
-      }>
-    >(Prisma.sql`
-      SELECT p.id, x->>'make' AS make, x->>'model' AS model,
-             min((x->>'year')::int) AS min_year, max((x->>'year')::int) AS max_year
-      FROM "CanonicalPart" p, jsonb_array_elements(CASE WHEN jsonb_typeof(p.compatibility) = 'array' THEN p.compatibility ELSE '[]'::jsonb END) x
-      WHERE p.id = ANY(${ids}::text[])
-        AND coalesce(x->>'make', '') <> '' AND coalesce(x->>'model', '') <> '' AND (x->>'year') ~ '^[0-9]{4}$'
-      GROUP BY p.id, x->>'make', x->>'model'`);
-    for (const row of rows) {
+    type Row = {
+      id: string;
+      make: string;
+      model: string;
+      min_year: number;
+      max_year: number;
+    };
+    const [listRows, fitmentRows] = await Promise.all([
+      this.prisma.$queryRaw<Row[]>(Prisma.sql`
+        SELECT p.id, x->>'make' AS make, x->>'model' AS model,
+               min((x->>'year')::int) AS min_year, max((x->>'year')::int) AS max_year
+        FROM "CanonicalPart" p, jsonb_array_elements(CASE WHEN jsonb_typeof(p.compatibility) = 'array' THEN p.compatibility ELSE '[]'::jsonb END) x
+        WHERE p.id = ANY(${ids}::text[])
+          AND coalesce(x->>'make', '') <> '' AND coalesce(x->>'model', '') <> '' AND (x->>'year') ~ '^[0-9]{4}$'
+        GROUP BY p.id, x->>'make', x->>'model'`),
+      this.prisma.$queryRaw<Row[]>(Prisma.sql`
+        SELECT f."canonicalPartId" AS id, coalesce(mk."displayName", mk.name) AS make, md.name AS model,
+               min(g."startYear") AS min_year,
+               max(coalesce(g."endYear", extract(year FROM now())::int)) AS max_year
+        FROM "Fitment" f
+        JOIN "VehicleConfiguration" c ON c.id = f."vehicleConfigId"
+        JOIN "VehicleGeneration" g ON g.id = c."generationId"
+        JOIN "VehicleModel" md ON md.id = g."modelId"
+        JOIN "VehicleMake" mk ON mk.id = md."makeId"
+        WHERE f."canonicalPartId" = ANY(${ids}::text[]) AND g."startYear" IS NOT NULL
+        GROUP BY f."canonicalPartId", coalesce(mk."displayName", mk.name), md.name`),
+    ]);
+    const add = (row: Row, source: CompatRow['source']) => {
       const list = map.get(row.id) ?? [];
       list.push({
         make: row.make,
         model: row.model,
         minYear: Number(row.min_year),
         maxYear: Number(row.max_year),
+        source,
       });
       map.set(row.id, list);
-    }
+    };
+    listRows.forEach((row) => add(row, 'list'));
+    fitmentRows.forEach((row) => add(row, 'fitment'));
     return map;
   }
 
@@ -1166,11 +1221,12 @@ export class PortalOptionsService {
       const { part } = candidate;
       const offers = toInternalOffers(offersByPart.get(part.id) ?? []);
       const compatRows = compat.get(part.id) ?? [];
-      const documented = summarizeDocumented(compatRows);
+      const documented = summarizeDocumented(mergeCompatRows(compatRows));
       const compatibilityListsVehicle = Boolean(
         vehicle &&
         compatRows.some(
           (row) =>
+            row.source === 'list' &&
             normalizeMvlToken(row.make) === vehicleMake &&
             normalizeMvlToken(row.model) === vehicleModel &&
             row.minYear <= vehicle.year &&
@@ -1451,4 +1507,22 @@ interface CompatRow {
   model: string;
   minYear: number;
   maxYear: number;
+  /** `compatibility` list on the part, or structured Fitment rows. */
+  source: 'list' | 'fitment';
+}
+
+/** One row per make + model (names normalized), year ranges widened. */
+export function mergeCompatRows(rows: CompatRow[]): CompatRow[] {
+  const byKey = new Map<string, CompatRow>();
+  for (const row of rows) {
+    const key = `${normalizeMvlToken(row.make)}|${normalizeMvlToken(row.model)}`;
+    const existing = byKey.get(key);
+    if (!existing) byKey.set(key, { ...row });
+    else {
+      existing.minYear = Math.min(existing.minYear, row.minYear);
+      existing.maxYear = Math.max(existing.maxYear, row.maxYear);
+      if (row.source === 'list') existing.source = 'list';
+    }
+  }
+  return [...byKey.values()];
 }

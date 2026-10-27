@@ -1,10 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  ITEM_SPECIFIC_NUMBER_KEYS,
   classifyDirect,
+  distinctNumbers,
   editDistance,
   expansionNumbers,
   isSignificantNumber,
+  itemSpecificGenuine,
+  itemSpecificNumbers,
   numbersOfPart,
   splitNumberList,
+  strongestRef,
   type NumberedPart,
 } from './number-graph';
 import {
@@ -119,6 +126,82 @@ describe('number graph', () => {
     expect(
       expansionNumbers(p, new Set(['8640112020'])).map((r) => r.number),
     ).toEqual(['8640112021']);
+  });
+
+  it('reads role-tagged numbers from listing item specifics (all languages, lists and arrays)', () => {
+    const specifics = {
+      supersededPartNumber: '03H103173D, 066103173G',
+      interchangePartNumber: '06E127065G',
+      'oE/OEMTeilenummer': '5560730220',
+      OE_numbers: ['4782718AA'],
+      partOutID: 'A-130763493',
+      referenceNumber: '5',
+      vINNumber: 'WVWZZZ1JZXW000001',
+    };
+    const found = itemSpecificNumbers(specifics);
+    expect(found.map((s) => [s.key, s.role])).toEqual([
+      ['OE_numbers', 'OE'],
+      ['oE/OEMTeilenummer', 'OE'],
+      ['interchangePartNumber', 'INTERCHANGE'],
+      ['supersededPartNumber', 'SUPERSEDED'],
+    ]);
+    const refs = numbersOfPart(part({ specificNumbers: found }));
+    expect(refs.find((r) => r.number === '066103173G')).toMatchObject({
+      role: 'SUPERSEDED',
+      verified: false,
+    });
+    expect(itemSpecificNumbers(null)).toEqual([]);
+    expect(itemSpecificNumbers(['x'])).toEqual([]);
+  });
+
+  it('a superseded number copied into oeNumbers still classifies as superseded', () => {
+    // Importers copy item specifics into oeNumbers, which loses the role.
+    const p = part({
+      manufacturerPartNumber: '066103173J',
+      oeNumbers: ['03H103173D, 066103173G'],
+      specificNumbers: [
+        { key: 'supersededPartNumber', role: 'SUPERSEDED', value: '03H103173D, 066103173G' },
+      ],
+    });
+    expect(classifyDirect(p, new Set(['066103173G']))?.relation).toBe('superseded');
+    const refs = numbersOfPart(p);
+    expect(strongestRef(refs, new Set(['066103173G']))?.role).toBe('SUPERSEDED');
+    expect(distinctNumbers(refs).map((r) => [r.number, r.role])).toEqual([
+      ['066103173J', 'MPN'],
+      ['03H103173D', 'SUPERSEDED'],
+      ['066103173G', 'SUPERSEDED'],
+    ]);
+  });
+
+  it('a "Genuine OEM: Yes" listing makes an aftermarket-branded part an OEM equivalent', () => {
+    expect(itemSpecificGenuine({ genuineOEM: 'Yes' })).toBe(true);
+    expect(itemSpecificGenuine({ oEM: 'Ja' })).toBe(true);
+    expect(itemSpecificGenuine({ genuineOEM: 'No' })).toBe(false);
+    const p = part({
+      brand: 'Volkswagen',
+      partSource: 'USED',
+      manufacturerPartNumber: '5Q0907511L',
+      oeNumbers: ['5Q0907511A'],
+      genuineFlag: true,
+    });
+    expect(classifyDirect(p, new Set(['5Q0907511A']))?.relation).toBe('oem_equivalent');
+  });
+
+  it('splits one-per-line lists too', () => {
+    expect(splitNumberList('A1646201761\nA1646200761')).toEqual(['A1646201761', 'A1646200761']);
+  });
+
+  it('the SQL lookup function covers exactly the item-specific keys the graph reads', () => {
+    const sql = readFileSync(
+      join(__dirname, '../../../../../prisma/migrations/20261027120000_part_numbers_lookup/migration.sql'),
+      'utf8',
+    );
+    const arrays = [...sql.matchAll(/ARRAY\[([\s\S]*?)\]/g)].map((m) =>
+      [...m[1].matchAll(/'([^']+)'/g)].map((k) => k[1]).sort(),
+    );
+    const keys = Object.keys(ITEM_SPECIFIC_NUMBER_KEYS).sort();
+    expect(arrays).toHaveLength(2);
+    for (const list of arrays) expect(list).toEqual(keys);
   });
 
   it('bounded edit distance', () => {

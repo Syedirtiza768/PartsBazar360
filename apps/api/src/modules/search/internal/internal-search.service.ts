@@ -16,7 +16,17 @@
  */
 
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
+import {
+  distinctNumbers,
+  itemSpecificGenuine,
+  itemSpecificNumbers,
+  numbersOfPart,
+  sourceLabel,
+  type CatalogNumberRow,
+  type NumberRole,
+} from './options/number-graph';
 import {
   isBuyerVisibleIndexedOffer,
   isOutrankedBySuperior,
@@ -297,8 +307,19 @@ export class InternalSearchService {
         ebayItemId: true,
         weight: true,
         dimensions: true,
+        itemSpecifics: true,
         createdAt: true,
         updatedAt: true,
+        partNumbers: {
+          select: {
+            displayNumber: true,
+            normalizedNumber: true,
+            numberType: true,
+            source: true,
+            verificationStatus: true,
+            confidence: true,
+          },
+        },
         offers: { select: OFFER_SELECT },
         sourceRecords: {
           select: {
@@ -321,10 +342,25 @@ export class InternalSearchService {
     });
     if (!part) throw new NotFoundException('Part not found');
 
-    const { offers, sourceRecords, ...rest } = part as any;
+    const { offers, sourceRecords, partNumbers, itemSpecifics, ...rest } =
+      part as any;
     const internalOffers = toInternalOffers(offers as OfferRow[]);
+    const fitments = await this.fitments(part.id);
     return {
       ...rest,
+      itemSpecifics,
+      genuineOem: itemSpecificGenuine(itemSpecifics),
+      crossReferences: crossReferencesOf({
+        id: part.id,
+        brand: part.brand,
+        partSource: part.partSource,
+        manufacturerPartNumber: part.manufacturerPartNumber,
+        oeNumbers: part.oeNumbers ?? [],
+        catalogNumbers: partNumbers as CatalogNumberRow[],
+        specificNumbers: itemSpecificNumbers(itemSpecifics),
+      }),
+      fitments: fitments.rows,
+      fitmentCount: fitments.total,
       createdAt: part.createdAt.toISOString(),
       updatedAt: part.updatedAt.toISOString(),
       publicUrl: part.slug
@@ -343,4 +379,74 @@ export class InternalSearchService {
       ),
     };
   }
+
+  /** Structured fitment rows (vehicle + evidence), strongest evidence first. */
+  private async fitments(
+    partId: string,
+  ): Promise<{ rows: InternalFitment[]; total: number }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<InternalFitment & { total: bigint }>
+    >(Prisma.sql`
+      SELECT coalesce(mk."displayName", mk.name) AS make, md.name AS model, g.name AS generation,
+             g."startYear" AS "startYear", g."endYear" AS "endYear", c.trim, c.engine,
+             c.transmission, c.drivetrain, c.market,
+             f."evidenceLevel" AS "evidenceLevel", f.confidence, f."verificationStatus" AS "verificationStatus",
+             f.source, f."fitmentNotes" AS notes, count(*) OVER () AS total
+      FROM "Fitment" f
+      JOIN "VehicleConfiguration" c ON c.id = f."vehicleConfigId"
+      JOIN "VehicleGeneration" g ON g.id = c."generationId"
+      JOIN "VehicleModel" md ON md.id = g."modelId"
+      JOIN "VehicleMake" mk ON mk.id = md."makeId"
+      WHERE f."canonicalPartId" = ${partId}
+      ORDER BY f."evidenceLevel", 1, 2, g."startYear" NULLS LAST, c.engine NULLS LAST
+      LIMIT ${MAX_FITMENT_ROWS}`);
+    return {
+      total: rows.length ? Number(rows[0].total) : 0,
+      rows: rows.map(({ total: _total, ...row }) => ({
+        ...row,
+        confidence: Number(row.confidence),
+      })),
+    };
+  }
+}
+
+const MAX_FITMENT_ROWS = 1000;
+
+export interface InternalFitment {
+  make: string;
+  model: string;
+  generation: string | null;
+  startYear: number | null;
+  endYear: number | null;
+  trim: string | null;
+  engine: string | null;
+  transmission: string | null;
+  drivetrain: string | null;
+  market: string | null;
+  evidenceLevel: string;
+  confidence: number;
+  verificationStatus: string;
+  source: string | null;
+  notes: string | null;
+}
+
+export interface InternalCrossReference {
+  number: string;
+  normalized: string;
+  role: NumberRole;
+  source: string;
+  verified: boolean;
+}
+
+/** Every number on a part with its role and where it comes from. */
+export function crossReferencesOf(
+  part: Parameters<typeof numbersOfPart>[0],
+): InternalCrossReference[] {
+  return distinctNumbers(numbersOfPart(part)).map((ref) => ({
+    number: ref.display,
+    normalized: ref.number,
+    role: ref.role,
+    source: sourceLabel(ref),
+    verified: ref.verified,
+  }));
 }

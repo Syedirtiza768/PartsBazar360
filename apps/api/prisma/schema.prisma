@@ -277,6 +277,9 @@ model CanonicalPart {
   auditEvents    AuditEvent[]
   slugHistory    CanonicalPartSlug[]
 
+  // Not expressible here: GIN index "CanonicalPart_part_numbers_gin" on
+  // pb_part_numbers("manufacturerPartNumber", "oeNumbers", "itemSpecifics")
+  // (migration 20261027120000_part_numbers_lookup) — staff number lookup.
   @@index([enrichmentStatus])
   @@index([partClassKey])
   // Sitemap and taxonomy queries page through parts ordered by change time;

@@ -9,6 +9,12 @@
  *   OEM_CROSS_REFERENCE (Febest website) rows, all unverified, confidence 0.55.
  *   SUPERSEDED / VERIFIED rows do not exist yet; the rules below already
  *   handle them so they take effect as soon as the data does.
+ * - `itemSpecifics` (listing aspects, ~132k parts) is the richest role-tagged
+ *   source: interchange numbers on ~20k parts, superseded numbers on ~19k,
+ *   OE/OEM numbers incl. German/French/Italian/Spanish keys. Imports copied
+ *   most of them into `oeNumbers`, which loses the role (a superseded number
+ *   looked like a plain OE number), and ~5k values exist only here. See
+ *   ITEM_SPECIFIC_NUMBER_KEYS; the SQL lookup function mirrors that list.
  *
  * Relations, strongest first:
  *   exact                 – the part *is* the queried number (MPN / BRAND_MPN / OEM)
@@ -72,10 +78,78 @@ export interface NumberedPart {
   manufacturerPartNumber: string | null;
   oeNumbers: string[] | null;
   catalogNumbers?: CatalogNumberRow[];
+  /** Number-bearing listing aspects, see itemSpecificNumbers(). */
+  specificNumbers?: SpecificNumber[];
+  /** Listing aspect says the part is genuine OEM ("Genuine OEM: Yes"). */
+  genuineFlag?: boolean;
 }
 
 /** Brands that mean "genuine OEM" rather than an aftermarket manufacturer. */
 const GENUINE_BRAND_RE = /^(genuine( oem)?|oem|oe|original|genuine parts?)$/i;
+
+/**
+ * Listing aspects (CanonicalPart.itemSpecifics keys, as stored by the eBay and
+ * marketplace importers) that carry part numbers, by role. Keys that look like
+ * numbers but are not part numbers (partOutID, referenceNumber = quantity,
+ * vINNumber) are deliberately absent.
+ *
+ * KEEP IN SYNC with pb_part_numbers() in
+ * prisma/migrations/20261027120000_part_numbers_lookup (the indexed lookup).
+ */
+export const ITEM_SPECIFIC_NUMBER_KEYS: Record<string, NumberRole> = {
+  mpn: 'BRAND_MPN',
+  manufacturerPartNumber: 'BRAND_MPN',
+  numeroparteproduttore: 'BRAND_MPN',
+  officialArticleNumber: 'BRAND_MPN',
+  oeNumber: 'OE',
+  oEPartNumber: 'OE',
+  OE_numbers: 'OE',
+  otherPartNumber: 'OE',
+  'numeroparteOE/OEM': 'OE',
+  'numérodepièceOE/OEM': 'OE',
+  'oE/OEMTeilenummer': 'OE',
+  'númerodepiezaOE/OEM': 'OE',
+  interchangePartNumber: 'INTERCHANGE',
+  interchangeNumbers: 'INTERCHANGE',
+  numeropartediscambio: 'INTERCHANGE',
+  supersededPartNumber: 'SUPERSEDED',
+  supersedes: 'SUPERSEDED',
+  numeropartesostituito: 'SUPERSEDED',
+};
+
+const GENUINE_FLAG_KEYS = ['genuineOEM', 'oEM'];
+
+export interface SpecificNumber {
+  key: string;
+  role: NumberRole;
+  value: string;
+}
+
+/** Number-bearing values of a part's listing aspects (strings or arrays). */
+export function itemSpecificNumbers(specifics: unknown): SpecificNumber[] {
+  if (!specifics || typeof specifics !== 'object' || Array.isArray(specifics))
+    return [];
+  const out: SpecificNumber[] = [];
+  for (const [key, role] of Object.entries(ITEM_SPECIFIC_NUMBER_KEYS)) {
+    const raw = (specifics as Record<string, unknown>)[key];
+    const values = Array.isArray(raw) ? raw : [raw];
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim())
+        out.push({ key, role, value: value.trim() });
+    }
+  }
+  return out;
+}
+
+/** "Genuine OEM: Yes" / "OEM: Ja" on the listing. */
+export function itemSpecificGenuine(specifics: unknown): boolean {
+  if (!specifics || typeof specifics !== 'object') return false;
+  return GENUINE_FLAG_KEYS.some((key) =>
+    /^(yes|ja|si|sí|oui|true)$/i.test(
+      String((specifics as Record<string, unknown>)[key] ?? '').trim(),
+    ),
+  );
+}
 
 /**
  * A number is safe to match/expand on only when it can plausibly identify one
@@ -88,11 +162,11 @@ export function isSignificantNumber(normalized: string): boolean {
   return true;
 }
 
-/** Split stored lists like "XR816247, 1R8E9K461CD" / "A;B" / "A|B". */
+/** Split stored lists like "XR816247, 1R8E9K461CD" / "A;B" / "A|B" / one per line. */
 export function splitNumberList(raw: unknown): string[] {
   if (typeof raw !== 'string') return [];
   return raw
-    .split(/[,;|]+/)
+    .split(/[,;|\n]+/)
     .map((value) => value.trim())
     .filter(Boolean);
 }
@@ -144,7 +218,6 @@ export function numbersOfPart(part: NumberedPart): PartNumberRef[] {
   };
   // The part's own number is its identity, not a claim about another part.
   push(part.manufacturerPartNumber, 'MPN', 'part', true);
-  for (const raw of part.oeNumbers ?? []) push(raw, 'OE', 'oe_numbers', false);
   for (const row of part.catalogNumbers ?? []) {
     const role = roleOfCatalogRow(row.numberType);
     if (!role) continue;
@@ -155,12 +228,57 @@ export function numbersOfPart(part: NumberedPart): PartNumberRef[] {
       isVerifiedCatalogRow(row),
     );
   }
+  // Role-tagged listing aspects before the untyped oeNumbers copy, so the
+  // first ref found for a number carries its real role (superseded, …).
+  for (const spec of part.specificNumbers ?? [])
+    push(spec.value, spec.role, `item_specifics:${spec.key}`, false);
+  for (const raw of part.oeNumbers ?? []) push(raw, 'OE', 'oe_numbers', false);
   return out;
 }
 
+/** Strongest role first: what a number *is* on a part when it appears twice. */
+const ROLE_STRENGTH: NumberRole[] = [
+  'MPN',
+  'BRAND_MPN',
+  'OEM',
+  'SUPERSEDED',
+  'INTERCHANGE',
+  'OEM_CROSS_REFERENCE',
+  'OE',
+];
+
+/** Lower = stronger. */
+export function roleStrength(role: NumberRole): number {
+  return ROLE_STRENGTH.indexOf(role);
+}
+
+/** The strongest ref of a part for one of the given numbers. */
+export function strongestRef(
+  refs: PartNumberRef[],
+  numbers: { has(number: string): boolean },
+): PartNumberRef | undefined {
+  return refs
+    .filter((ref) => numbers.has(ref.number))
+    .sort((a, b) => roleStrength(a.role) - roleStrength(b.role))[0];
+}
+
+/** One ref per number — its strongest role — in role order. */
+export function distinctNumbers(refs: PartNumberRef[]): PartNumberRef[] {
+  const byNumber = new Map<string, PartNumberRef>();
+  for (const ref of refs) {
+    const existing = byNumber.get(ref.number);
+    if (!existing || roleStrength(ref.role) < roleStrength(existing.role))
+      byNumber.set(ref.number, ref);
+  }
+  return [...byNumber.values()].sort(
+    (a, b) => roleStrength(a.role) - roleStrength(b.role),
+  );
+}
+
 export function isGenuinePart(
-  part: Pick<NumberedPart, 'brand' | 'partSource'>,
+  part: Pick<NumberedPart, 'brand' | 'partSource' | 'genuineFlag'>,
 ): boolean {
+  if (part.genuineFlag) return true;
   if (part.brand && GENUINE_BRAND_RE.test(part.brand.trim())) return true;
   return (part.partSource ?? '').toUpperCase() === 'OEM';
 }
@@ -238,6 +356,8 @@ export function describeRef(ref: PartNumberRef): string {
 
 export function sourceLabel(ref: PartNumberRef): string {
   if (ref.role === 'MPN') return 'part record';
+  if (ref.source.startsWith('item_specifics:'))
+    return `listing item specifics (${ref.source.slice('item_specifics:'.length)})`;
   if (ref.role === 'OE') return 'part OE numbers (seller/catalogue data)';
   if (/FEBEST/i.test(ref.source)) return 'Febest catalogue';
   if (/SPREADSHEET/i.test(ref.source)) return 'seller spreadsheet';
