@@ -43,7 +43,7 @@ async function errorMessage(response: Response) {
 }
 
 export default function PaymentLinksPage() {
-  const { token, user } = useAdminAuth();
+  const { token, user, isPaymentLinksAdmin } = useAdminAuth();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [paymentLink, setPaymentLink] = useState<PaymentLink | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,7 +52,7 @@ export default function PaymentLinksPage() {
 
   async function createPaymentLink(event: FormEvent) {
     event.preventDefault();
-    if (!token || user?.role !== "ADMIN") return;
+    if (!token || (user?.role !== "ADMIN" && !isPaymentLinksAdmin)) return;
 
     const amount = Number(form.amount);
     if (
@@ -110,13 +110,13 @@ export default function PaymentLinksPage() {
     }
   }
 
-  if (user && user.role !== "ADMIN") {
+  if (user && user.role !== "ADMIN" && !isPaymentLinksAdmin) {
     return (
       <PageBody size="wide">
         <PageHeader
           eyebrow="Payments"
           title="Payment links"
-          description="Payment link generation is restricted to platform administrators."
+          description="Payment link generation is restricted to authorized staff."
         />
       </PageBody>
     );
