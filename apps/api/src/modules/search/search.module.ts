@@ -12,6 +12,7 @@ import { SearchOutboxRunner } from './index/search-outbox.runner';
 import { InternalSearchService } from './internal/internal-search.service';
 import { InternalSearchController } from './internal/internal-search.controller';
 import { RealtrackSearchGuard } from './internal/internal-search.guard';
+import { PortalOptionsService } from './internal/options/portal-options.service';
 import { EnrichmentModule } from '../enrichment/enrichment.module';
 import { CheckoutModule } from '../checkout/checkout.module';
 import { SeoModule } from '../seo/seo.module';
@@ -33,6 +34,7 @@ import { SeoModule } from '../seo/seo.module';
     SearchOutboxRunner,
     // Omni Core's staff search: same v1 query path, all offers from Postgres.
     InternalSearchService,
+    PortalOptionsService,
     RealtrackSearchGuard,
   ],
   // SearchV1Controller is additive: the existing /search/* routes are

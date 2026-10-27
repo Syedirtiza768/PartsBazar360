@@ -2,6 +2,17 @@
 
 **Last reviewed:** 2026-10-26
 
+## 2026-10-27 — Staff options search: verdicts by evidence kind, expansion by number role
+
+**Decision:**
+- **Fitment verdicts** are decided by the evidence *type*. `TITLE_MVL` / `MVL_MATCH` / generic `TITLE_PARSE` can at most make a part "likely"; only catalogue or compatibility-table evidence can make it "fits", and only when the engine matches or every engine of the model year is documented.
+- **Number expansion** classifies by the role the number plays on each part (own number / superseded / OE list of an OEM part / aftermarket declaration). It follows one hop through unverified numbers into a collapsed "possible" group, and goes further only through verified references.
+- **Candidates** are collected from Postgres as well as the index.
+
+**Why:** Production data (2026-10-27) grades 1.55M fitments "B / VERIFIED". But the largest source is title parsing expanded to every engine of the parsed years, so the grade would overstate precision. All 65k `CatalogPartNumber` rows are unverified (confidence 0.55) and there are no superseded rows, so treating every cross-reference as an equivalent would mislead; treating none would lose sales. `oeNumbers` (on 250k parts) is the main cross-reference graph and mixes formats, so values are split and normalized. The index is known to miss parts with live offers.
+
+**Revisit when:** verified or superseded `CatalogPartNumber` rows arrive (they automatically allow deeper expansion and the superseded group), evidence gains engine-level detail, or a GIN index on *normalized* OE numbers is added (would replace the raw-format `oeNumbers &&` lookup).
+
 ## 2026-10-26 — Internal search for Omni Core reuses v1 ranking and reloads offers from Postgres
 
 **Decision:** Omni Core's Parts Search portal gets a separate, key-guarded endpoint

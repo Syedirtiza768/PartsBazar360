@@ -295,6 +295,29 @@ Omni Core). Machine-to-machine only:
 - Tests: `internal/internal-search.spec.ts`.
 - Observed on production 2026-10-26 while building this: the public `/search/parts/:id` response includes `sellerBasePrice`, `marketplaceFee`, `sellerProceeds`, `sourceKey` and `sellerSku` on offers, and the public v1 search still returns `seller`/`sourceTag` facets. If those should be staff-only, the internal endpoint is now the place for them and the public responses can be trimmed.
 
+### Options search — every sellable option (2026-10-27)
+
+`GET /integrations/realtrack/search/options` (same guard) answers "what can we sell for this request" for staff. Code: `src/modules/search/internal/options/`.
+
+- **Params:** `q`; vehicle as `vehicleConfigId`, or `makeId`/`modelId`/`year`, or `make`/`model`/`year`, plus optional `engineLitres` (VIN decode or picker). A year/make/model typed in `q` is used when no vehicle is passed. `drop=number,make,model,year,side,position` ignores parts of the interpretation. `includeUnavailable`, and `page`/`pageSize` for text queries.
+- **Number queries** (`86401-12020`, `86401 12020`, `A 221 820 02 64`, partial `86401`). Candidates come from the index (`searchNumbers`) *and* Postgres: `CatalogPartNumber.normalizedNumber`, the normalized-MPN expression index and the `oeNumbers` GIN index, because the index drifts. Each part is classified by how it carries the number (`number-graph.ts`):
+  - **exact:** MPN / BRAND_MPN / OEM;
+  - **superseded;**
+  - **oem_equivalent:** an OEM part listing it among its OE numbers;
+  - **aftermarket_equivalent:** an aftermarket part declaring it replaces it;
+  - **possible:** one hop further through an unverified number, or the same digits on another make.
+
+  Further hops go only through verified references; superseded chains are followed to depth 10. Numbers under 5 characters, numbers without digits and seller SKUs are never expanded through. A part whose makes conflict with the context make (query/vehicle make, or the clear majority make of the exact matches) is excluded from the equivalents (`summary.excludedOtherMake`). Every item carries a `match.trail` of ready-to-render steps.
+- **Text queries** use the unchanged v1 ranking (`SearchV1Service`) for candidates, keep its facets and pagination, and are grouped by fitment verdict when a vehicle is known.
+- **Availability** is decided from `SellerOffer` + `Inventory` rows at query time (`availability.ts`): `in_stock` (active, priced offer from an active seller with quantity), `can_source` (active offer, no stock, lead time) or `not_available`. Not-available items are counted but hidden unless `includeUnavailable`.
+- **Fitment verdicts** (`fitment-verdict.ts`) depend on the *kind* of evidence, not the letter grade:
+  - **Strong evidence:** Febest catalogue, eBay compatibility table (`EBAY_MVL`), catalogue imports (e.g. `LEMFORDER_FCPEURO_MVL`), manual/VIN/OEM.
+  - **Medium evidence:** title-derived `TITLE_MVL`, back-filled `MVL_MATCH`, other `TITLE_PARSE`, and grade C/D.
+  - **The rules:** `fits` needs strong evidence and either the selected engine or every engine of that model year (engines compared in litres parsed from free-text configuration strings). `likely` covers medium evidence or an unknown engine. A missing row is `unverified`, never `does_not_fit`; the latter is used for explicit conflicts such as the wrong side.
+- **Sorting** within a group (deterministic): verdict, availability, (text: relevance), best condition, lowest price, id.
+- **Response:** `summary.sentence` (e.g. "12 options: 4 in stock that fit your 2018 Audi Q5, …"), `didYouMean` (fuzzy on `searchNumbers`) when a number matches nothing, and per item `numbers` (normalized) so Omni Core can merge its own warehouse stock.
+- **Tests:** `options-rules.spec.ts` (rules) and `portal-options.service.spec.ts` (expansion against a mocked catalogue: separator forms, other-make exclusion, unverified hop, ended offers).
+
 ## RealTrack listing bridge
 
 `realtrack-bridge` exposes `GET /admin/realtrack-bridge/offers` plus admin-only

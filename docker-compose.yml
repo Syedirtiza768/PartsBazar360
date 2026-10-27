@@ -88,6 +88,9 @@ services:
       REALTRACK_BRIDGE_MAX_RETRIES: ${REALTRACK_BRIDGE_MAX_RETRIES:-6}
       REALTRACK_BRIDGE_MAX_RETRY_DELAY_MS: ${REALTRACK_BRIDGE_MAX_RETRY_DELAY_MS:-30000}
       REALTRACK_BRIDGE_RETRY_BASE_DELAY_MS: ${REALTRACK_BRIDGE_RETRY_BASE_DELAY_MS:-1000}
+      # Shared secret Omni Core's Parts Search portal presents to the internal
+      # search (GET /api/integrations/realtrack/search*). Blank = 503 (off).
+      REALTRACK_SEARCH_API_KEY: ${REALTRACK_SEARCH_API_KEY:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-partsbazar-prod-change-me}
       OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
       CHECKOUT_OTP_BYPASS: ${CHECKOUT_OTP_BYPASS:-0}

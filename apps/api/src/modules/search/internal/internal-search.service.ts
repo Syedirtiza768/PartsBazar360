@@ -92,7 +92,7 @@ export interface InternalSearchResponse extends SearchV1Response {
   meta: SearchV1Response['meta'] & { audience: 'internal' };
 }
 
-const OFFER_SELECT = {
+export const OFFER_SELECT = {
   id: true,
   sellerId: true,
   canonicalPartId: true,
@@ -122,7 +122,7 @@ const OFFER_SELECT = {
   },
 } as const;
 
-type OfferRow = {
+export type OfferRow = {
   id: string;
   sellerId: string;
   canonicalPartId: string;
