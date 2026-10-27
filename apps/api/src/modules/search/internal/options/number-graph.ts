@@ -244,6 +244,76 @@ export function sourceLabel(ref: PartNumberRef): string {
   return ref.source || 'catalogue';
 }
 
+/**
+ * Manufacturer families whose makes legitimately share part numbers
+ * (`VehicleMake.manufacturerGroup` is empty in production, 2026-10-27).
+ * Keys and members are normalizeMvlToken() forms. A make can sit in more than
+ * one family (Opel/Vauxhall moved from GM to Stellantis).
+ */
+const MAKE_FAMILIES: Record<string, string[]> = {
+  GM: [
+    'CHEVROLET',
+    'CADILLAC',
+    'GMC',
+    'BUICK',
+    'PONTIAC',
+    'SATURN',
+    'HUMMER',
+    'OLDSMOBILE',
+    'OPEL',
+    'VAUXHALL',
+    'HOLDEN',
+    'DAEWOO',
+  ],
+  VAG: [
+    'AUDI',
+    'VOLKSWAGEN',
+    'VW',
+    'SKODA',
+    'SEAT',
+    'CUPRA',
+    'PORSCHE',
+    'BENTLEY',
+    'LAMBORGHINI',
+    'BUGATTI',
+  ],
+  TOYOTA: ['TOYOTA', 'LEXUS', 'SCION', 'DAIHATSU'],
+  NISSAN: ['NISSAN', 'INFINITI', 'DATSUN'],
+  HONDA: ['HONDA', 'ACURA'],
+  HYUNDAI: ['HYUNDAI', 'KIA', 'GENESIS'],
+  FORD: ['FORD', 'LINCOLN', 'MERCURY'],
+  BMW: ['BMW', 'MINI', 'ROLLSROYCE'],
+  MERCEDES: ['MERCEDESBENZ', 'MERCEDES', 'SMART', 'MAYBACH'],
+  JLR: ['JAGUAR', 'LANDROVER', 'RANGEROVER'],
+  STELLANTIS: [
+    'CHRYSLER',
+    'DODGE',
+    'JEEP',
+    'RAM',
+    'FIAT',
+    'ALFAROMEO',
+    'MASERATI',
+    'LANCIA',
+    'PEUGEOT',
+    'CITROEN',
+    'DS',
+    'OPEL',
+    'VAUXHALL',
+    'ABARTH',
+  ],
+  RENAULT: ['RENAULT', 'DACIA'],
+  VOLVO: ['VOLVO', 'POLESTAR'],
+};
+
+/** Families a (normalized) make belongs to; unknown makes are their own family. */
+export function makeFamilies(normalizedMake: string): string[] {
+  if (!normalizedMake) return [];
+  const families = Object.entries(MAKE_FAMILIES)
+    .filter(([, members]) => members.includes(normalizedMake))
+    .map(([family]) => family);
+  return families.length ? families : [normalizedMake];
+}
+
 /** Levenshtein distance, bounded (for "did you mean"). */
 export function editDistance(a: string, b: string, max = 3): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;

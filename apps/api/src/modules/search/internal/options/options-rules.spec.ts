@@ -364,3 +364,33 @@ describe('availability', () => {
     expect(s.leadTimeDays).toBe(5);
   });
 });
+
+describe('manufacturer families', () => {
+  it('groups makes that share part numbers', () => {
+    const { makeFamilies } = jest.requireActual('./number-graph');
+    expect(makeFamilies('CADILLAC')).toEqual(['GM']);
+    expect(makeFamilies('CHEVROLET')).toEqual(['GM']);
+    expect(makeFamilies('AUDI')).toEqual(['VAG']);
+    expect(makeFamilies('OPEL').sort()).toEqual(['GM', 'STELLANTIS']);
+    expect(makeFamilies('TATA')).toEqual(['TATA']);
+  });
+});
+
+describe('matchesAsked (text precision)', () => {
+  const { matchesAsked } = jest.requireActual('./portal-options.service');
+  const { parseQuery } = jest.requireActual('../../query/query-parser');
+  it('keeps titles naming the part or a synonym, and demotes the rest', () => {
+    const q = parseQuery('front left headlight 2018 Audi Q5');
+    expect(matchesAsked('2009-2013 Audi Q5 Headlight 8R0941030AF', q)).toBe(
+      true,
+    );
+    expect(matchesAsked('Audi Q5 Head Lamp Assembly', q)).toBe(true);
+    expect(matchesAsked('2009-2021 Audi Q5 Front Fender 8R0821106', q)).toBe(
+      false,
+    );
+    expect(
+      matchesAsked('Front brake pad set', parseQuery('brake pads bmw x5')),
+    ).toBe(true);
+    expect(matchesAsked('anything', parseQuery('2018 Audi Q5'))).toBe(true);
+  });
+});

@@ -62,6 +62,7 @@ import {
   editDistance,
   expansionNumbers,
   isGenuinePart,
+  makeFamilies,
   isSignificantNumber,
   numbersOfPart,
   sourceLabel,
@@ -83,6 +84,7 @@ const MAX_SUPERSEDED_DEPTH = 10;
 export type GroupKey =
   | Relation
   | 'matches'
+  | 'related'
   | 'fits'
   | 'likely'
   | 'universal'
@@ -96,6 +98,7 @@ export const GROUP_LABELS: Record<GroupKey, string> = {
   aftermarket_equivalent: 'Aftermarket equivalent',
   possible: 'Possible equivalent (unverified cross-reference)',
   matches: 'Matches',
+  related: 'Other matches (not the part asked for)',
   fits: 'Fits your vehicle',
   likely: 'Likely fits',
   universal: 'Universal',
@@ -125,6 +128,8 @@ export interface OptionItem {
     matchedNumber: string | null;
     trail: TrailStep[];
     note: string | null;
+    /** Text queries: the title names the part asked for (or a synonym). */
+    asked: boolean;
   };
   fitment:
     | (VerdictResult & { documented: string | null })
@@ -609,15 +614,21 @@ export class PortalOptionsService {
     const compat = await this.compatSummaries(
       directMatches.map((row) => row.part.id),
     );
-    const contextMake =
-      normalizeMvlToken(vehicle?.make ?? parsed.make ?? '') ||
-      this.dominantMake(
-        directMatches
-          .filter((row) => row.match!.relation === 'exact')
-          .map((row) => row.part),
-        compat,
-        makes,
-      );
+    // Context = manufacturer families (GM, VAG, Toyota/Lexus, …) of the query
+    // or vehicle make, else of the clear majority of exact matches. Makes in
+    // one family legitimately share numbers; other families do not.
+    const explicitMake = normalizeMvlToken(vehicle?.make ?? parsed.make ?? '');
+    const contextFamilies = new Set<string>(
+      explicitMake
+        ? makeFamilies(explicitMake)
+        : this.dominantFamilies(
+            directMatches
+              .filter((row) => row.match!.relation === 'exact')
+              .map((row) => row.part),
+            compat,
+            makes,
+          ),
+    );
 
     const byId = new Map<string, Candidate>();
     let excludedOtherMake = 0;
@@ -630,14 +641,22 @@ export class PortalOptionsService {
       return set;
     };
     const conflictsWithMake = (part: PartRow): string | null => {
-      if (!contextMake) return null;
+      if (!contextFamilies.size) return null;
       const set = partMakes(part);
-      if (!set.size || set.has(contextMake)) return null;
+      if (!set.size) return null;
+      if (
+        [...set].some((make) =>
+          makeFamilies(make).some((f) => contextFamilies.has(f)),
+        )
+      )
+        return null;
       return [...set]
         .map((m) => makes.get(m) ?? m)
         .slice(0, 2)
         .join(', ');
     };
+    const makeUnknown = (part: PartRow) =>
+      contextFamilies.size > 0 && partMakes(part).size === 0;
 
     let rank = 0;
     for (const { part, match } of directMatches) {
@@ -651,6 +670,9 @@ export class PortalOptionsService {
         }
         relation = 'possible';
         note = `Same number, but recorded for ${conflict}`;
+      } else if (relation !== 'exact' && makeUnknown(part)) {
+        note =
+          'Vehicle make not documented on this part — verify before selling';
       }
       const matched = match!.matched;
       const step: TrailStep = {
@@ -917,28 +939,29 @@ export class PortalOptionsService {
     }
   }
 
-  private dominantMake(
+  /**
+   * Manufacturer families of the exact matches, by vote per part. Only a clear
+   * majority family defines the context; a tie means "unknown" (no exclusion).
+   */
+  private dominantFamilies(
     parts: PartRow[],
     compat: Map<string, CompatRow[]>,
     makes: Map<string, string>,
-  ): string {
+  ): string[] {
     const votes = new Map<string, number>();
     for (const part of parts) {
       const brand = normalizeBrand(part.brand);
-      const set = new Set<string>(
-        makes.has(brand)
-          ? [brand]
-          : (compat.get(part.id) ?? []).map((row) =>
-              normalizeMvlToken(row.make),
-            ),
-      );
-      for (const make of set) votes.set(make, (votes.get(make) ?? 0) + 1);
+      const partMakes = makes.has(brand)
+        ? [brand]
+        : (compat.get(part.id) ?? []).map((row) => normalizeMvlToken(row.make));
+      const families = new Set<string>(partMakes.flatMap(makeFamilies));
+      for (const family of families)
+        votes.set(family, (votes.get(family) ?? 0) + 1);
     }
     const sorted = [...votes.entries()].sort((a, b) => b[1] - a[1]);
-    // Only a clear majority defines the context; ties mean "unknown".
     if (!sorted.length || (sorted[1] && sorted[1][1] === sorted[0][1]))
-      return '';
-    return sorted[0][0];
+      return [];
+    return [sorted[0][0]];
   }
 
   // -------------------------------------------------------- text search
@@ -1201,6 +1224,10 @@ export class PortalOptionsService {
           matchedNumber: candidate.matched?.display ?? null,
           trail: candidate.trail,
           note: candidate.note,
+          asked:
+            candidate.relation === 'text'
+              ? matchesAsked(part.title, parsed)
+              : true,
         },
         fitment: verdict
           ? { ...verdict, documented }
@@ -1255,6 +1282,7 @@ export class PortalOptionsService {
     const keyOf = (item: OptionItem): GroupKey => {
       if (mode === 'number') return item.match.relation as Relation;
       if (item.fitment.verdict === 'does_not_fit') return 'does_not_fit';
+      if (item.match.asked === false) return 'related';
       if (!hasVehicle) return 'matches';
       return (item.fitment.verdict ?? 'unverified') as GroupKey;
     };
@@ -1268,8 +1296,15 @@ export class PortalOptionsService {
       mode === 'number'
         ? RELATION_ORDER
         : hasVehicle
-          ? ['fits', 'likely', 'universal', 'unverified', 'does_not_fit']
-          : ['matches', 'does_not_fit'];
+          ? [
+              'fits',
+              'likely',
+              'universal',
+              'unverified',
+              'related',
+              'does_not_fit',
+            ]
+          : ['matches', 'related', 'does_not_fit'];
     const compare = this.compare(hasVehicle, mode === 'text');
     return order
       .filter((key) => buckets.has(key))
@@ -1283,7 +1318,8 @@ export class PortalOptionsService {
           label: GROUP_LABELS[key],
           total: all.length,
           hiddenUnavailable: all.length - visible.length,
-          collapsedByDefault: key === 'possible' || key === 'does_not_fit',
+          collapsedByDefault:
+            key === 'possible' || key === 'does_not_fit' || key === 'related',
           items: visible.slice(0, MAX_PER_GROUP),
         };
       });
@@ -1381,6 +1417,33 @@ export class PortalOptionsService {
     }
     return physicalIndexName(SEARCH_INDEX_VERSION);
   }
+}
+
+/**
+ * Does a title name the part that was asked for? Uses the parser's part terms
+ * and synonyms ("headlight" → headlamp, head light, …); with no recognised
+ * phrase, every descriptive word must appear. Separators are ignored.
+ */
+export function matchesAsked(title: string, parsed: ParsedQuery): boolean {
+  const tokens = parsed.freeText
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+  if (!tokens.length) return true;
+  const compact = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const text = compact(title);
+  if (
+    parsed.expandedTerms.some(
+      (term) => compact(term).length >= 3 && text.includes(compact(term)),
+    )
+  )
+    return true;
+  return tokens.every((token) =>
+    text.includes(
+      token.length > 4 && token.endsWith('s') ? token.slice(0, -1) : token,
+    ),
+  );
 }
 
 interface CompatRow {
