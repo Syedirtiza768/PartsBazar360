@@ -700,7 +700,9 @@ export class PortalOptionsService {
     }
 
     // Hop 1 through any significant number; further hops only through verified
-    // references, and superseded chains to any (bounded) depth.
+    // references (verified superseded chains to any bounded depth). Seller-
+    // declared superseded numbers (listing item specifics) are unverified: they
+    // mean "superseded" one hop from an exact match, never as a chain.
     let frontier = [...byId.values()];
     const usedNumbers = new Set<string>(numbers);
     for (
@@ -712,8 +714,7 @@ export class PortalOptionsService {
       for (const candidate of frontier) {
         for (const ref of expansionNumbers(candidate.part, query)) {
           if (usedNumbers.has(ref.number)) continue;
-          if (depth > 1 && !(ref.verified || ref.role === 'SUPERSEDED'))
-            continue;
+          if (depth > 1 && !ref.verified) continue;
           if (ref.role === 'MPN' && candidate.relation === 'possible') continue;
           if (!edges.has(ref.number))
             edges.set(ref.number, { ref, from: candidate });
@@ -753,10 +754,16 @@ export class PortalOptionsService {
           ['MPN', 'BRAND_MPN'].includes(hit.role) &&
           normalizeBrand(part.brand) &&
           normalizeBrand(part.brand) === normalizeBrand(from.part.brand);
+        const supersededEdge =
+          edgeRef.role === 'SUPERSEDED' || hit.role === 'SUPERSEDED';
+        const trustedSuperseded =
+          supersededEdge &&
+          ((edgeRef.role === 'SUPERSEDED' && edgeRef.verified) ||
+            (hit.role === 'SUPERSEDED' && hit.verified) ||
+            (depth === 1 && from.relation === 'exact'));
         const verifiedEdge =
           (edgeRef.verified && hit.verified && edgeRef.role !== 'MPN') ||
-          edgeRef.role === 'SUPERSEDED' ||
-          hit.role === 'SUPERSEDED';
+          trustedSuperseded;
         let relation: Relation;
         let note: string | null = null;
         if (sameProduct) {
@@ -766,8 +773,11 @@ export class PortalOptionsService {
               : (from.relation as Relation);
           note =
             `Same ${part.brand} ${part.manufacturerPartNumber ?? ''} as another listing`.trim();
-        } else if (edgeRef.role === 'SUPERSEDED' || hit.role === 'SUPERSEDED') {
+        } else if (trustedSuperseded) {
           relation = 'superseded';
+        } else if (supersededEdge) {
+          relation = 'possible';
+          note = 'Reached through a seller-declared superseded number';
         } else if (verifiedEdge && from.relation !== 'possible') {
           relation = relationOf(part);
         } else {

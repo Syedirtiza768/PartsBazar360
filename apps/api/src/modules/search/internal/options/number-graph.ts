@@ -314,15 +314,32 @@ export function classifyDirect(
 }
 
 /**
- * Numbers to expand through from a directly matched part (hop 1).
- * Only significant numbers, never the queried ones.
+ * A 17-character vehicle identification number stored in a part-number field
+ * (seen in production: a VIN as `manufacturerPartNumber`). Expanding through
+ * it links unrelated parts from the same car.
+ */
+export function looksLikeVin(normalized: string): boolean {
+  return (
+    normalized.length === 17 &&
+    /^[A-HJ-NPR-Z0-9]{17}$/.test(normalized) &&
+    /[A-Z]/.test(normalized) &&
+    /[0-9]{4}$/.test(normalized)
+  );
+}
+
+/**
+ * Numbers to expand through from a matched part.
+ * Only significant numbers, never the queried ones, never VINs.
  */
 export function expansionNumbers(
   part: NumberedPart,
   query: Set<string>,
 ): PartNumberRef[] {
   return numbersOfPart(part).filter(
-    (ref) => !query.has(ref.number) && isSignificantNumber(ref.number),
+    (ref) =>
+      !query.has(ref.number) &&
+      isSignificantNumber(ref.number) &&
+      !looksLikeVin(ref.number),
   );
 }
 

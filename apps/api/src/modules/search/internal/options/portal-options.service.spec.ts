@@ -7,7 +7,7 @@ import { PortalOptionsService } from './portal-options.service';
  * listing), a cross-reference one hop away, a same-digits part of another
  * make, and an other-make cross-reference that must be excluded.
  */
-const PARTS = [
+const PARTS: MockPart[] = [
   {
     id: 't1',
     title: 'Toyota Corolla lane camera 86401-12020',
@@ -73,8 +73,23 @@ const PARTS = [
   },
 ];
 
-const numbersOf = (p: (typeof PARTS)[number]) =>
-  [p.mpn, ...p.oe].map(normalizePartNumber);
+type MockPart = {
+  id: string;
+  title: string;
+  brand: string;
+  partSource: string;
+  mpn: string;
+  oe: string[];
+  makes: string[];
+  specifics?: Record<string, unknown>;
+};
+
+/** Every number on a mock part, as the index and pb_part_numbers() see them. */
+const numbersOf = (p: MockPart) =>
+  [p.mpn, ...p.oe, ...Object.values(p.specifics ?? {}).map(String)]
+    .flatMap((value) => value.split(/[,;|]+/))
+    .map(normalizePartNumber)
+    .filter(Boolean);
 
 function offerRow(partId: string, status = 'ACTIVE', quantity = 1) {
   return {
@@ -113,13 +128,13 @@ function offerRow(partId: string, status = 'ACTIVE', quantity = 1) {
   };
 }
 
-function makeService() {
+function makeService(parts: MockPart[] = PARTS) {
   const prisma: any = {
     catalogPartNumber: { findMany: jest.fn().mockResolvedValue([]) },
     canonicalPart: {
       findMany: jest.fn(({ where }: any) =>
         Promise.resolve(
-          PARTS.filter((p) => where.id.in.includes(p.id)).map((p) => ({
+          parts.filter((p) => where.id.in.includes(p.id)).map((p) => ({
             id: p.id,
             title: p.title,
             brand: p.brand,
@@ -130,6 +145,7 @@ function makeService() {
             position: null,
             manufacturerPartNumber: p.mpn,
             oeNumbers: p.oe,
+            itemSpecifics: p.specifics ?? null,
             imageUrls: [`https://img/${p.id}.jpg`],
             slug: null,
             partNumbers: [],
@@ -156,10 +172,18 @@ function makeService() {
     $queryRaw: jest.fn((sql: any) => {
       const text: string = sql.strings.join('?');
       const values: any[] = sql.values;
+      if (text.includes('pb_part_numbers')) {
+        const wanted: string[] = values[0];
+        return Promise.resolve(
+          parts
+            .filter((p) => numbersOf(p).some((n) => wanted.includes(n)))
+            .map((p) => ({ id: p.id })),
+        );
+      }
       if (text.includes('regexp_replace')) {
         const wanted: string[] = values[0];
         return Promise.resolve(
-          PARTS.filter((p) => wanted.includes(normalizePartNumber(p.mpn))).map(
+          parts.filter((p) => wanted.includes(normalizePartNumber(p.mpn))).map(
             (p) => ({ id: p.id }),
           ),
         );
@@ -167,7 +191,7 @@ function makeService() {
       if (text.includes('"oeNumbers" &&')) {
         const wanted: string[] = values[0];
         return Promise.resolve(
-          PARTS.filter((p) => p.oe.some((o) => wanted.includes(o))).map(
+          parts.filter((p) => p.oe.some((o) => wanted.includes(o))).map(
             (p) => ({ id: p.id }),
           ),
         );
@@ -175,7 +199,7 @@ function makeService() {
       if (text.includes('jsonb_array_elements')) {
         const ids: string[] = values[0];
         return Promise.resolve(
-          PARTS.filter((p) => ids.includes(p.id)).flatMap((p) =>
+          parts.filter((p) => ids.includes(p.id)).flatMap((p) =>
             p.makes.map((make) => ({
               id: p.id,
               make,
@@ -197,7 +221,7 @@ function makeService() {
     search: jest.fn(({ body }: any) => {
       const terms: string[] | undefined = body?.query?.terms?.searchNumbers;
       const hits = terms
-        ? PARTS.filter((p) => numbersOf(p).some((n) => terms.includes(n))).map(
+        ? parts.filter((p) => numbersOf(p).some((n) => terms.includes(n))).map(
             (p) => ({ _id: p.id }),
           )
         : [];
@@ -276,5 +300,34 @@ describe('PortalOptionsService number expansion', () => {
     expect(prisma.sellerOffer.findMany).toHaveBeenCalled();
     expect(response.summary.sentence).toMatch(/^\d+ options: \d+ in stock/);
     expect(response.meta.audience).toBe('internal');
+  });
+});
+
+describe('PortalOptionsService seller-declared superseded numbers', () => {
+  // Production case (2026-10-27, BP4K-56-453B): listing item specifics carry
+  // superseded numbers on ~19k parts, and one listing stores a VIN as its
+  // part number. Chaining through them returned 99 "superseded" parts in 49 s.
+  const MAZDA: MockPart[] = [
+    { id: 'e1', title: 'Mazda 3 control arm BP4K-56-453B', brand: 'Mazda', partSource: 'OEM', mpn: 'BP4K-56-453B', oe: [], makes: ['Mazda'], specifics: { supersededPartNumber: 'BP4K-56-453D' } },
+    { id: 's1', title: 'Mazda 3 control arm (newer number)', brand: 'Mazda', partSource: 'OEM', mpn: 'BP4K-56-453D', oe: [], makes: ['Mazda'] },
+    { id: 'vin', title: 'Mazda 3 arm from donor car', brand: 'Mazda', partSource: 'OEM', mpn: 'JM7BK326081392088', oe: [], makes: ['Mazda'], specifics: { supersededPartNumber: 'BP4K-56-453B' } },
+    { id: 'samecar', title: 'Mazda 3 door mirror from the same donor', brand: 'Mazda', partSource: 'OEM', mpn: 'JM7BK326081392088', oe: [], makes: ['Mazda'] },
+    { id: 's2', title: 'Mazda 3 arm listing', brand: 'Mazda', partSource: 'OEM', mpn: 'ZZ-99999', oe: [], makes: ['Mazda'], specifics: { supersededPartNumber: 'BP4K-56-453D' } },
+    { id: 'deep', title: 'Mazda part two seller hops away', brand: 'Mazda', partSource: 'OEM', mpn: 'QQ-12345', oe: [], makes: ['Mazda'], specifics: { supersededPartNumber: 'ZZ-99999' } },
+  ];
+
+  it('keeps unverified superseded numbers to one hop and never expands through a VIN', async () => {
+    const { service } = makeService(MAZDA);
+    const groups = membership(await service.options({ q: 'BP4K-56-453B', includeUnavailable: true } as any));
+    expect(groups.exact).toEqual(['e1']);
+    // The exact part's own superseded number, the listing that declares it
+    // supersedes the asked number, and listings declaring the exact part's
+    // superseded number: one hop, so "superseded".
+    expect(groups.superseded?.sort()).toEqual(['s1', 's2', 'vin']);
+    const all = Object.values(groups).flat();
+    // The VIN on 'vin' is never followed to other parts of the same car.
+    expect(all).not.toContain('samecar');
+    // Two seller-declared hops away: at most an unverified possibility.
+    expect(groups.superseded).not.toContain('deep');
   });
 });
