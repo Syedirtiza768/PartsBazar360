@@ -349,6 +349,18 @@ Every place a part's numbers and fitment live is now read, by role:
 
 **Images:** `partsbazar360-api:latest` = `11a96fd28c4c`. Rollback tags: `partsbazar360-api:search-options-20261027-r1` (first options build), `partsbazar360-api:rollback-pre-search-options-20261027` (before any of this). Backups: `/home/ubuntu/docker-compose.yml.pre-search-options-20261027`, `/home/ubuntu/.env.pb360.pre-search-options-20261027`.
 
+**Cross-reference pass (2026-10-27, main 894393a + 0aaaa5b):**
+- **Index:** `pb_part_numbers()` and `"CanonicalPart_part_numbers_gin"` were created by hand with `CREATE INDEX CONCURRENTLY` (45 s, 14 MB, lookup 0.17 ms). Script: `/home/ubuntu/pb-xref-index-20261027.sql`.
+- **Migration record:** production runs `SCHEMA_MODE=skip`, so `20261027120000_part_numbers_lookup` was recorded with `prisma migrate resolve --applied`.
+- **Patches:** `/home/ubuntu/pb-xref-20261027.patch` and `…-r2.patch` (search module + migration only) were applied to the server tree, and only `api` was rebuilt and recreated, then nginx was reloaded.
+- **Images:** `partsbazar360-api:latest` = `728b5f918f12`. Rollback: `partsbazar360-api:rollback-pre-xref-20261027` (`65b3987018fc`, the image running before). The first build (`xref-20261027-r1`, `70d77bbaa02a`) chained seller-declared superseded numbers (`BP4K-56-453B`: 99 "superseded" parts, 49 s) and was replaced within minutes by the r2 fix (212 ms, 2 real superseded parts).
+- **Checks on production:**
+  - `5N1419502B` is superseded by `5N1419502M` (11 options).
+  - `13501711` gives 20 exact plus the Febest equivalent.
+  - `3815A195` gives 5 in stock.
+  - The part detail returns `crossReferences`, `fitments` and `itemSpecifics`.
+- **The index is independent of the image.** Rolling back the image leaves the index harmless; the old code doesn't use it.
+
 **Acceptance on production data:**
 - The three separator forms of `86401-12020` return identical results.
 - `13501711` returns 20 exact parts plus a Febest aftermarket equivalent.
