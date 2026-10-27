@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-10-01
+**Last reviewed:** 2026-10-27
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -42,13 +42,17 @@ validation and the acting admin is recorded in the audit log.
 
 ## Stripe Payment Links
 
-`/payment-links` is a platform-admin-only workspace for generating a fixed
-amount, one-time Stripe Payment Link in AED or USD. Admins can add checkout
-details and a reconciliation reference, then copy or open the hosted Stripe
-checkout URL. Each link accepts one completed payment. The API uses the
-configured `STRIPE_SECRET_KEY` and records link creation in the audit log;
-standalone link payments are visible in Stripe and are not attached to
-marketplace orders.
+`/payment-links` is available to platform admins and the scoped
+`PAYMENT_LINKS_ADMIN` role. The scoped role can open only this workspace and
+create fixed-amount, one-time Stripe Payment Links in AED or USD; it cannot
+open other admin pages or use their API routes. Admins can add checkout details
+and a reconciliation reference, then copy or open the hosted Stripe checkout
+URL. Each link accepts one completed payment. The API uses the configured
+`STRIPE_SECRET_KEY` and records link creation in the audit log; standalone link
+payments are visible in Stripe and are not attached to marketplace orders.
+Provision the scoped role for an existing verified account with
+`seed:payment-links-admin`; it preserves the account password and refuses to
+replace another staff role.
 
 ## Depends on
 
