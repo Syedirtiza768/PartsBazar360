@@ -83,12 +83,6 @@ export class SupportService {
           : null,
         cartSummary: isFreightQuote ? body.cartSummary || null : null,
       },
-      include: {
-        order: true,
-        sellerOrder: true,
-        canonicalPart: true,
-        sellerOffer: true,
-      },
     });
 
     // Notify admin of new ticket
@@ -104,7 +98,16 @@ export class SupportService {
       estimatedWeightKg: ticket.estimatedWeightKg ?? undefined,
     });
 
-    return ticket;
+    // Public ticket creation returns a receipt only. The related order, seller
+    // order, offer, and catalog entities are available to staff through the
+    // authenticated support endpoints, never to the guest submission caller.
+    return {
+      id: ticket.id,
+      category: ticket.category,
+      subject: ticket.subject,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+    };
   }
 
   async listTickets(query: {

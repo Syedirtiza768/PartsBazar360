@@ -15,6 +15,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { AuthService } from '../auth/auth.service';
 import {
@@ -76,7 +77,7 @@ export class CheckoutIdentityService {
     const session = await this.prisma.checkoutSession.create({
       data: {
         cartId,
-        draft: this.cleanDraft(draft),
+        draft: this.cleanDraft(draft) as Prisma.InputJsonValue | undefined,
       },
     });
     await this.trackEvent(session.id, 'checkout_started');
@@ -96,7 +97,9 @@ export class CheckoutIdentityService {
     }
     await this.prisma.checkoutSession.update({
       where: { id: session.id },
-      data: { draft: this.cleanDraft(draft) },
+      data: {
+        draft: this.cleanDraft(draft) as Prisma.InputJsonValue | undefined,
+      },
     });
     return { saved: true };
   }
@@ -540,11 +543,35 @@ export class CheckoutIdentityService {
       'deliveryInstructions',
       'paymentProvider',
     ];
-    return Object.fromEntries(
+    const cleaned: Record<string, unknown> = Object.fromEntries(
       allowed
         .filter((key) => typeof draft[key] === 'string')
         .map((key) => [key, String(draft[key]).slice(0, 500)]),
     );
+    const fingerprint = draft.checkoutValidationFingerprint;
+    if (
+      typeof fingerprint === 'string' &&
+      /^[a-f0-9]{64}$/i.test(fingerprint)
+    ) {
+      cleaned.checkoutValidationFingerprint = fingerprint.toLowerCase();
+    }
+    const acknowledgedCartItemIds = draft.acknowledgedCartItemIds;
+    if (Array.isArray(acknowledgedCartItemIds)) {
+      cleaned.acknowledgedCartItemIds = [
+        ...new Set(
+          acknowledgedCartItemIds
+            .filter(
+              (id): id is string =>
+                typeof id === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                  id,
+                ),
+            )
+            .slice(0, 250),
+        ),
+      ];
+    }
+    return cleaned;
   }
 
   private cleanMetadata(metadata: Record<string, string | number | boolean>) {

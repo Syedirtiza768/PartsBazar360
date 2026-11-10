@@ -6,6 +6,9 @@ describe('OrderService public order numbers', () => {
     [10000, 'PB10000'],
   ])('stores the public number %s as %s', async (lastNumber, expected) => {
     const tx = {
+      checkoutValidation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       orderNumberSequence: {
         update: jest.fn().mockResolvedValue({ lastNumber }),
       },
@@ -52,6 +55,10 @@ describe('OrderService public order numbers', () => {
         customerId: 'customer-1',
         verifiedPhone: '+971500000000',
         idempotencyKey: 'checkout-1',
+        cartId: 'cart-1',
+        checkoutValidationId: 'validation-1',
+        checkoutValidationSnapshot: { lines: [] },
+        shippingQuoteSnapshotsBySeller: {},
       },
     );
 

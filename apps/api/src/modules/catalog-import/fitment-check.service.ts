@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
-  isVerifiedFitmentEvidence,
+  isBuyerVerifiedFitmentEvidence,
   type FitmentStatus,
 } from '@repo/catalog-contracts';
 import { PrismaService } from '../../prisma.service';
@@ -12,8 +12,6 @@ export interface FitmentCheckResult {
     evidenceType: string;
     evidenceLevel: string;
     confidence: number;
-    source?: string | null;
-    reason?: string | null;
   }>;
   missingAttributes: string[];
   conflicts: string[];
@@ -63,10 +61,9 @@ export class FitmentCheckService {
             'An OEM number is associated with this part, but complete vehicle fitment has not been verified for your configuration.',
           evidence: [
             {
-              evidenceType: 'OEM_CROSS_REFERENCE',
+              evidenceType: 'OEM_NUMBER_REFERENCE',
               evidenceLevel: 'E',
               confidence: 0.4,
-              reason: 'OEM reference without vehicle configuration match',
             },
           ],
           missingAttributes: [],
@@ -85,25 +82,41 @@ export class FitmentCheckService {
       };
     }
 
-    const evidence = fitment.evidence.length
+    const rawEvidence = fitment.evidence.length
       ? fitment.evidence.map((e) => ({
           evidenceType: e.evidenceType,
           evidenceLevel: e.evidenceLevel,
           confidence: e.confidence,
-          source: e.source,
-          reason: e.reason,
         }))
       : [
           {
             evidenceType: fitment.source || 'LEGACY_FITMENT',
             evidenceLevel: fitment.evidenceLevel,
             confidence: fitment.confidence,
-            source: fitment.source,
-            reason: fitment.reason,
           },
         ];
 
-    if (isVerifiedFitmentEvidence(fitment.evidenceLevel, fitment.confidence)) {
+    const hasVerifiedEvidence =
+      isBuyerVerifiedFitmentEvidence(
+        fitment.evidenceLevel,
+        fitment.confidence,
+        fitment.source,
+      ) ||
+      fitment.evidence.some((row) =>
+        isBuyerVerifiedFitmentEvidence(
+          row.evidenceLevel,
+          row.confidence,
+          row.evidenceType || row.source,
+        ),
+      );
+    const evidence = rawEvidence.map((row) => ({
+      evidenceType: hasVerifiedEvidence
+        ? 'EXACT_CATALOG_APPLICATION'
+        : 'COMPATIBILITY_RECORD',
+      evidenceLevel: row.evidenceLevel,
+      confidence: row.confidence,
+    }));
+    if (hasVerifiedEvidence) {
       return {
         status: 'CONFIRMED',
         explanation:
@@ -117,6 +130,7 @@ export class FitmentCheckService {
 
     if (
       fitment.evidenceLevel === 'C' ||
+      fitment.evidenceLevel === 'B' ||
       (fitment.confidence >= 0.6 && fitment.confidence < 0.8)
     ) {
       return {
@@ -134,8 +148,7 @@ export class FitmentCheckService {
       return {
         status: 'OEM_NUMBER_MATCH',
         explanation:
-          fitment.reason ||
-          'Compatibility is seller-declared or inferred and is not independently verified.',
+          'Compatibility is not independently verified for this vehicle configuration.',
         evidence,
         missingAttributes: [],
         conflicts: [],

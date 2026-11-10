@@ -31,19 +31,33 @@ describe('ShippingService', () => {
       });
     });
 
-    it('falls back to the sheet average for unsupported countries', () => {
+    it('returns unavailable instead of assigning an average rate to unsupported countries', () => {
       const quote = service.quoteSellerShipping([dense(1)], 'Atlantis');
 
       expect(quote.matchedCountry).toBe(false);
-      expect(quote.amount).toBeGreaterThan(0);
+      expect(quote).toMatchObject({
+        available: false,
+        availabilityReason: 'DESTINATION_UNSUPPORTED',
+        serviceType: 'UNAVAILABLE',
+        amount: 0,
+        leadTime: null,
+      });
       expect(quote.billableWeightGrams).toBe(1000);
     });
 
-    it('extends heavier parcels beyond the largest defined band', () => {
+    it('requires a manual quote beyond the largest defined rate band', () => {
       const quote = service.quoteSellerShipping([dense(2.4)], 'Australia');
 
       expect(quote.billableWeightGrams).toBe(2400);
-      expect(quote.amount).toBe(383.4);
+      expect(quote).toMatchObject({
+        available: false,
+        requiresFreightQuote: true,
+        availabilityReason: 'FREIGHT_QUOTE_REQUIRED',
+        serviceType: 'FREIGHT_QUOTE_REQUIRED',
+        leadTime: null,
+        quotedWeightKg: 2.4,
+        amount: 0,
+      });
     });
   });
 
@@ -88,10 +102,12 @@ describe('ShippingService', () => {
       expect(quote.leadTime).toBe('04 to 06 Business Days');
     });
 
-    it('falls back to the conservative average window for a country with no rate-sheet row', () => {
+    it('returns no delivery window for a country with no rate-sheet row', () => {
       const quote = service.quoteSellerShipping([dense(1)], 'Atlantis');
       expect(quote.matchedCountry).toBe(false);
-      expect(quote.leadTime).toBe('08 to 14 Business Days');
+      expect(quote.available).toBe(false);
+      expect(quote.availabilityReason).toBe('DESTINATION_UNSUPPORTED');
+      expect(quote.leadTime).toBeNull();
     });
 
     it('gives UAE domestic delivery its own short window', () => {
@@ -119,7 +135,27 @@ describe('ShippingService', () => {
 
       expect(
         service.quoteSellerShipping([dense(40)], 'Emirates'),
-      ).toMatchObject({ serviceType: 'UAE FLAT (heavy)', amount: 150 });
+      ).toMatchObject({
+        available: false,
+        requiresFreightQuote: true,
+        serviceType: 'FREIGHT_QUOTE_REQUIRED',
+        amount: 0,
+      });
+    });
+  });
+
+  it('requires a specialist review for explicitly restricted handling', () => {
+    const quote = service.quoteSellerShipping(
+      [{ ...dense(1), requiresSpecialHandling: true }],
+      'UAE',
+    );
+
+    expect(quote).toMatchObject({
+      available: false,
+      availabilityReason: 'SPECIAL_HANDLING_REVIEW',
+      serviceType: 'SPECIAL_HANDLING_REVIEW',
+      amount: 0,
+      leadTime: null,
     });
   });
 
@@ -142,10 +178,7 @@ describe('ShippingService', () => {
 
     it('still charges normal shipping for other items in a mixed cart', () => {
       const quote = service.quoteSellerShipping(
-        [
-          { quantity: 1, canonicalPartId: PAYMENT_TEST_PART_ID },
-          dense(1),
-        ],
+        [{ quantity: 1, canonicalPartId: PAYMENT_TEST_PART_ID }, dense(1)],
         'United Arab Emirates',
       );
 
@@ -176,8 +209,8 @@ describe('ShippingService', () => {
       expect(quote.weightBasis).toBe('VOLUMETRIC');
       expect(quote.totalWeightGrams).toBe(8000);
       expect(quote.requiresFreightQuote).toBe(true);
-      expect(quote.serviceType).toBe('UAE FLAT (heavy)');
-      expect(quote.amount).toBe(150);
+      expect(quote.serviceType).toBe('FREIGHT_QUOTE_REQUIRED');
+      expect(quote.amount).toBe(0);
     });
 
     it('bills a mid-size bulky part on volume without tripping freight', () => {
@@ -194,9 +227,12 @@ describe('ShippingService', () => {
         'Australia',
       );
 
-      // 56 × 42 × 26 / 6000 ≈ 10.2kg volumetric vs 2.2kg actual.
+      // 56 × 42 × 26 / 6000 ≈ 10.2kg volumetric vs 2.2kg actual. The
+      // international rate sheet stops at 2kg, so the shipment needs review.
       expect(quote.weightBasis).toBe('VOLUMETRIC');
-      expect(quote.requiresFreightQuote).toBe(false);
+      expect(quote.requiresFreightQuote).toBe(true);
+      expect(quote.available).toBe(false);
+      expect(quote.amount).toBe(0);
       expect(quote.billableWeightGrams).toBeGreaterThan(10_000);
     });
 
@@ -321,10 +357,12 @@ describe('ShippingService', () => {
       );
 
       expect(quote.requiresFreightQuote).toBe(true);
-      // Priced at the 30kg courier ceiling, not 184kg of linear extrapolation.
-      expect(quote.quotedWeightKg).toBe(30);
+      // The eligibility weight is reported, but no ceiling/floor is charged.
+      expect(quote.quotedWeightKg).toBe(211.6);
       expect(quote.totalWeightGrams).toBe(184_000);
-      expect(quote.amount).toBeLessThan(6000);
+      expect(quote.amount).toBe(0);
+      expect(quote.available).toBe(false);
+      expect(quote.leadTime).toBeNull();
     });
 
     it('flags oversized UAE parcels too', () => {
@@ -341,7 +379,8 @@ describe('ShippingService', () => {
       );
 
       expect(quote.requiresFreightQuote).toBe(true);
-      expect(quote.serviceType).toBe('UAE FLAT (heavy)');
+      expect(quote.serviceType).toBe('FREIGHT_QUOTE_REQUIRED');
+      expect(quote.amount).toBe(0);
     });
 
     it('leaves normal parcels unflagged', () => {
@@ -372,14 +411,14 @@ describe('ShippingService', () => {
   describe('quantity', () => {
     it('multiplies billable weight by line quantity', () => {
       const single = service.quoteSellerShipping([dense(1)], 'Australia');
-      const triple = service.quoteSellerShipping(
-        [{ ...dense(1), quantity: 3 }],
+      const double = service.quoteSellerShipping(
+        [{ ...dense(1), quantity: 2 }],
         'Australia',
       );
 
       expect(single.totalWeightGrams).toBe(1000);
-      expect(triple.totalWeightGrams).toBe(3000);
-      expect(triple.amount).toBeGreaterThan(single.amount);
+      expect(double.totalWeightGrams).toBe(2000);
+      expect(double.amount).toBeGreaterThan(single.amount);
     });
   });
 

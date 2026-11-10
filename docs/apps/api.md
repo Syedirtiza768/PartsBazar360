@@ -79,6 +79,69 @@ shipping totals. Tax is derived from the charged total after item subtotal,
 coupon discount, and shipping because tax is not currently stored as a
 separate order column.
 
+## 2026-10-09 buyer safety projections
+
+Buyer-facing search responses are allowlisted in
+`modules/search/buyer-visible-offers.util.ts`. PDP, enrichment, cart, order and
+public support receipt routes project only fields needed by the buyer; private
+seller relations remain available inside checkout, settlement and staff
+operations. Public fitment responses use a controlled evidence category and
+never return raw source/reason strings. Only A/B evidence at the confidence
+threshold from an approved exact-application source may be described as
+confirmed; title/MVL identity matches stay advisory.
+
+`POST /cart/:cartId/items` accepts an optional canonical
+`vehicleConfigId`. PDP adds pass the selected garage configuration; an explicit
+null records no-vehicle intent. The same offer stays on separate cart lines
+when intended for different vehicles, and stock availability is checked
+against the combined quantity across those lines. Existing lines can change
+intent through `PATCH /cart/:cartId/items/:itemId/vehicle`; checkout still
+computes and enforces the authoritative per-line decision.
+
+Shipping quotes return an unavailable reason with no payable amount or ETA for
+unsupported destinations. Explicit special-handling flags require review, and
+checkout re-evaluates both shipping and freight eligibility before reservation
+and on payment retry. International quotes stop at the EMX rate sheet's highest
+weight band; the UAE flat tiers stop at their explicit 25 kg limit. Over-band
+parcels receive no estimated charge or delivery promise and require manual
+freight review. Rate, dangerous-goods, origin, packaging, quote expiry and
+unknown-restriction profiles still require operations-owned policy and data.
+The legacy search writer now indexes manufacturer/OE identifiers in its
+normalized exact-number field; existing documents require a controlled
+reindex before that change affects search.
+
+## 2026-10-09 per-line checkout review
+
+`POST /checkout/:cartId/validate` creates a ten-minute, one-use server review
+bound to the cart, checkout session, item revisions, intended vehicle, exact
+fitment evidence, stock, delivery quote, address, currency, provider, coupon,
+and policy version. Buyer responses expose only the decision and an opaque
+fingerprint. `POST /checkout/:cartId` ignores client fitment claims, compares
+the review fingerprint with a fresh server evaluation, requires an exact set of
+acknowledgments for unresolved lines, and rejects explicit conflicts or
+unavailable shipping before stock reservation or provider-session creation.
+
+Each cart line stores its intended `VehicleConfiguration` and purchase intent;
+changing the active garage vehicle does not rewrite other lines. Order, seller
+shipment, order-line, and payment-attempt records retain the internal decision
+and quote snapshots. Decline retries and resumes of unpaid hosted sessions
+re-check cart identity, address, current fitment, shipping, item prices and the
+stored payable total before exposing a payment URL. Checkout drafts retain only
+bounded UUID acknowledgment IDs and a SHA-256 fingerprint; these values are
+never authorization and must match a newly validated review.
+
+The additive migration is `20261009170000_add_per_line_checkout_validation`.
+It has been schema-validated locally but not applied to any database. High-
+value used-assembly risk thresholds, quote/rate expiry and operational shipping
+profiles still require approval from the responsible data and fulfillment
+owners.
+
+Order creation starts checkout but does not send an order notification. The
+notification service suppresses legacy `ORDER_CREATED` events, while the
+existing `PAYMENT_STATUS_CHANGED` event with `PAID` sends the buyer confirmation
+and operations update after the payment transition succeeds. Payment-failure
+and later fulfillment notifications remain separate lifecycle events.
+
 ## Modules (`src/modules/*`)
 
 - `auth` — authentication (see [[../decisions]] re: email vs SMS OTP)
@@ -98,6 +161,7 @@ separate order column.
 - `order`
 - `pricing`
 - `realtrack-publish` — inbound `/integrations/realtrack/listings` endpoint RealTrack publishes into (queues to the ingestion worker); see "RealTrack publish endpoint" above
+- `private-image-proxy` — buyer listing photos under the approved private S3 inventory prefix are served by the internal image-proxy service; see [[private-image-proxy]]
 - `realtrack-bridge` — admin-only selection, pricing preview, and transfer of PartsBazar offers into the existing RealTrack listing API
 - `search` — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[../SEARCH_PHASE1_AUDIT]], [[../SEARCH_PHASE2_RESULTS]]
 - `seed` — marketplace seeding, see [[../SEEDING_AND_IMPORTS]]
@@ -170,6 +234,15 @@ channel is available and are copied to `info@partsbazar360.com`.
 customer/admin messages. Database writes complete before notification delivery;
 provider failures are logged independently and do not roll back the order
 mutation.
+
+`OrderNotificationService` also fans out the full order lifecycle: creation,
+payment success/failure/retry, cancellation, refund, seller shipment/delivery
+status, and tracking-detail changes. Each event is sent to the customer by
+SMSGlobal and SendGrid when a channel is available and is always copied to
+`info@partsbazar360.com`. `SellerOrder.trackingUrl` is validated as an HTTP(S)
+URL and included in customer/admin messages. Database writes complete before
+notification delivery; provider failures are logged independently and do not
+roll back the order mutation.
 
 New orders also receive a public `orderNumber` such as `PB1110`. The number
 is allocated from a singleton Postgres counter inside the same transaction as

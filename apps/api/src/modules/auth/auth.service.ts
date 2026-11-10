@@ -593,7 +593,7 @@ export class AuthService {
     }
     if (existing.role !== 'BUYER' && existing.role !== 'PAYMENT_LINKS_ADMIN') {
       throw new BadRequestException(
-        'Account already has another staff role; refusing to replace it.',
+        `Account already has the ${existing.role} role; refusing to replace it.`,
       );
     }
     if (!existing.passwordHash || !existing.emailVerified) {

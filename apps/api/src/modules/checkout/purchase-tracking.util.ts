@@ -54,11 +54,10 @@ export function buildPurchaseTrackingPayload(
   const items = order.sellerOrders.flatMap((sellerOrder) =>
     sellerOrder.items.map((item) => {
       const itemId =
-        item.sellerOffer?.canonicalPart?.id?.trim() || item.sellerOfferId;
+        item.sellerOffer?.canonicalPart?.id?.trim() || 'marketplace-part';
       const itemName =
         item.sellerOffer?.canonicalPart?.title?.trim() ||
-        item.sellerOffer?.sellerTitle?.trim() ||
-        itemId;
+        'Marketplace part';
 
       return {
         item_id: itemId,

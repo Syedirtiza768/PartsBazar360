@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { createReadStream } from 'fs';
 import Redis from 'ioredis';
+import { isBuyerVerifiedFitmentEvidence } from '@repo/catalog-contracts';
 import { OpenSearchService, type BrowseSort } from './opensearch.service';
 import { PrismaService } from '../../prisma.service';
 import { SeoSlugService } from '../seo/seo-slug.service';
@@ -21,10 +22,15 @@ import { FebestWebsiteService } from './febest-website.service';
 import { MvlOeCatalogService } from './mvl-oe-catalog.service';
 import {
   applySuperiorPriority,
+  sanitizeBuyerSpecifics,
+  sanitizeBuyerText,
   sanitizeSearchItems,
 } from './buyer-visible-offers.util';
 import { buildPartShippingSummary } from '../checkout/part-shipping-summary.util';
-import { ShippingService } from '../checkout/shipping.service';
+import {
+  partRequiresSpecialHandling,
+  ShippingService,
+} from '../checkout/shipping.service';
 import { EnrichmentService } from '../enrichment/enrichment.service';
 import { renderInfographicSvg } from '../enrichment/infographic-renderer';
 import { renderPlaceholderSvg } from '../enrichment/placeholder-svg';
@@ -55,6 +61,23 @@ type CompatRow = {
 };
 
 const MVL_MARKETS = ['US', 'DE', 'UK', 'AU'] as const;
+
+function hasBuyerVerifiedFitment(fitment: any): boolean {
+  return (
+    isBuyerVerifiedFitmentEvidence(
+      fitment?.evidenceLevel,
+      fitment?.confidence,
+      fitment?.source,
+    ) ||
+    (fitment?.evidence || []).some((evidence: any) =>
+      isBuyerVerifiedFitmentEvidence(
+        evidence.evidenceLevel,
+        evidence.confidence,
+        evidence.evidenceType || evidence.source,
+      ),
+    )
+  );
+}
 
 function parsePriceParam(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -309,6 +332,10 @@ export class SearchController implements OnModuleDestroy {
     });
     await this.seoSlugs.attachSlugs(visible);
     result.items = visible;
+    if (result.facets) {
+      result.facets.sourceTags = [];
+      delete (result.facets as any).sellers;
+    }
     // Fire-and-forget: FEBEST enrichment runs in background, doesn't block response.
     void this.febestWebsite.attachImagesToSearchItems(visible).catch(() => {});
     void this.enrichment.requestEnrichmentByIds(
@@ -327,7 +354,8 @@ export class SearchController implements OnModuleDestroy {
   // Brand/category facets with counts, to power the browse-page filter sidebar.
   @Get('facets')
   async getFacets() {
-    return this.searchService.getFacets();
+    const facets = await this.searchService.getFacets();
+    return { ...facets, sourceTags: [], sellers: [] };
   }
 
   // Lightweight autocomplete — returns top parts, categories, and brands
@@ -345,7 +373,8 @@ export class SearchController implements OnModuleDestroy {
         sourceTags: [],
       };
     }
-    return this.searchService.suggest(query);
+    const suggestions = await this.searchService.suggest(query);
+    return { ...suggestions, sourceTags: [] };
   }
 
   /**
@@ -500,6 +529,7 @@ export class SearchController implements OnModuleDestroy {
         },
         fitments: {
           include: {
+            evidence: true,
             vehicleConfig: {
               include: {
                 generation: {
@@ -558,8 +588,13 @@ export class SearchController implements OnModuleDestroy {
         model: model.name,
         startYear: gen.startYear,
         endYear: gen.endYear,
-        evidenceLevel: f.evidenceLevel,
-        confidence: f.confidence,
+        evidenceLevel: hasBuyerVerifiedFitment(f)
+          ? f.evidenceLevel
+          : 'C',
+        confidence: hasBuyerVerifiedFitment(f)
+          ? f.confidence
+          : Math.min(Number(f.confidence) || 0, 0.65),
+        verified: hasBuyerVerifiedFitment(f),
       };
     });
 
@@ -604,8 +639,7 @@ export class SearchController implements OnModuleDestroy {
     const mediaUrls = (partWithOffers.media || [])
       .map((m) => m.url)
       .filter(Boolean);
-    const storedUrls = (partWithOffers.imageUrls || [])
-      .filter(Boolean);
+    const storedUrls = (partWithOffers.imageUrls || []).filter(Boolean);
     const normalizeUrl = (u: string) => {
       try {
         const parsed = new URL(u);
@@ -640,7 +674,6 @@ export class SearchController implements OnModuleDestroy {
       url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)$/i, '/s-l1600.$1'),
     );
 
-    let listingUrl = partWithOffers.listingUrl;
     const oemCrossReferences = partWithOffers.partNumbers
       .filter((number) => number.numberType === 'OEM_CROSS_REFERENCE')
       .map((number) => ({
@@ -650,7 +683,6 @@ export class SearchController implements OnModuleDestroy {
           number.vehicleMake?.displayName || number.vehicleMake?.name || null,
         verificationStatus: number.verificationStatus,
       }));
-    let enrichmentSource: string | null = null;
     let enrichmentLive = false;
 
     // FEBEST: resolve images + compatibility live from febest.de for this PDP
@@ -676,9 +708,7 @@ export class SearchController implements OnModuleDestroy {
         partWithOffers.manufacturerPartNumber,
       );
       if (live) {
-        enrichmentSource = 'febest.de';
         enrichmentLive = true;
-        listingUrl = live.detailsUrl;
         if (live.imageUrls.length > 0) {
           // Merge live FEBEST images with stored ones; live take priority.
           // Re-apply SVG filter and full URL normalization so FEBEST scrape
@@ -764,9 +794,6 @@ export class SearchController implements OnModuleDestroy {
       });
 
       if (oeEnrichment?.expanded) {
-        enrichmentSource = oeEnrichment.platform
-          ? `mvl_catalog:${oeEnrichment.platform}`
-          : 'mvl_catalog';
         enrichmentLive = true;
         compatibilityTable = oeEnrichment.rows.map((row) => ({
           year: row.year,
@@ -778,7 +805,16 @@ export class SearchController implements OnModuleDestroy {
           mvlVerified: true,
           epid: row.epid ?? null,
         }));
-        compatibleVehicles = oeEnrichment.compatibleVehicles;
+        // The OE expansion broadens a vehicle catalog range from sparse seed
+        // data. MVL validates those vehicle identities; it does not prove the
+        // part-to-configuration relationship, so keep every expanded row
+        // advisory until an exact catalog source validates that relationship.
+        compatibleVehicles = oeEnrichment.compatibleVehicles.map((vehicle) => ({
+          ...vehicle,
+          evidenceLevel: 'C',
+          confidence: Math.min(Number(vehicle.confidence) || 0, 0.65),
+          verified: false,
+        }));
       }
     }
 
@@ -855,6 +891,10 @@ export class SearchController implements OnModuleDestroy {
       normalizedMaterial = String(normalizedItemSpecifics.material);
     }
 
+    // SEO provenance is internal enrichment bookkeeping and is not part of
+    // the public buyer contract.
+    if (normalizedItemSpecifics) delete normalizedItemSpecifics._seo;
+
     // Cache-aside: this view is what triggers enrichment, but the response never
     // waits on it. Not awaited, and the service swallows its own failures.
     // Cache-aside: this view is what triggers enrichment, but the response never
@@ -883,30 +923,152 @@ export class SearchController implements OnModuleDestroy {
       }
     }
 
+    const {
+      fitments: _privateFitments,
+      salvageUnits: _privateSalvageUnits,
+      media: _privateMedia,
+      partNumbers: _privatePartNumbers,
+      primaryBrand: _privatePrimaryBrand,
+    } = partWithOffers as any;
+    const publicCompatibilityRows = mvlVerifiedTable.map((row) => ({
+      year: row.year,
+      make: row.make,
+      model: row.model,
+      trim: row.trim,
+      engine: row.engine,
+    }));
+
     return {
-      ...partWithOffers,
+      id: partWithOffers.id,
+      slug: partWithOffers.slug,
+      title: sanitizeBuyerText(
+        partWithOffers.title,
+        buyerOffers,
+        partWithOffers.brand,
+        false,
+      ),
+      description: sanitizeBuyerText(
+        partWithOffers.description,
+        buyerOffers,
+        partWithOffers.brand,
+      ),
       brand: canonicalizeCatalogBrand(partWithOffers.brand),
-      itemSpecifics: normalizedItemSpecifics,
+      manufacturer: sanitizeBuyerText(
+        partWithOffers.manufacturer,
+        buyerOffers,
+        partWithOffers.brand,
+        false,
+      ),
+      manufacturerPartNumber: partWithOffers.manufacturerPartNumber,
+      genuineOemPartNumber: partWithOffers.genuineOemPartNumber,
+      category: partWithOffers.category,
+      categoryGroup: partWithOffers.categoryGroup,
+      partSource: partWithOffers.partSource,
+      partType: partWithOffers.partType,
+      qualityTier: partWithOffers.qualityTier,
+      oeNumbers: partWithOffers.oeNumbers,
+      fitmentFlags: (partWithOffers.fitmentFlags || []).filter((flag: string) =>
+        String(flag).toUpperCase().includes('UNIVERSAL'),
+      ),
+      createdAt: partWithOffers.createdAt,
       position: normalizedPosition,
       vehicleSystem: normalizedVehicleSystem,
       material: normalizedMaterial,
+      fitmentStatus:
+        partWithOffers.fitmentStatus === 'CONFIRMED'
+          ? 'LIKELY'
+          : partWithOffers.fitmentStatus,
+      fitmentConfidence:
+        partWithOffers.fitmentStatus === 'CONFIRMED'
+          ? Math.min(Number(partWithOffers.fitmentConfidence) || 0, 0.65)
+          : partWithOffers.fitmentConfidence,
+      primaryBrand: _privatePrimaryBrand
+        ? {
+            displayName: _privatePrimaryBrand.displayName,
+            canonicalName: _privatePrimaryBrand.canonicalName,
+          }
+        : null,
+      partNumbers: (_privatePartNumbers || [])
+        .filter(
+          (number: any) =>
+            !['SELLER_SKU', 'SKU'].includes(
+              String(number.numberType || '').toUpperCase(),
+            ),
+        )
+        .map((number: any) => ({
+          displayNumber: number.displayNumber,
+          normalizedNumber: number.normalizedNumber,
+          numberType: number.numberType,
+          make:
+            number.vehicleMake?.displayName || number.vehicleMake?.name || null,
+          brand:
+            number.brand?.displayName || number.brand?.canonicalName || null,
+        })),
+      offers: buyerOffers.map((offer: any) => ({
+        id: offer.id,
+        price: offer.price,
+        currency: offer.currency,
+        condition: offer.condition,
+        partSource: offer.partSource,
+        partType: offer.partType,
+        qualityTier: offer.qualityTier,
+        moq: offer.moq,
+        leadTimeDays: offer.leadTimeDays,
+        inStock: true,
+      })),
+      fitments: (_privateFitments || []).map((fitment: any) => ({
+        vehicleConfigId: fitment.vehicleConfigId,
+        evidenceLevel: fitment.evidenceLevel,
+        confidence: fitment.confidence,
+        verified: hasBuyerVerifiedFitment(fitment),
+      })),
+      media: (_privateMedia || []).map((media: any) => ({
+        url: media.url,
+        altText: sanitizeBuyerText(
+          media.altText,
+          buyerOffers,
+          partWithOffers.brand,
+          false,
+        ),
+        isPrimary: media.isPrimary,
+        isActualItem: media.isActualItem,
+        sortOrder: media.sortOrder,
+      })),
+      itemSpecifics: sanitizeBuyerSpecifics(
+        normalizedItemSpecifics,
+        buyerOffers,
+        partWithOffers.brand,
+      ),
       // Always resolvable, so the PDP can render a shipping figure on first
       // paint instead of waiting on background enrichment.
       shipping: buildPartShippingSummary(part),
-      // Strip stored compatibility from the FEBEST live path so the client
-      // never treats DB cache as authoritative for these parts.
-      compatibility: mvlVerifiedTable,
       imageUrls,
       locationDiagramUrl: locationDiagram?.url ?? null,
-      locationDiagramAlt: locationDiagram?.altText ?? null,
+      locationDiagramAlt: sanitizeBuyerText(
+        locationDiagram?.altText,
+        buyerOffers,
+        partWithOffers.brand,
+        false,
+      ),
       infographicUrl: infographic?.url ?? null,
-      infographicAlt: infographic?.altText ?? null,
-      listingUrl,
-      compatibleVehicles,
-      compatibilityTable: mvlVerifiedTable,
+      infographicAlt: sanitizeBuyerText(
+        infographic?.altText,
+        buyerOffers,
+        partWithOffers.brand,
+        false,
+      ),
+      compatibleVehicles: compatibleVehicles.map((vehicle) => ({
+        label: vehicle.label,
+        make: vehicle.make,
+        model: vehicle.model,
+        startYear: vehicle.startYear,
+        endYear: vehicle.endYear,
+        verified: vehicle.verified === true,
+      })),
+      compatibilityTable: publicCompatibilityRows,
+      compatibility: publicCompatibilityRows,
       oemCrossReferences,
-      enrichmentSource,
-      enrichmentLive,
+      sourceTags: [],
       salvageUnits: (partWithOffers.salvageUnits?.length
         ? partWithOffers.salvageUnits
         : partWithOffers.offers.flatMap((offer) => offer.salvageUnits || [])
@@ -915,12 +1077,13 @@ export class SearchController implements OnModuleDestroy {
         originalOemNumber: unit.originalOemNumber,
         conditionGrade: unit.conditionGrade,
         testedStatus: unit.testedStatus,
-        damageNotes: unit.damageNotes,
+        damageNotes: sanitizeBuyerText(
+          unit.damageNotes,
+          buyerOffers,
+          partWithOffers.brand,
+        ),
         missingComponents: unit.missingComponents,
         warranty: unit.warranty,
-        dismantlingLocation: unit.dismantlingLocation,
-        shelfBin: unit.shelfBin,
-        identityMethod: unit.identityMethod,
         donorVehicle: unit.donorVehicle
           ? {
               make:
@@ -931,10 +1094,8 @@ export class SearchController implements OnModuleDestroy {
               modelYear: unit.donorVehicle.modelYear,
               trim: unit.donorVehicle.trim,
               engine: unit.donorVehicle.engine,
-              vinMasked: unit.donorVehicle.vinMasked,
               mileage: unit.donorVehicle.mileage,
               mileageUnit: unit.donorVehicle.mileageUnit,
-              donorStockNumber: unit.donorVehicle.donorStockNumber,
             }
           : null,
       })),
@@ -978,6 +1139,8 @@ export class SearchController implements OnModuleDestroy {
       throw new NotFoundException(`Part ${id} not found`);
     }
 
+    const publicItemSpecifics = sanitizeBuyerSpecifics(part.itemSpecifics);
+
     const locationDiagram = part.media.find(
       (m) => m.mediaType === 'LOCATION_DIAGRAM',
     );
@@ -989,8 +1152,10 @@ export class SearchController implements OnModuleDestroy {
       enrichmentStatus: part.enrichmentStatus,
       enrichmentVersion: part.enrichmentVersion,
       enrichedAt: part.enrichedAt,
-      hasItemSpecifics: Boolean(part.itemSpecifics),
-      itemSpecifics: part.itemSpecifics,
+      hasItemSpecifics: Boolean(
+        publicItemSpecifics && Object.keys(publicItemSpecifics).length,
+      ),
+      itemSpecifics: publicItemSpecifics,
       locationDiagramUrl: locationDiagram?.url ?? null,
       locationDiagramAlt: locationDiagram?.altText ?? null,
       infographicUrl: infographic?.url ?? null,
@@ -1013,13 +1178,6 @@ export class SearchController implements OnModuleDestroy {
       throw new BadRequestException('country is required');
     }
 
-    const cacheK = this.cacheKey('shipping-quote', {
-      id,
-      country: destination,
-    });
-    const cached = await this.cacheGet<any>(cacheK);
-    if (cached) return cached;
-
     const part = await this.prisma.canonicalPart.findUnique({
       where: { id },
       select: {
@@ -1029,6 +1187,7 @@ export class SearchController implements OnModuleDestroy {
         partClassKey: true,
         dimensions: true,
         enrichmentStatus: true,
+        itemSpecifics: true,
       },
     });
     if (!part) {
@@ -1044,13 +1203,15 @@ export class SearchController implements OnModuleDestroy {
           dimensionsCm: summary.dimensionsCm,
           weightSource: summary.source,
           partClassKey: summary.partClassKey,
+          requiresSpecialHandling: partRequiresSpecialHandling(
+            part.itemSpecifics,
+          ),
         },
       ],
       destination,
     );
 
     const result = { partId: id, weightState: summary.state, ...quote };
-    this.cacheSet(cacheK, result, 45);
     return result;
   }
 

@@ -96,7 +96,7 @@ async function main() {
       `Total Amount (incl Shipping): ${checkoutResult.order.totalAmount} ${checkoutResult.order.currency}`,
     );
     console.log(
-      `Payment Intent Status: ${checkoutResult.paymentIntent.status} via ${checkoutResult.paymentIntent.provider}`,
+      `Payment Intent Status: ${checkoutResult.paymentIntent?.status ?? 'unavailable'} via ${checkoutResult.paymentIntent?.provider ?? 'unknown'}`,
     );
     console.log(`Checkout URL: ${checkoutResult.checkoutUrl}`);
     console.log(

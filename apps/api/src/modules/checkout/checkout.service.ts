@@ -1,14 +1,21 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { isBuyerVerifiedFitmentEvidence } from '@repo/catalog-contracts';
 import { CartService } from '../cart/cart.service';
 import { ReservationService } from '../inventory/reservation.service';
 import { OrderService } from '../order/order.service';
-import { ShippingService, type ShippingQuoteItem } from './shipping.service';
+import {
+  partRequiresSpecialHandling,
+  ShippingService,
+  type ShippingQuoteItem,
+} from './shipping.service';
 import { parseDimensionsJson } from './billable-weight.util';
 import { resolvePartClassKey } from './part-class-weights';
 import { StripeService } from './stripe.service';
@@ -31,6 +38,14 @@ import { CheckoutIdentityService } from './checkout-identity.service';
 import { OrderNotificationService } from '../order/order-notification.service';
 import { normalizePhone, normalizeUnvalidatedPhone } from '../auth/phone.util';
 import { buildPurchaseTrackingPayload } from './purchase-tracking.util';
+import {
+  acknowledgmentsMatch,
+  CHECKOUT_VALIDATION_POLICY_VERSION,
+  CHECKOUT_VALIDATION_TTL_MS,
+  checkoutValidationFingerprint,
+  publicCheckoutValidation,
+  type CheckoutLineDecision,
+} from './checkout-validation.util';
 
 @Injectable()
 export class CheckoutService {
@@ -66,6 +81,8 @@ export class CheckoutService {
       checkoutSessionId?: string;
       checkoutToken?: string;
       idempotencyKey?: string;
+      validationId?: string;
+      acknowledgedCartItemIds?: string[];
     },
     couponCodeInput?: string | null,
   ) {
@@ -168,7 +185,25 @@ export class CheckoutService {
           buyer,
           paymentProviderInput || existingOrder.paymentIntent.provider,
           checkoutSessionId,
+          {
+            validationId: checkoutAuth?.validationId,
+            acknowledgedCartItemIds: checkoutAuth?.acknowledgedCartItemIds,
+          },
         );
+      }
+      if (existingOrder.status !== 'PAID') {
+        await this.validatePendingOrderResume({
+          order: existingOrder,
+          cartId,
+          shippingAddress,
+          chargeCurrencyInput,
+          paymentProviderInput,
+          checkoutSessionId,
+          validationInput: {
+            validationId: checkoutAuth?.validationId,
+            acknowledgedCartItemIds: checkoutAuth?.acknowledgedCartItemIds,
+          },
+        });
       }
       return this.resumeExistingOrder(existingOrder);
     }
@@ -209,6 +244,19 @@ export class CheckoutService {
           chargeCurrency,
         )
       : null;
+
+    const checkoutValidation = await this.requireCheckoutValidation({
+      cart,
+      cartId,
+      checkoutSessionId,
+      validationId: checkoutAuth?.validationId,
+      acknowledgedCartItemIds: checkoutAuth?.acknowledgedCartItemIds,
+      shippingAddress,
+      destinationCountry,
+      chargeCurrency,
+      paymentProvider,
+      couponCode: coupon?.code ?? null,
+    });
 
     const dbUser = resolvedBuyerId
       ? await this.prisma.user.findUnique({ where: { id: resolvedBuyerId } })
@@ -268,21 +316,10 @@ export class CheckoutService {
           ] as const,
       ),
     );
-
-    const freightSellers = [...quotesBySeller.values()].filter(
-      (quote) => quote.requiresFreightQuote,
+    this.assertShippingQuotesAvailable(
+      [...quotesBySeller.values()],
+      destinationCountry,
     );
-    if (freightSellers.length > 0) {
-      // The rate sheet only covers courier parcels, so an automatic price here
-      // would under-charge by a wide margin. Ops must quote these manually.
-      throw new BadRequestException(
-        `This order exceeds courier limits (${freightSellers
-          .map((q) => `${q.quotedWeightKg}kg+`)
-          .join(
-            ', ',
-          )}) and needs a freight quote. Please submit a freight quote request at ${this.buyerAppUrl}/support?category=FREIGHT_QUOTE.`,
-      );
-    }
 
     // 1. Lock stock for all items
     const reservedOffers: string[] = [];
@@ -344,6 +381,15 @@ export class CheckoutService {
           couponId: coupon?.id,
           couponCode: coupon?.code,
           discountAmount: coupon?.discountAmount,
+          cartId,
+          checkoutValidationId: checkoutValidation.id,
+          checkoutValidationSnapshot: checkoutValidation.snapshot,
+          shippingQuoteSnapshotsBySeller: Object.fromEntries(
+            [...quotesBySeller.entries()].map(([sellerId, quote]) => [
+              sellerId,
+              quote,
+            ]),
+          ),
         },
       );
     } catch (error) {
@@ -364,19 +410,24 @@ export class CheckoutService {
             },
           },
         });
-        if (replay) return this.resumeExistingOrder(replay);
+        if (replay) {
+          const replayFingerprint = (
+            replay.checkoutValidationSnapshot as
+              Record<string, unknown> | null | undefined
+          )?.fingerprint;
+          if (
+            typeof replayFingerprint !== 'string' ||
+            replayFingerprint !== checkoutValidation.snapshot.fingerprint
+          ) {
+            throw new ConflictException(
+              'Another checkout attempt created an order with different reviewed details. Review the order again before paying.',
+            );
+          }
+          return this.resumeExistingOrder(replay);
+        }
       }
       throw error;
     }
-
-    void this.orderNotifications
-      .notifyOrderUpdated(order.id, {
-        type: 'ORDER_CREATED',
-        status: order.status,
-      })
-      .catch((err) =>
-        this.logger.error(`Order creation notification failed: ${err}`),
-      );
 
     // 4. Create the local payment record and the selected hosted checkout.
     const paymentIntent = await this.prisma.paymentIntent.create({
@@ -536,12 +587,11 @@ export class CheckoutService {
     );
 
     return {
-      order,
-      paymentIntent: {
+      order: this.toBuyerOrder(order, cart.items),
+      paymentIntent: this.toBuyerPaymentIntent({
         ...paymentIntent,
-        externalId: checkoutSession.externalId,
         status: 'PENDING',
-      },
+      }),
       checkoutUrl: checkoutSession.url,
       paymentProvider,
       chargeCurrency,
@@ -553,8 +603,8 @@ export class CheckoutService {
   private resumeExistingOrder(order: any) {
     const latestAttempt = order.paymentIntent?.attempts?.[0];
     return {
-      order,
-      paymentIntent: order.paymentIntent,
+      order: this.toBuyerOrder(order),
+      paymentIntent: this.toBuyerPaymentIntent(order.paymentIntent),
       checkoutUrl:
         order.status === 'PAID' ? null : (latestAttempt?.checkoutUrl ?? null),
       paymentProvider: order.paymentIntent?.provider ?? null,
@@ -574,6 +624,10 @@ export class CheckoutService {
     buyer: { email?: string | null; name?: string; phone?: string },
     providerInput: string,
     checkoutSessionId?: string,
+    validationInput?: {
+      validationId?: string;
+      acknowledgedCartItemIds?: string[];
+    },
   ) {
     const paymentProvider: 'stripe' | 'tamara' =
       providerInput === 'tamara' ? 'tamara' : 'stripe';
@@ -616,6 +670,56 @@ export class CheckoutService {
       );
     }
 
+    const address = (order.shippingAddress || {}) as Record<string, unknown>;
+    const destinationCountry = this.getDestinationCountry(address);
+    const checkoutValidation = await this.requireCheckoutValidation({
+      cart,
+      cartId,
+      checkoutSessionId,
+      validationId: validationInput?.validationId,
+      acknowledgedCartItemIds: validationInput?.acknowledgedCartItemIds,
+      shippingAddress: address,
+      destinationCountry,
+      chargeCurrency: order.currency as ChargeCurrency,
+      paymentProvider,
+      couponCode: order.couponCode ?? null,
+    });
+    const retryQuotes = Object.values(this.groupItemsBySeller(cart.items)).map(
+      (items) =>
+        this.shippingService.quoteSellerShipping(
+          items.map((item) => this.toShippingItem(item)),
+          destinationCountry,
+        ),
+    );
+    this.assertShippingQuotesAvailable(retryQuotes, destinationCountry);
+
+    const retryQuoteBySeller = Object.fromEntries(
+      Object.entries(this.groupItemsBySeller(cart.items)).map(
+        ([sellerId, sellerItems]) => [
+          sellerId,
+          this.shippingService.quoteSellerShipping(
+            sellerItems.map((item) => this.toShippingItem(item)),
+            destinationCountry,
+          ),
+        ],
+      ),
+    );
+    for (const sellerOrder of order.sellerOrders) {
+      const quote = retryQuoteBySeller[sellerOrder.sellerId];
+      const recalculatedShipping = quote
+        ? convertAmount(quote.amount, SETTLEMENT_CURRENCY, order.currency)
+        : null;
+      if (
+        recalculatedShipping == null ||
+        roundMoney(recalculatedShipping) !==
+          roundMoney(sellerOrder.shippingTotal)
+      ) {
+        throw new ConflictException(
+          'Delivery pricing changed since this order was created. Contact support before retrying payment.',
+        );
+      }
+    }
+
     const reservedOffers: string[] = [];
     for (const [offerId, quantity] of orderedQuantityByOffer) {
       const cartItem = cart.items.find(
@@ -644,18 +748,40 @@ export class CheckoutService {
       reservedOffers.push(offerId);
     }
 
-    const address = (order.shippingAddress || {}) as Record<string, unknown>;
-    const destinationCountry = this.getDestinationCountry(address);
     const tamaraMarket =
       paymentProvider === 'tamara'
         ? this.resolveTamaraMarket(destinationCountry)
         : null;
-    const paymentClaim = await this.prisma.paymentIntent.updateMany({
-      where: {
-        id: order.paymentIntent.id,
-        status: { not: 'SUCCEEDED' },
-      },
-      data: { provider: paymentProvider, status: 'PENDING', externalId: null },
+    const paymentClaim = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.paymentIntent.updateMany({
+        where: {
+          id: order.paymentIntent.id,
+          status: { not: 'SUCCEEDED' },
+        },
+        data: {
+          provider: paymentProvider,
+          status: 'PENDING',
+          externalId: null,
+        },
+      });
+      if (claim.count === 0) return claim;
+
+      const validationClaim = await tx.checkoutValidation.updateMany({
+        where: {
+          id: checkoutValidation.id,
+          cartId,
+          checkoutSessionId: checkoutSessionId ?? null,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: { consumedAt: new Date() },
+      });
+      if (validationClaim.count !== 1) {
+        throw new ConflictException(
+          'Checkout review expired or was already used. Review the order again.',
+        );
+      }
+      return claim;
     });
     if (paymentClaim.count === 0) {
       for (const reservedOfferId of reservedOffers) {
@@ -676,7 +802,11 @@ export class CheckoutService {
       where: { id: order.paymentIntent.id },
     });
     const attempt = await this.prisma.paymentAttempt.create({
-      data: { paymentIntentId: paymentIntent.id, provider: paymentProvider },
+      data: {
+        paymentIntentId: paymentIntent.id,
+        provider: paymentProvider,
+        validationSnapshot: checkoutValidation.snapshot,
+      },
     });
     const buyerAppUrl = this.buyerAppUrl.replace(/\/$/, '');
     let externalId: string;
@@ -821,8 +951,8 @@ export class CheckoutService {
         },
       });
       return {
-        order: { ...order, status: 'PAID' },
-        paymentIntent: finalPayment,
+        order: this.toBuyerOrder({ ...order, status: 'PAID' }, cart.items),
+        paymentIntent: this.toBuyerPaymentIntent(finalPayment),
         checkoutUrl: null,
         paymentProvider: finalPayment.provider,
         chargeCurrency: order.currency,
@@ -842,8 +972,14 @@ export class CheckoutService {
       );
     }
     return {
-      order: { ...order, status: 'PENDING_PAYMENT' },
-      paymentIntent: { ...paymentIntent, externalId },
+      order: this.toBuyerOrder(
+        { ...order, status: 'PENDING_PAYMENT' },
+        cart.items,
+      ),
+      paymentIntent: this.toBuyerPaymentIntent({
+        ...paymentIntent,
+        status: 'PENDING',
+      }),
       checkoutUrl,
       paymentProvider,
       chargeCurrency: order.currency,
@@ -893,8 +1029,9 @@ export class CheckoutService {
     }
 
     const itemsBySeller = this.groupItemsBySeller(cart.items);
-    const sellerQuotes = Object.entries(itemsBySeller).map(
-      ([sellerId, items]) => {
+    const sellerQuotes = Object.entries(itemsBySeller)
+      .sort(([sellerA], [sellerB]) => sellerA.localeCompare(sellerB))
+      .map(([_sellerId, items], index) => {
         const quote = this.shippingService.quoteSellerShipping(
           items.map((item) => this.toShippingItem(item)),
           country,
@@ -906,17 +1043,15 @@ export class CheckoutService {
         );
 
         return {
-          sellerId,
-          sellerName:
-            items[0]?.sellerOffer.seller?.name || 'Marketplace seller',
+          shipmentNumber: index + 1,
+          shipmentLabel: `Shipment ${index + 1}`,
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
           ...quote,
           currency: chargeCurrency,
           amount,
           amountAed: quote.amount,
         };
-      },
-    );
+      });
 
     const subtotal = cart.items.reduce(
       (sum, item) =>
@@ -929,19 +1064,689 @@ export class CheckoutService {
           ),
       0,
     );
-    const shippingTotal = roundMoney(
-      sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0),
-    );
+    const available = sellerQuotes.every((quote) => quote.available);
+    const shippingTotal = available
+      ? roundMoney(sellerQuotes.reduce((sum, quote) => sum + quote.amount, 0))
+      : null;
 
     return {
       currency: chargeCurrency,
       settlementCurrency: SETTLEMENT_CURRENCY,
       destinationCountry: country,
+      available,
       subtotal: roundMoney(subtotal),
       shippingTotal,
-      totalAmount: roundMoney(subtotal + shippingTotal),
+      totalAmount:
+        shippingTotal == null ? null : roundMoney(subtotal + shippingTotal),
       sellerQuotes,
     };
+  }
+
+  async validateCheckout(
+    cartId: string,
+    shippingAddress: Record<string, unknown>,
+    chargeCurrencyInput?: string | null,
+    paymentProviderInput?: 'stripe' | 'tamara',
+    couponCodeInput?: string | null,
+    checkoutAuth?: {
+      checkoutSessionId?: string;
+      checkoutToken?: string;
+    },
+  ) {
+    const checkoutSession = checkoutAuth?.checkoutSessionId
+      ? await this.checkoutIdentity.authorize(
+          checkoutAuth.checkoutSessionId,
+          checkoutAuth.checkoutToken,
+          cartId,
+          true,
+        )
+      : null;
+    const cart = await this.cartService.getCart(cartId);
+    if (cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    const destinationCountry = this.getDestinationCountry(shippingAddress);
+    const paymentProvider = paymentProviderInput || 'stripe';
+    const tamaraMarket =
+      paymentProvider === 'tamara'
+        ? this.resolveTamaraMarket(destinationCountry)
+        : null;
+    const chargeCurrency = tamaraMarket
+      ? tamaraMarket.currency
+      : resolveChargeCurrency(chargeCurrencyInput);
+    const coupon = couponCodeInput?.trim()
+      ? await this.resolveCouponForItems(
+          cart.items,
+          couponCodeInput,
+          chargeCurrency,
+        )
+      : null;
+    const evaluation = await this.evaluateCheckoutCart({
+      cart,
+      shippingAddress,
+      destinationCountry,
+      chargeCurrency,
+      paymentProvider,
+      couponCode: coupon?.code ?? null,
+    });
+    const validationId = randomUUID();
+    const expiresAt = new Date(Date.now() + CHECKOUT_VALIDATION_TTL_MS);
+    const snapshot = {
+      ...evaluation.snapshot,
+      validationId,
+      fingerprint: evaluation.fingerprint,
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    await this.prisma.checkoutValidation.create({
+      data: {
+        id: validationId,
+        cartId,
+        checkoutSessionId: checkoutSession?.id ?? null,
+        fingerprint: evaluation.fingerprint,
+        snapshot: snapshot as any,
+        expiresAt,
+      },
+    });
+
+    return publicCheckoutValidation(snapshot);
+  }
+
+  private async evaluateCheckoutCart(input: {
+    cart: any;
+    shippingAddress: Record<string, unknown>;
+    destinationCountry: string;
+    chargeCurrency: ChargeCurrency;
+    paymentProvider: 'stripe' | 'tamara';
+    couponCode: string | null;
+  }) {
+    const items = [...input.cart.items].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const coupon = input.couponCode
+      ? await this.resolveCouponForItems(
+          items,
+          input.couponCode,
+          input.chargeCurrency,
+        )
+      : null;
+    const fitmentPairs = items
+      .filter((item) => item.intendedVehicleConfigId)
+      .map((item) => ({
+        canonicalPartId: item.sellerOffer.canonicalPartId,
+        vehicleConfigId: item.intendedVehicleConfigId,
+      }));
+    const fitments = fitmentPairs.length
+      ? await this.prisma.fitment.findMany({
+          where: {
+            OR: fitmentPairs.map((pair) => ({
+              canonicalPartId: pair.canonicalPartId,
+              vehicleConfigId: pair.vehicleConfigId,
+            })),
+          },
+          select: {
+            id: true,
+            canonicalPartId: true,
+            vehicleConfigId: true,
+            evidenceLevel: true,
+            confidence: true,
+            source: true,
+            verificationStatus: true,
+            updatedAt: true,
+          },
+        })
+      : [];
+    const fitmentByPair = new Map(
+      fitments.map((fitment) => [
+        `${fitment.canonicalPartId}:${fitment.vehicleConfigId}`,
+        fitment,
+      ]),
+    );
+
+    const itemsBySeller = this.groupItemsBySeller(items);
+    const sellerQuotes = Object.entries(itemsBySeller)
+      .sort(([sellerA], [sellerB]) => sellerA.localeCompare(sellerB))
+      .map(([sellerId, sellerItems]) => ({
+        sellerId,
+        itemIds: sellerItems.map((item) => item.id).sort(),
+        quote: this.shippingService.quoteSellerShipping(
+          sellerItems.map((item) => this.toShippingItem(item)),
+          input.destinationCountry,
+        ),
+      }));
+    const quoteBySeller = new Map(
+      sellerQuotes.map((entry) => [entry.sellerId, entry.quote]),
+    );
+    const shippingAvailable = sellerQuotes.every(
+      (entry) => entry.quote.available,
+    );
+
+    const lines: CheckoutLineDecision[] = items.map((item) => {
+      const part = item.sellerOffer.canonicalPart;
+      const fitment = item.intendedVehicleConfigId
+        ? fitmentByPair.get(
+            `${item.sellerOffer.canonicalPartId}:${item.intendedVehicleConfigId}`,
+          )
+        : null;
+      const fitmentStatus: CheckoutLineDecision['fitmentStatus'] =
+        !item.intendedVehicleConfigId
+          ? 'NO_VEHICLE'
+          : fitment?.verificationStatus === 'CONFLICT'
+            ? 'CONFLICT'
+            : fitment &&
+                isBuyerVerifiedFitmentEvidence(
+                  fitment.evidenceLevel,
+                  Number(fitment.confidence),
+                  fitment.source,
+                )
+              ? 'CONFIRMED'
+              : 'UNVERIFIED';
+      const quote = quoteBySeller.get(item.sellerOffer.sellerId);
+      const shippingStatus: CheckoutLineDecision['shippingStatus'] =
+        quote?.requiresFreightQuote
+          ? 'REQUIRES_QUOTE'
+          : quote?.availabilityReason === 'SPECIAL_HANDLING_REVIEW'
+            ? 'NEEDS_REVIEW'
+            : quote?.available
+              ? 'AVAILABLE'
+              : 'BLOCKED';
+      const availableStock = item.sellerOffer.inventory.reduce(
+        (sum: number, inventory: { quantity: number }) =>
+          sum + inventory.quantity,
+        0,
+      );
+      let blockingReason: string | null = null;
+      if (fitmentStatus === 'CONFLICT') blockingReason = 'FITMENT_CONFLICT';
+      else if (
+        item.sellerOffer.status !== 'ACTIVE' ||
+        item.sellerOffer.seller.onboardingStatus !== 'ACTIVE'
+      ) {
+        blockingReason = 'ITEM_UNAVAILABLE';
+      } else if (availableStock < item.quantity) {
+        blockingReason = 'INSUFFICIENT_STOCK';
+      } else if (shippingStatus !== 'AVAILABLE') {
+        blockingReason = shippingStatus;
+      }
+
+      return {
+        cartItemId: item.id,
+        partId: part?.id ?? item.sellerOffer.canonicalPartId,
+        offerId: item.sellerOfferId,
+        quantity: item.quantity,
+        intendedVehicleConfigId: item.intendedVehicleConfigId ?? null,
+        purchaseIntent: item.purchaseIntent || 'UNSPECIFIED',
+        fitmentStatus,
+        fitmentId: fitment?.id ?? null,
+        evidenceLevel: fitment?.evidenceLevel ?? null,
+        confidence: fitment ? Number(fitment.confidence) : null,
+        source: fitment?.source ?? null,
+        verificationStatus: fitment?.verificationStatus ?? null,
+        shippingStatus,
+        shippingReason: quote?.availabilityReason ?? null,
+        blockingReason,
+        partUpdatedAt: part?.updatedAt?.toISOString?.() ?? null,
+        offerUpdatedAt: item.sellerOffer.updatedAt?.toISOString?.() ?? null,
+        fitmentUpdatedAt: fitment?.updatedAt?.toISOString?.() ?? null,
+        unitPrice: Number(item.sellerOffer.price),
+        currency: item.sellerOffer.currency,
+        condition: item.sellerOffer.condition,
+        availableStock,
+      } as CheckoutLineDecision & Record<string, unknown>;
+    });
+
+    const requiredAcknowledgmentCartItemIds = lines
+      .filter(
+        (line) =>
+          line.fitmentStatus === 'NO_VEHICLE' ||
+          line.fitmentStatus === 'UNVERIFIED',
+      )
+      .map((line) => line.cartItemId)
+      .sort();
+    const blockingLineIds = lines
+      .filter((line) => line.blockingReason)
+      .map((line) => line.cartItemId)
+      .sort();
+    const shippingQuotes = sellerQuotes.map(({ sellerId, itemIds, quote }) => ({
+      sellerId,
+      itemIds,
+      destinationCountry: quote.destinationCountry,
+      available: quote.available,
+      availabilityReason: quote.availabilityReason,
+      requiresFreightQuote: quote.requiresFreightQuote,
+      serviceType: quote.serviceType,
+      leadTime: quote.leadTime,
+      billableWeightGrams: quote.billableWeightGrams,
+      amountAed: quote.amount,
+      weightBasis: quote.weightBasis,
+      weightSource: quote.weightSource,
+      estimated: quote.estimated,
+      marginPct: quote.marginPct,
+    }));
+    const addressFingerprint = {
+      country: input.destinationCountry.trim().toLowerCase(),
+      line1: String(input.shippingAddress.line1 ?? '')
+        .trim()
+        .toLowerCase(),
+      line2: String(input.shippingAddress.line2 ?? '')
+        .trim()
+        .toLowerCase(),
+      city: String(input.shippingAddress.city ?? '')
+        .trim()
+        .toLowerCase(),
+      region: String(input.shippingAddress.region ?? '')
+        .trim()
+        .toLowerCase(),
+      postalCode: String(input.shippingAddress.postalCode ?? '')
+        .trim()
+        .toLowerCase(),
+    };
+    const fingerprint = checkoutValidationFingerprint({
+      policyVersion: CHECKOUT_VALIDATION_POLICY_VERSION,
+      cartId: input.cart.id,
+      address: addressFingerprint,
+      chargeCurrency: input.chargeCurrency,
+      paymentProvider: input.paymentProvider,
+      coupon: coupon
+        ? {
+            id: coupon.id,
+            code: coupon.code,
+            discountPercent: coupon.discountPercent,
+            subtotal: coupon.subtotal,
+            discountAmount: coupon.discountAmount,
+          }
+        : null,
+      lines,
+      shippingQuotes,
+    });
+    return {
+      fingerprint,
+      snapshot: {
+        cartId: input.cart.id,
+        policyVersion: CHECKOUT_VALIDATION_POLICY_VERSION,
+        destinationCountry: input.destinationCountry,
+        chargeCurrency: input.chargeCurrency,
+        paymentProvider: input.paymentProvider,
+        couponCode: input.couponCode,
+        coupon,
+        addressFingerprint,
+        evaluatedAt: new Date().toISOString(),
+        shippingAvailable,
+        lines,
+        shippingQuotes,
+        requiredAcknowledgmentCartItemIds,
+        blockingLineIds,
+      },
+    };
+  }
+
+  private async requireCheckoutValidation(input: {
+    cart: any;
+    cartId: string;
+    checkoutSessionId?: string;
+    validationId?: string;
+    acknowledgedCartItemIds?: string[];
+    shippingAddress: Record<string, unknown>;
+    destinationCountry: string;
+    chargeCurrency: ChargeCurrency;
+    paymentProvider: 'stripe' | 'tamara';
+    couponCode: string | null;
+  }) {
+    if (!input.validationId) {
+      throw new BadRequestException(
+        'Review this cart before paying so each item can be validated.',
+      );
+    }
+    const validation = await this.prisma.checkoutValidation.findFirst({
+      where: {
+        id: input.validationId,
+        cartId: input.cartId,
+        checkoutSessionId: input.checkoutSessionId ?? null,
+      },
+    });
+    if (
+      !validation ||
+      validation.consumedAt ||
+      validation.expiresAt <= new Date()
+    ) {
+      throw new ConflictException(
+        'Checkout review expired. Review your delivery and items again.',
+      );
+    }
+
+    const current = await this.evaluateCheckoutCart({
+      cart: input.cart,
+      shippingAddress: input.shippingAddress,
+      destinationCountry: input.destinationCountry,
+      chargeCurrency: input.chargeCurrency,
+      paymentProvider: input.paymentProvider,
+      couponCode: input.couponCode,
+    });
+    if (current.fingerprint !== validation.fingerprint) {
+      throw new ConflictException(
+        'Your cart, fitment, price, or delivery rules changed. Review the order again.',
+      );
+    }
+    const snapshot = validation.snapshot as any;
+    if (snapshot.blockingLineIds?.length) {
+      const blockingLines = (snapshot.lines || []).filter(
+        (line: CheckoutLineDecision) =>
+          snapshot.blockingLineIds.includes(line.cartItemId),
+      );
+      if (
+        blockingLines.some(
+          (line: CheckoutLineDecision) => line.fitmentStatus === 'CONFLICT',
+        )
+      ) {
+        throw new BadRequestException(
+          'A cart item conflicts with its selected vehicle. Remove it or choose a different vehicle before paying.',
+        );
+      }
+      if (
+        blockingLines.some(
+          (line: CheckoutLineDecision) =>
+            line.shippingStatus === 'REQUIRES_QUOTE',
+        )
+      ) {
+        throw new BadRequestException(
+          'One or more items exceed courier limits and need a freight quote before payment.',
+        );
+      }
+      if (
+        blockingLines.some(
+          (line: CheckoutLineDecision) =>
+            line.shippingStatus === 'NEEDS_REVIEW',
+        )
+      ) {
+        throw new BadRequestException(
+          'One or more items need a specialist shipping review before payment.',
+        );
+      }
+      throw new BadRequestException(
+        blockingLines.some(
+          (line: CheckoutLineDecision) => line.shippingStatus === 'BLOCKED',
+        )
+          ? 'One or more items do not have a supported delivery service for this destination.'
+          : 'One or more cart items cannot be purchased with the current stock or delivery selection.',
+      );
+    }
+    const acknowledgedCartItemIds = input.acknowledgedCartItemIds ?? [];
+    if (
+      !acknowledgmentsMatch(
+        snapshot.requiredAcknowledgmentCartItemIds ?? [],
+        acknowledgedCartItemIds,
+      )
+    ) {
+      throw new BadRequestException(
+        'Review and acknowledge each item whose fitment is not confirmed.',
+      );
+    }
+
+    const acknowledged = new Set(acknowledgedCartItemIds);
+    return {
+      id: validation.id,
+      snapshot: {
+        ...snapshot,
+        acknowledgedCartItemIds,
+        lines: snapshot.lines.map((line: CheckoutLineDecision) => ({
+          ...line,
+          purchaseIntent: acknowledged.has(line.cartItemId)
+            ? 'EXACT_NUMBER_OR_INTENDED_USE'
+            : line.purchaseIntent,
+          acknowledged: acknowledged.has(line.cartItemId),
+          acknowledgedAt: acknowledged.has(line.cartItemId)
+            ? new Date().toISOString()
+            : null,
+        })),
+      },
+    };
+  }
+
+  private async validatePendingOrderResume(input: {
+    order: any;
+    cartId: string;
+    shippingAddress: Record<string, unknown>;
+    chargeCurrencyInput?: string | null;
+    paymentProviderInput?: 'stripe' | 'tamara';
+    checkoutSessionId?: string;
+    validationInput?: {
+      validationId?: string;
+      acknowledgedCartItemIds?: string[];
+    };
+  }) {
+    const { order } = input;
+    if (
+      order.status !== 'PENDING_PAYMENT' ||
+      !order.paymentIntent ||
+      order.paymentIntent.status !== 'PENDING'
+    ) {
+      throw new ConflictException(
+        'This order is no longer waiting for payment. Refresh your order status before continuing.',
+      );
+    }
+
+    const address = (order.shippingAddress || {}) as Record<string, unknown>;
+    const addressFields = [
+      'country',
+      'line1',
+      'line2',
+      'city',
+      'region',
+      'postalCode',
+    ];
+    const normalizeAddressValue = (value: unknown) =>
+      String(value ?? '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+    if (
+      addressFields.some(
+        (field) =>
+          normalizeAddressValue(address[field]) !==
+          normalizeAddressValue(input.shippingAddress[field]),
+      )
+    ) {
+      throw new ConflictException(
+        'The delivery address for this payment has changed. Start a new checkout review.',
+      );
+    }
+
+    const paymentProvider =
+      input.paymentProviderInput || order.paymentIntent.provider;
+    if (paymentProvider !== order.paymentIntent.provider) {
+      throw new ConflictException(
+        'This order already has a payment session with a different provider. Start a new checkout review.',
+      );
+    }
+    const chargeCurrency = input.chargeCurrencyInput
+      ? resolveChargeCurrency(input.chargeCurrencyInput)
+      : (order.currency as ChargeCurrency);
+    if (chargeCurrency !== order.currency) {
+      throw new ConflictException(
+        'The payment currency for this order has changed. Start a new checkout review.',
+      );
+    }
+
+    const cart = await this.cartService.getCart(input.cartId);
+    const orderLines = (order.sellerOrders || []).flatMap((sellerOrder: any) =>
+      (sellerOrder.items || []).map((item: any) => ({
+        sellerOfferId: item.sellerOfferId,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      })),
+    );
+    const cartLines = cart.items.map((item: any) => ({
+      sellerOfferId: item.sellerOfferId,
+      quantity: Number(item.quantity),
+      unitPrice: convertAmount(
+        Number(item.sellerOffer.price),
+        item.sellerOffer.currency,
+        chargeCurrency,
+      ),
+    }));
+    const orderedByOffer = new Map<
+      string,
+      { quantity: number; unitPrice: number }
+    >();
+    for (const line of orderLines) {
+      const current = orderedByOffer.get(line.sellerOfferId);
+      if (
+        current &&
+        roundMoney(current.unitPrice) !== roundMoney(line.unitPrice)
+      ) {
+        throw new ConflictException(
+          'The item price on this order no longer matches the cart. Review checkout again.',
+        );
+      }
+      orderedByOffer.set(line.sellerOfferId, {
+        quantity: (current?.quantity ?? 0) + line.quantity,
+        unitPrice: line.unitPrice,
+      });
+    }
+    const cartByOffer = new Map<
+      string,
+      { quantity: number; unitPrice: number }
+    >();
+    for (const line of cartLines) {
+      const current = cartByOffer.get(line.sellerOfferId);
+      if (
+        current &&
+        roundMoney(current.unitPrice) !== roundMoney(line.unitPrice)
+      ) {
+        throw new ConflictException(
+          'The item price on this order no longer matches the cart. Review checkout again.',
+        );
+      }
+      cartByOffer.set(line.sellerOfferId, {
+        quantity: (current?.quantity ?? 0) + line.quantity,
+        unitPrice: line.unitPrice,
+      });
+    }
+    if (
+      orderedByOffer.size !== cartByOffer.size ||
+      [...orderedByOffer].some(([offerId, line]) => {
+        const current = cartByOffer.get(offerId);
+        return (
+          !current ||
+          current.quantity !== line.quantity ||
+          roundMoney(current.unitPrice) !== roundMoney(line.unitPrice)
+        );
+      })
+    ) {
+      throw new ConflictException(
+        'The cart no longer matches this payment order. Restore the original items or start a new checkout.',
+      );
+    }
+
+    const destinationCountry = this.getDestinationCountry(
+      input.shippingAddress,
+    );
+    const validation = await this.requireCheckoutValidation({
+      cart,
+      cartId: input.cartId,
+      checkoutSessionId: input.checkoutSessionId,
+      validationId: input.validationInput?.validationId,
+      acknowledgedCartItemIds: input.validationInput?.acknowledgedCartItemIds,
+      shippingAddress: input.shippingAddress,
+      destinationCountry,
+      chargeCurrency,
+      paymentProvider,
+      couponCode: order.couponCode ?? null,
+    });
+    const originalFingerprint = (
+      order.checkoutValidationSnapshot as Record<string, unknown> | null
+    )?.fingerprint;
+    if (
+      typeof originalFingerprint === 'string' &&
+      originalFingerprint !== validation.snapshot.fingerprint
+    ) {
+      throw new ConflictException(
+        'Fitment, delivery, or checkout policy changed since this payment order was created. Review a new order before paying.',
+      );
+    }
+
+    const snapshotQuotes = (validation.snapshot.shippingQuotes || []) as Array<{
+      sellerId: string;
+      amountAed: number;
+    }>;
+    const quoteBySeller = new Map(
+      snapshotQuotes.map((quote) => [quote.sellerId, quote]),
+    );
+    for (const sellerOrder of order.sellerOrders || []) {
+      const quote = quoteBySeller.get(sellerOrder.sellerId);
+      const expectedShipping = quote
+        ? convertAmount(quote.amountAed, SETTLEMENT_CURRENCY, chargeCurrency)
+        : null;
+      if (
+        expectedShipping == null ||
+        roundMoney(expectedShipping) !== roundMoney(sellerOrder.shippingTotal)
+      ) {
+        throw new ConflictException(
+          'Delivery pricing changed since this order was created. Review checkout again before paying.',
+        );
+      }
+    }
+    const expectedTotal = roundMoney(
+      cartLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0) +
+        order.sellerOrders.reduce(
+          (sum: number, sellerOrder: any) =>
+            sum + Number(sellerOrder.shippingTotal),
+          0,
+        ) -
+        Number(order.discountAmount || 0),
+    );
+    if (expectedTotal !== roundMoney(Number(order.totalAmount))) {
+      throw new ConflictException(
+        'The payable total no longer matches the reviewed cart. Review checkout again before paying.',
+      );
+    }
+
+    const claim = await this.prisma.checkoutValidation.updateMany({
+      where: {
+        id: validation.id,
+        cartId: input.cartId,
+        checkoutSessionId: input.checkoutSessionId ?? null,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { consumedAt: new Date() },
+    });
+    if (claim.count !== 1) {
+      throw new ConflictException(
+        'Checkout review expired or was already used. Review the order again.',
+      );
+    }
+  }
+
+  private assertShippingQuotesAvailable(
+    quotes: Array<ReturnType<ShippingService['quoteSellerShipping']>>,
+    destinationCountry: string,
+  ) {
+    const freightQuotes = quotes.filter((quote) => quote.requiresFreightQuote);
+    if (freightQuotes.length > 0) {
+      throw new BadRequestException(
+        `This order exceeds courier limits (${freightQuotes
+          .map((quote) => `${quote.quotedWeightKg}kg+`)
+          .join(
+            ', ',
+          )}) and needs a freight quote. Please submit a freight quote request at ${this.buyerAppUrl}/support?category=FREIGHT_QUOTE.`,
+      );
+    }
+
+    if (quotes.some((quote) => !quote.available)) {
+      if (
+        quotes.some(
+          (quote) => quote.availabilityReason === 'SPECIAL_HANDLING_REVIEW',
+        )
+      ) {
+        throw new BadRequestException(
+          'One or more items need a specialist shipping review. Request a shipping quote before paying.',
+        );
+      }
+      throw new BadRequestException(
+        `We don't currently have a confirmed shipping service to ${destinationCountry}. Choose another delivery country or request a shipping quote through ${this.buyerAppUrl}/support.`,
+      );
+    }
   }
 
   private async resolveCouponForItems(
@@ -1313,7 +2118,7 @@ export class CheckoutService {
   async listCustomerOrders(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.customerId) return [];
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: { customerId: user.customerId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -1331,6 +2136,7 @@ export class CheckoutService {
         paymentIntent: true,
       },
     });
+    return orders.map((order) => this.toBuyerOrder(order));
   }
 
   async getCustomerOrder(
@@ -1380,8 +2186,108 @@ export class CheckoutService {
     }
     if (!authorized) throw new UnauthorizedException('Order access denied');
     return {
-      ...order,
+      ...this.toBuyerOrder(order),
       ecommerce: buildPurchaseTrackingPayload(order),
+    };
+  }
+
+  private toBuyerPaymentIntent(paymentIntent: any) {
+    if (!paymentIntent) return null;
+    return {
+      status: paymentIntent.status,
+      provider: paymentIntent.provider,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      createdAt: paymentIntent.createdAt,
+      updatedAt: paymentIntent.updatedAt,
+    };
+  }
+
+  /** Strip seller ids, payout data, offer ids, and supplier relations from buyer order reads. */
+  private toBuyerOrder(order: any, cartItems?: any[]) {
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      discountAmount: order.discountAmount,
+      couponCode: order.couponCode,
+      currency: order.currency,
+      shippingAddress: order.shippingAddress,
+      sellerOrders: (order.sellerOrders || []).map(
+        (sellerOrder: any, shipmentIndex: number) => ({
+          id: `shipment-${shipmentIndex + 1}`,
+          shipmentLabel: `Shipment ${shipmentIndex + 1}`,
+          subTotal: sellerOrder.subTotal,
+          discountTotal: sellerOrder.discountTotal,
+          shippingTotal: sellerOrder.shippingTotal,
+          status: sellerOrder.status,
+          trackingNumber: sellerOrder.trackingNumber,
+          carrier: sellerOrder.carrier,
+          trackingUrl: sellerOrder.trackingUrl,
+          createdAt: sellerOrder.createdAt,
+          updatedAt: sellerOrder.updatedAt,
+          items: (sellerOrder.items || []).map(
+            (item: any, lineIndex: number) => {
+              const cartItem = cartItems?.find(
+                (candidate) => candidate.sellerOfferId === item.sellerOfferId,
+              );
+              const offer = item.sellerOffer || cartItem?.sellerOffer;
+              const storedLine = item.lineSnapshot as
+                Record<string, unknown> | null | undefined;
+              const part = storedLine
+                ? {
+                    id: storedLine.partId,
+                    slug: storedLine.slug,
+                    title: storedLine.title,
+                    imageUrls: storedLine.imageUrls,
+                    brand: storedLine.brand,
+                    partSource: storedLine.partSource,
+                    partType: storedLine.partType,
+                    oeNumbers: storedLine.oeNumbers,
+                  }
+                : offer?.canonicalPart;
+              const price = Number(item.unitPrice ?? offer?.price ?? 0);
+              const decision = item.decisionSnapshot as
+                Record<string, unknown> | null | undefined;
+              return {
+                id: item.id || `line-${shipmentIndex + 1}-${lineIndex + 1}`,
+                quantity: item.quantity,
+                unitPrice: price,
+                fitmentDecision: decision
+                  ? {
+                      status: decision.fitmentStatus,
+                      intendedVehicleConfigId: decision.intendedVehicleConfigId,
+                      acknowledged: decision.acknowledged === true,
+                    }
+                  : null,
+                sellerOffer: {
+                  id: item.id || `line-${shipmentIndex + 1}-${lineIndex + 1}`,
+                  price,
+                  currency: order.currency,
+                  condition: storedLine?.condition ?? offer?.condition,
+                  partSource: offer?.partSource,
+                  partType: offer?.partType,
+                  canonicalPart: part
+                    ? {
+                        id: part.id,
+                        slug: part.slug,
+                        title: part.title,
+                        imageUrls: part.imageUrls,
+                        brand: part.brand,
+                        partSource: part.partSource,
+                        partType: part.partType,
+                      }
+                    : null,
+                },
+              };
+            },
+          ),
+        }),
+      ),
+      paymentIntent: this.toBuyerPaymentIntent(order.paymentIntent),
     };
   }
 
@@ -1504,6 +2410,7 @@ export class CheckoutService {
         dimensions?: unknown;
         title?: string | null;
         category?: string | null;
+        itemSpecifics?: unknown;
       } | null;
     };
   }): ShippingQuoteItem {
@@ -1520,6 +2427,7 @@ export class CheckoutService {
           title: part?.title ?? null,
           category: part?.category ?? null,
         }),
+      requiresSpecialHandling: partRequiresSpecialHandling(part?.itemSpecifics),
     };
   }
 

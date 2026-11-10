@@ -34,6 +34,48 @@ export class CartService {
     return cart;
   }
 
+  /** Buyer API projection; private seller, warehouse, and session data stays server-side. */
+  async getBuyerCart(cartId: string) {
+    const cart = await this.getCart(cartId);
+    const shipmentNumbers = new Map(
+      [...new Set(cart.items.map((item) => item.sellerOffer.sellerId))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((sellerId, index) => [sellerId, index + 1] as const),
+    );
+
+    return {
+      id: cart.id,
+      status: cart.status,
+      createdAt: cart.createdAt,
+      updatedAt: cart.updatedAt,
+      items: cart.items.map((item) => ({
+        id: item.id,
+        quantity: item.quantity,
+        intendedVehicleConfigId: item.intendedVehicleConfigId,
+        purchaseIntent: item.purchaseIntent,
+        sellerOffer: {
+          id: item.sellerOffer.id,
+          price: item.sellerOffer.price,
+          currency: item.sellerOffer.currency,
+          condition: item.sellerOffer.condition,
+          partSource: item.sellerOffer.partSource,
+          partType: item.sellerOffer.partType,
+          qualityTier: item.sellerOffer.qualityTier,
+          shipmentLabel: `Shipment ${shipmentNumbers.get(item.sellerOffer.sellerId)}`,
+          canonicalPart: {
+            id: item.sellerOffer.canonicalPart.id,
+            slug: item.sellerOffer.canonicalPart.slug,
+            title: item.sellerOffer.canonicalPart.title,
+            imageUrls: item.sellerOffer.canonicalPart.imageUrls,
+            partSource: item.sellerOffer.canonicalPart.partSource,
+            partType: item.sellerOffer.canonicalPart.partType,
+            oeNumbers: item.sellerOffer.canonicalPart.oeNumbers,
+          },
+        },
+      })),
+    };
+  }
+
   async getOrCreateCart(userId?: string, sessionId?: string) {
     if (!userId && !sessionId) {
       throw new BadRequestException('Must provide userId or sessionId');
@@ -75,7 +117,12 @@ export class CartService {
     return this.getCart(cart.id);
   }
 
-  async addItem(cartId: string, offerId: string, quantity: number) {
+  async addItem(
+    cartId: string,
+    offerId: string,
+    quantity: number,
+    vehicleConfigId?: string | null,
+  ) {
     // 1. Validate offer and stock
     const offer = await this.prisma.sellerOffer.findUnique({
       where: { id: offerId },
@@ -94,16 +141,38 @@ export class CartService {
       (sum, inv) => sum + inv.quantity,
       0,
     );
-    if (totalStock < quantity) {
-      throw new BadRequestException(
-        `Insufficient stock. Only ${totalStock} available.`,
-      );
+    const intentSpecified = vehicleConfigId !== undefined;
+    const intendedVehicleConfigId = vehicleConfigId ?? null;
+    if (intendedVehicleConfigId) {
+      const configuration = await this.prisma.vehicleConfiguration.findUnique({
+        where: { id: intendedVehicleConfigId },
+        select: { id: true },
+      });
+      if (!configuration) {
+        throw new BadRequestException('Selected vehicle is unavailable');
+      }
     }
 
-    // 2. Add or update item in cart
-    const existingItem = await this.prisma.cartItem.findFirst({
+    // Keep separate cart lines when the buyer intends the same offer for
+    // different vehicles; otherwise one line could silently represent two
+    // incompatible purchase decisions.
+    const existingItems = await this.prisma.cartItem.findMany({
       where: { cartId, sellerOfferId: offerId },
     });
+    const existingQuantity = existingItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    if (existingQuantity + quantity > totalStock) {
+      throw new BadRequestException(
+        `Insufficient stock. Only ${Math.max(0, totalStock - existingQuantity)} more available.`,
+      );
+    }
+    const existingItem = existingItems.find(
+      (item) =>
+        !intentSpecified ||
+        (item.intendedVehicleConfigId ?? null) === intendedVehicleConfigId,
+    );
 
     if (existingItem) {
       await this.prisma.cartItem.update({
@@ -116,6 +185,10 @@ export class CartService {
           cartId,
           sellerOfferId: offerId,
           quantity,
+          intendedVehicleConfigId,
+          purchaseIntent: intendedVehicleConfigId
+            ? 'VEHICLE_FITMENT'
+            : 'UNSPECIFIED',
         },
       });
     }
@@ -152,6 +225,46 @@ export class CartService {
       where: { id: itemId },
       data: { quantity },
     });
+    return this.getCart(cartId);
+  }
+
+  async setIntendedVehicle(
+    cartId: string,
+    itemId: string,
+    vehicleConfigId: string | null,
+  ) {
+    const item = await this.prisma.cartItem.findFirst({
+      where: { id: itemId, cartId, cart: { status: 'ACTIVE' } },
+      select: { id: true },
+    });
+    if (!item) {
+      throw new NotFoundException('Active cart item not found');
+    }
+
+    if (vehicleConfigId) {
+      const configuration = await this.prisma.vehicleConfiguration.findUnique({
+        where: { id: vehicleConfigId },
+        select: { id: true },
+      });
+      if (!configuration) {
+        throw new BadRequestException('Selected vehicle is unavailable');
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.cartItem.update({
+        where: { id: itemId },
+        data: {
+          intendedVehicleConfigId: vehicleConfigId,
+          purchaseIntent: vehicleConfigId ? 'VEHICLE_FITMENT' : 'UNSPECIFIED',
+        },
+      }),
+      this.prisma.cart.update({
+        where: { id: cartId },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
+
     return this.getCart(cartId);
   }
 

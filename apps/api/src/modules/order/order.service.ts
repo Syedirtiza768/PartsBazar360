@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
 @Injectable()
@@ -21,6 +21,10 @@ export class OrderService {
       couponId?: string;
       couponCode?: string;
       discountAmount?: number;
+      cartId: string;
+      checkoutValidationId: string;
+      checkoutValidationSnapshot: any;
+      shippingQuoteSnapshotsBySeller: Record<string, unknown>;
     },
   ) {
     // We group cart items by Seller ID to split them into SellerOrders
@@ -49,6 +53,22 @@ export class OrderService {
 
     // Use Prisma Transaction to ensure atomic order creation
     return this.prisma.$transaction(async (tx) => {
+      const validationClaim = await tx.checkoutValidation.updateMany({
+        where: {
+          id: identity?.checkoutValidationId,
+          cartId: identity?.cartId,
+          checkoutSessionId: identity?.checkoutSessionId ?? null,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: { consumedAt: new Date() },
+      });
+      if (validationClaim.count !== 1) {
+        throw new ConflictException(
+          'Checkout review expired or was already used. Review the order again.',
+        );
+      }
+
       // The row lock from this update serializes concurrent checkouts. Because
       // it is in the same transaction as the Order insert, failed or duplicate
       // checkout attempts roll the counter back and do not consume a number.
@@ -72,6 +92,12 @@ export class OrderService {
           discountAmount,
           currency,
           shippingAddress,
+          ...(identity?.checkoutValidationSnapshot
+            ? {
+                checkoutValidationSnapshot:
+                  identity.checkoutValidationSnapshot as any,
+              }
+            : {}),
           status: 'PENDING_PAYMENT',
         },
       });
@@ -110,12 +136,23 @@ export class OrderService {
             shippingTotal,
             marketplaceFeeTotal,
             sellerProceedsTotal,
+            ...(identity?.shippingQuoteSnapshotsBySeller?.[sellerId]
+              ? {
+                  shippingQuoteSnapshot: identity
+                    .shippingQuoteSnapshotsBySeller[sellerId] as any,
+                }
+              : {}),
             status: 'AWAITING_PAYMENT',
           },
         });
 
         // Create Order Items
         for (const item of items) {
+          const validationLine =
+            identity?.checkoutValidationSnapshot?.lines?.find(
+              (line: any) => line.cartItemId === item.id,
+            ) ?? null;
+          const part = item.sellerOffer.canonicalPart;
           await tx.orderItem.create({
             data: {
               sellerOrderId: sellerOrder.id,
@@ -128,6 +165,31 @@ export class OrderService {
               pricingPolicyId: item.sellerOffer.pricingPolicyId,
               pricingPolicyVersion: item.sellerOffer.pricingPolicyVersion,
               weight: item.sellerOffer.canonicalPart?.weight,
+              ...(part
+                ? {
+                    lineSnapshot: {
+                      partId: part.id,
+                      title: part.title,
+                      slug: part.slug,
+                      imageUrls: Array.isArray(part.imageUrls)
+                        ? part.imageUrls
+                        : [],
+                      brand: part.brand,
+                      partSource: part.partSource,
+                      partType: part.partType,
+                      manufacturerPartNumber: part.manufacturerPartNumber,
+                      oeNumbers: Array.isArray(part.oeNumbers)
+                        ? part.oeNumbers
+                        : [],
+                      condition: item.sellerOffer.condition,
+                      unitPrice: item.sellerOffer.price,
+                      currency: item.sellerOffer.currency,
+                    } as any,
+                  }
+                : {}),
+              ...(validationLine
+                ? { decisionSnapshot: validationLine as any }
+                : {}),
             },
           });
         }
