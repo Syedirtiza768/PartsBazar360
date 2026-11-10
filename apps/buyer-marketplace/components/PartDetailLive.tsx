@@ -6,6 +6,7 @@ import { BuyBox, StickyMobileBar } from "./BuyBox";
 import { useEnrichmentReconcile } from "@/lib/use-enrichment-reconcile";
 import type { Part } from "@/lib/types";
 import { ViewItemTracker } from "./ViewItemTracker";
+import { PdpPurchaseProvider } from "./PdpPurchaseContext";
 
 /**
  * Client shell around the gallery and buy box so a background enrichment job
@@ -36,23 +37,28 @@ export function PartDetailLive({
   const livePart: Part = { ...part, shipping, imageUrls: images };
 
   return (
-    <>
-      <ViewItemTracker part={livePart} />
-      {/*
+    <PdpPurchaseProvider part={livePart}>
+      <>
+        <ViewItemTracker part={livePart} />
+        {/*
         Grid placement keeps a sensible mobile order (gallery → buy box →
         details) while the buy box occupies a sticky right rail on desktop.
       */}
-      <div className="mt-5 grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0">
-          <ImageGallery images={images} title={part.title} imageAlt={imageAlt} />
-          {refining ? (
-            <p className="mt-2 text-xs text-graphite-600" aria-live="polite">
-              Refining shipping weight…
-            </p>
-          ) : null}
-        </div>
+        <div className="mt-5 grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0">
+            <ImageGallery
+              images={images}
+              title={part.title}
+              imageAlt={imageAlt}
+            />
+            {refining ? (
+              <p className="mt-2 text-xs text-graphite-600" aria-live="polite">
+                Refining shipping weight…
+              </p>
+            ) : null}
+          </div>
 
-        {/*
+          {/*
           `lg:max-h-[calc(100dvh-7rem)]` matches `lg:top-28` (7rem): once the
           box has more content than fits below the sticky offset, it scrolls
           internally instead of overflowing below the viewport where sticky
@@ -60,16 +66,17 @@ export function PartDetailLive({
           far enough to release the pin. Same bounded-scroll pattern as the
           AppShell rail and Sheet body.
         */}
-        <aside
-          className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-none-y"
-          aria-label="Purchase options"
-        >
-          <BuyBox part={livePart} heading={heading} />
-        </aside>
+          <aside
+            className="min-w-0 self-start lg:sticky lg:top-28 lg:row-span-2 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-none-y"
+            aria-label="Purchase options"
+          >
+            <BuyBox part={livePart} heading={heading} />
+          </aside>
 
-        {children}
-      </div>
-      <StickyMobileBar part={livePart} />
-    </>
+          {children}
+        </div>
+        <StickyMobileBar part={livePart} />
+      </>
+    </PdpPurchaseProvider>
   );
 }

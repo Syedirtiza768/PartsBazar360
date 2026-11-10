@@ -1,0 +1,29 @@
+{
+  "vector": [
+    "partsbazar360_horizontal_fullcolor",
+    "partsbazar360_horizontal_reversed",
+    "partsbazar360_horizontal_mono-black",
+    "partsbazar360_horizontal_mono-white",
+    "partsbazar360_stacked_fullcolor",
+    "partsbazar360_stacked_reversed",
+    "partsbazar360_stacked_mono-black",
+    "partsbazar360_stacked_mono-white",
+    "partsbazar360_symbol_fullcolor",
+    "partsbazar360_symbol_reversed",
+    "partsbazar360_symbol_mono-black",
+    "partsbazar360_symbol_mono-white",
+    "partsbazar360_wordmark_fullcolor",
+    "partsbazar360_wordmark_reversed",
+    "partsbazar360_wordmark_mono-black",
+    "partsbazar360_wordmark_mono-white",
+    "partsbazar360_production-horizontal_mono-black",
+    "partsbazar360_production-horizontal_mono-white"
+  ],
+  "concepts": [
+    "c1-fit-frame",
+    "c2-exchange",
+    "c3-full-turn",
+    "c4-hex-p",
+    "c5-ledger-tag"
+  ]
+}

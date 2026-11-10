@@ -37,6 +37,20 @@ should also use `transaction_id` as its idempotency key.
   those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support. On viewports below `lg`, it
   sits above the cart/PDP sticky action bar and the device safe area so both
+  actions remain visible and tappable; it returns to the bottom corner on
+  desktop.
+- Branded favicon — `app/icon.svg`, `app/favicon.ico` and `app/apple-icon.png` use
+  the Hex P symbol on petrol (see [[../brand/partsbazar360-logo]]). The header and
+  mobile drawer show the horizontal lockup from `public/brand/`, referenced with the
+  `/buyer/` base path.
+
+## 2026-10-12 listing image delivery
+
+Buyer listing images continue to use the same `/img-proxy/` URLs. Requests for
+the private inventory-image S3 host and approved inventory prefix are routed by
+Nginx to the internal [[private-image-proxy]] service; other third-party image
+hosts continue through the existing proxy. The private source bucket is not
+made public.
 
 ## 2026-08-26 buyer policies and blog CMS
 
@@ -61,8 +75,32 @@ authenticated admin CRUD endpoints to create drafts, edit slugs/content/SEO
 fields, preview, publish, and delete posts. Blog bodies are stored as text with
 limited heading/list rendering; arbitrary HTML is never injected.
 
-actions remain visible and tappable; it returns to the bottom corner on
-desktop.
+## 2026-10-09 buyer evidence and delivery states
+
+The PDP fitment checker reads the API's decision for the selected vehicle and
+clears the prior verdict while a new vehicle is checked. Compatibility-table
+and broad MVL vehicle rows remain advisory; a green exact-fit label requires an
+approved relationship source. Buyer DTOs omit seller identity, feed tags,
+seller SKU, donor VIN/stock/location and internal fitment provenance.
+
+Cart/checkout shipment labels are opaque and stable across cart and quote
+responses. Unsupported, freight and explicit special-handling states show no
+chargeable delivery total and prevent payment. Cart and checkout now store each
+line's intended vehicle, show the server's current review decision, and require
+acknowledgment only for no-vehicle or unverified lines. Checkout acknowledgments
+survive a refresh only when a fresh validation returns the same opaque
+fingerprint; a changed address, vehicle, coupon, currency, provider, price,
+stock, shipping quote or fitment policy invalidates the saved choice. One PDP
+purchase context drives desktop offer actions and the sticky mobile bar. It
+prioritizes shipping blocks, waits for the selected vehicle's server fitment
+result, and directs buyers without a vehicle to fitment setup first. When a
+public MPN/OE identifier exists, an explicitly labeled add-without-vehicle path
+remains available and checkout requires its server acknowledgment. PDP add/buy
+actions send the selected canonical vehicle configuration to the cart;
+adding the same offer for another vehicle creates a separate line. Cart review
+and checkout continue to rely on server validation rather than this display
+policy. PDP shipping quotes remain part-level, and device QA is still required
+before release.
 
 - Guest-first checkout — SMS verification normally happens before
   delivery/payment; no password or login is required. Drafts survive refresh
@@ -97,6 +135,8 @@ desktop.
   until their `_seo` evidence says the exact image is a high-confidence match. MPNs are not
   rendered as OE numbers. The model uses catalog/enrichment fields only and does not infer
   vehicle fitment or technical values.
+- eBay store CTA — the homepage hero, desktop utility navigation, and mobile menu use the
+  supplied four-color logo through a shared component linking to `https://www.ebay.com/str/partsbazar360`.
 
 ## Search/filter consistency contract (2026-08-24)
 
@@ -151,14 +191,10 @@ Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-mar
   the browse query, refinements stay on the current taxonomy URL, and pagination preserves
   those query parameters instead of sending buyers to /search.
 - Floating WhatsApp chat button for buyer support.
-- Branded favicon — `app/icon.svg`, `app/favicon.ico` and `app/apple-icon.png` use
-  the Hex P symbol on petrol (see [[../brand/partsbazar360-logo]]). The header and
-  mobile drawer show the horizontal lockup from `public/brand/`, referenced with the
-  `/buyer/` base path.
 - eBay store CTA — the homepage hero, desktop utility navigation, and mobile
-  menu use the supplied four-color eBay logo through one shared component, linking to
-  external store at `https://ebay.io/m/7vngBN`. External navigation opens in a
-  new tab with `noopener noreferrer`.
+  menu use the supplied four-color eBay logo through one shared component,
+  linking to `https://www.ebay.com/str/partsbazar360`. External navigation opens in a new
+  tab with `noopener noreferrer`.
 - Guest-first checkout — SMS verification happens before delivery/payment; no
   password or login is required. Drafts survive refresh and payment failure,
   OTP supports paste/autofill/auto-submit, and account creation is offered only

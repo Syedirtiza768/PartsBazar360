@@ -9,7 +9,13 @@ export type PartShippingQuote = {
   currency: string;
   serviceType: string;
   leadTime: string | null;
-  amount: number;
+  amount: number | null;
+  available: boolean;
+  availabilityReason?:
+    | "DESTINATION_UNSUPPORTED"
+    | "FREIGHT_QUOTE_REQUIRED"
+    | "SPECIAL_HANDLING_REVIEW"
+    | null;
   requiresFreightQuote: boolean;
   estimated: boolean;
 };
@@ -26,40 +32,56 @@ export function usePartShippingQuote(options: {
 }) {
   const { partId, country, enabled = true, debounceMs = 300 } = options;
 
-  const [quote, setQuote] = useState<PartShippingQuote | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [quoteRecord, setQuoteRecord] = useState<{
+    key: string;
+    quote: PartShippingQuote;
+  } | null>(null);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [errorRecord, setErrorRecord] = useState<{
+    key: string;
+    error: string;
+  } | null>(null);
+  const requestKey = `${partId ?? ""}:${country.trim()}`;
+  const quote = quoteRecord?.key === requestKey ? quoteRecord.quote : null;
+  const loading = loadingKey === requestKey;
+  const error = errorRecord?.key === requestKey ? errorRecord.error : null;
 
   useEffect(() => {
     const trimmed = country.trim();
     if (!enabled || !partId || !trimmed) {
-      setQuote(null);
-      setError(null);
-      setLoading(false);
+      setLoadingKey(null);
+      setErrorRecord(null);
       return;
     }
 
     let cancelled = false;
+    const key = `${partId}:${trimmed}`;
+    setLoadingKey(key);
+    setErrorRecord(null);
     const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError(null);
-
       fetch(
         `${API_BASE_URL}/search/parts/${partId}/shipping-quote?country=${encodeURIComponent(trimmed)}`,
       )
         .then(async (res) => {
           const data = await res.json();
-          if (!res.ok) throw new Error(data.message || "Unable to quote shipping.");
-          if (!cancelled) setQuote(data as PartShippingQuote);
+          if (!res.ok)
+            throw new Error(data.message || "Unable to quote shipping.");
+          if (!cancelled)
+            setQuoteRecord({ key, quote: data as PartShippingQuote });
         })
         .catch((err: unknown) => {
           if (!cancelled) {
-            setQuote(null);
-            setError(err instanceof Error ? err.message : "Unable to quote shipping.");
+            setErrorRecord({
+              key,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Unable to quote shipping.",
+            });
           }
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) setLoadingKey(null);
         });
     }, debounceMs);
 

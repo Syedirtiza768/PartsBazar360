@@ -1,6 +1,6 @@
 # SEO Architecture
 
-**Last reviewed:** 2026-09-29
+**Last reviewed:** 2026-10-09
 
 How PartsBazar360 generates SEO. The governing idea: **SEO is a property of the
 domain, not of the page templates.** Nothing about a listing's URL, metadata,
@@ -299,9 +299,12 @@ bounded keyset read. (Walking the keyset to chunk N would be 200 queries for
 the last chunk of a million-row catalog; `OFFSET` would re-scan the prefix.)
 
 `robots.txt` is a runtime route — a build-time evaluation previously baked
-`localhost:7070` into production. It disallows private paths and crawl traps
-but **explicitly allows `/_next/static/` and `/_next/image`**; blocking those
-stops Google rendering the page at all.
+`localhost:7070` into production. It emits identical rules for the wildcard,
+`Googlebot`, and `Googlebot-Image` groups so Merchant Center's product checks
+can crawl the storefront while private paths and crawl traps remain blocked.
+It **explicitly allows `/_next/static/` and `/_next/image`**; blocking those
+stops Google rendering the page at all. The same blanket disallow is emitted
+for all three groups when indexing is disabled.
 
 ---
 

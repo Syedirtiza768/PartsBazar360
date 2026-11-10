@@ -287,7 +287,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               "Results unavailable"
             ) : results.total === 0 ? (
               isFitmentMode ? (
-                "No verified-fit parts for this vehicle yet"
+                "No compatibility matches for this vehicle yet"
               ) : (
                 "No matching parts"
               )
@@ -302,8 +302,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   {results.total.toLocaleString()}
                   {isAtLeast ? "+" : ""}
                 </span>{" "}
-                {isFitmentMode ? "verified-fit " : ""}
-                {results.total === 1 ? "part" : "parts"}
+                {isFitmentMode ? "parts with compatibility data" : results.total === 1 ? "part" : "parts"}
               </>
             )}
           </p>
@@ -313,7 +312,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           <p className="min-w-0 truncate text-sm font-semibold text-slate-900" aria-live="polite">
             {results === null
               ? "Results unavailable"
-              : `${results.total.toLocaleString()}${isAtLeast ? "+" : ""} ${isFitmentMode ? "verified-fit " : ""}${results.total === 1 ? "part" : "parts"}`}
+              : isFitmentMode
+                ? `${results.total.toLocaleString()} possible compatibility matches`
+                : `${results.total.toLocaleString()}${isAtLeast ? "+" : ""} ${results.total === 1 ? "part" : "parts"}`}
           </p>
           <div className="flex shrink-0 items-center gap-2">
             {showFilters && (
@@ -379,7 +380,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               icon={isFitmentMode ? <CarIcon /> : <SearchIcon />}
               title={
                 isFitmentMode
-                  ? "No verified-fit parts for this vehicle yet"
+                  ? "No compatibility matches for this vehicle yet"
                   : "No parts match"
               }
               description={
@@ -442,7 +443,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   <ProductCard
                     key={part.id}
                     part={part}
-                    fitmentContext={isFitmentMode ? "verified" : "auto"}
+                  fitmentContext="auto"
                   />
                 ))}
               </div>

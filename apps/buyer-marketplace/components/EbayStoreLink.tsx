@@ -2,7 +2,7 @@ import { ExternalLinkIcon } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import Image from "next/image";
 
-export const EBAY_STORE_URL = "https://ebay.io/m/7vngBN";
+export const EBAY_STORE_URL = "https://www.ebay.com/str/partsbazar360";
 
 function EbayLogo({ size }: { size: "header" | "default" }) {
   return (

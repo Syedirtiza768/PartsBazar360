@@ -25,8 +25,8 @@ export function ShippingDestinationPicker({
       <p className="flex items-start gap-2 text-[13px] text-slate-600">
         <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
         <span>
-          <span className="font-semibold text-slate-800">Oversized item</span> — this ships as
-          freight rather than courier.{" "}
+          <span className="font-semibold text-slate-800">Oversized item</span> —
+          this ships as freight rather than courier.{" "}
           <Link
             href={`/support?partId=${part.id}&subject=${encodeURIComponent(
               `Freight quote request: ${part.title}`,
@@ -42,7 +42,10 @@ export function ShippingDestinationPicker({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-graphite-600">
+    <div
+      id="shipping-destination"
+      className="flex flex-wrap items-center gap-1.5 text-[13px] text-graphite-600"
+    >
       <TruckIcon className="h-4 w-4 shrink-0 text-slate-400" />
       Ships to
       <Select

@@ -7,18 +7,11 @@ export interface Offer {
   condition: string;
   partSource?: string;
   qualityTier?: string;
-  sellerId?: string;
-  sellerName?: string;
+  /** Anonymous shipment grouping label, scoped to this cart only. */
+  shipmentLabel?: string;
   partType?: string;
-  sellerSku?: string | null;
   moq?: number;
-  sourceTag?: string | null;
-  inventory?: Array<{ quantity: number; status: string; warehouse?: { name: string; location?: string | null } }>;
-  seller?: {
-    id: string;
-    name: string;
-    profile?: SellerProfileSummary | null;
-  };
+  inStock?: boolean;
 }
 
 export interface PartNumberRecord {
@@ -51,8 +44,7 @@ export interface CompatibleVehicle {
   model: string;
   startYear: number | null;
   endYear: number | null;
-  evidenceLevel: string;
-  confidence: number;
+  verified: boolean;
 }
 
 export interface CompatibilityRow {
@@ -62,9 +54,6 @@ export interface CompatibilityRow {
   trim?: string;
   engine?: string;
   notes?: string;
-  source?: string;
-  mvlVerified?: boolean;
-  epid?: string | null;
 }
 
 /** Raw fitment relation as returned by the part detail endpoint. */
@@ -73,6 +62,7 @@ export interface PartFitment {
   vehicleConfigId: string;
   evidenceLevel: string;
   confidence: number;
+  verified?: boolean;
   vehicleConfig?: {
     trim?: string | null;
     engine?: string | null;
@@ -87,14 +77,6 @@ export interface PartFitment {
 }
 
 export interface ItemSpecifics {
-  _seo?: {
-    source?: string | null;
-    decision?: string | null;
-    identityConfidence?: string | null;
-    imageAssessment?: string | null;
-    imageConfidence?: string | null;
-    imageHealth?: string | null;
-  };
   partType?: string | null;
   placementOnVehicle?: string | null;
   position?: string | null;
@@ -166,7 +148,13 @@ export interface PartShipping {
   billableWeightKg: number;
   volumetricWeightKg?: number | null;
   weightBasis: "ACTUAL" | "VOLUMETRIC";
-  source: "SPREADSHEET" | "SELLER" | "MEASURED" | "SIBLING_MPN" | "AI" | "CLASS_DEFAULT";
+  source:
+    | "SPREADSHEET"
+    | "SELLER"
+    | "MEASURED"
+    | "SIBLING_MPN"
+    | "AI"
+    | "CLASS_DEFAULT";
   confidence?: number | null;
   partClassKey?: string;
   dimensionsCm?: { lengthCm: number; widthCm: number; heightCm: number } | null;
@@ -216,8 +204,6 @@ export interface Part {
   infographicAlt?: string | null;
   locationDiagramUrl?: string | null;
   locationDiagramAlt?: string | null;
-  listingUrl?: string | null;
-  ebayItemId?: string | null;
   compatibility?: CompatibilityRow[];
   compatibilityTable?: CompatibilityRow[];
   partSource?: string;
@@ -256,19 +242,14 @@ export interface SalvageUnit {
   damageNotes?: string | null;
   missingComponents?: string[];
   warranty?: string | null;
-  dismantlingLocation?: string | null;
-  shelfBin?: string | null;
-  identityMethod?: string;
   donorVehicle?: {
     make?: string | null;
     model?: string | null;
     modelYear?: number | null;
     trim?: string | null;
     engine?: string | null;
-    vinMasked?: string | null;
     mileage?: number | null;
     mileageUnit?: string | null;
-    donorStockNumber?: string | null;
   } | null;
 }
 

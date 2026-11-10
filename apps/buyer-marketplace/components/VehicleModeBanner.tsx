@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { CarIcon, ShieldCheckIcon, XIcon } from "@repo/ui/icons";
+import { CarIcon, InfoIcon, XIcon } from "@repo/ui/icons";
 import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
 
 /**
  * Shown on search results filtered to a vehicle configuration. Explains what
- * the buyer is looking at (only verified-fit parts) and offers a clear exit.
+ * the buyer is looking at and offers a clear exit.
  * The label comes from the device garage; unknown config ids (e.g. shared
  * links) still get an honest generic banner.
  */
@@ -25,8 +25,8 @@ export function VehicleModeBanner({ configId, compact = false }: { configId: str
             {vehicle ? vehicleFullLabel(vehicle) : "Parts for your selected vehicle"}
           </p>
           <p className={compact ? "sr-only" : "mt-0.5 flex items-center gap-1 text-xs text-amber-800"}>
-            <ShieldCheckIcon className="h-3.5 w-3.5" />
-            Showing only parts with verified compatibility evidence for this configuration.
+            <InfoIcon className="h-3.5 w-3.5" />
+            Showing catalog compatibility matches. Confirm exact fit before ordering.
           </p>
         </div>
       </div>

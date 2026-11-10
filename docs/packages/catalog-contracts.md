@@ -1,6 +1,6 @@
 # @repo/catalog-contracts
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-10-09
 
 Shared types/schemas for the parts catalog, consumed by [[../apps/api]], [[../apps/buyer-marketplace]], [[../apps/seller-portal]], and [[../apps/admin-portal]] (notably **not** [[../apps/workshop-portal]] — see that note).
 
@@ -34,3 +34,12 @@ Entry points most callers need:
 **Note on tests:** `apps/api`'s jest maps `@repo/catalog-contracts` to this
 package's **source**, not `dist/`. Before that mapping existed, a spec was
 silently passing against a stale build.
+
+## Buyer fitment evidence gate
+
+`isBuyerVerifiedFitmentEvidence(level, confidence, source)` is the stricter
+buyer-facing gate. It retains the established A/B and confidence threshold,
+then requires an approved exact-application source. MVL vehicle identity,
+title parsing, seller declarations and other broad compatibility sources do
+not satisfy it. API projections derive the public `verified` boolean from this
+helper and do not expose the raw internal source string.

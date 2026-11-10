@@ -81,8 +81,6 @@ export function toSeoPart(part: Part): SeoPartInput {
       condition: offer.condition,
       partSource: offer.partSource ?? null,
       qualityTier: offer.qualityTier ?? null,
-      sellerName: offer.seller?.name ?? offer.sellerName ?? null,
-      sellerId: offer.sellerId ?? null,
       // An offer row reaching the storefront has already been filtered for
       // stock and seller status by the API, so its presence means buyable.
       inStock: true,
