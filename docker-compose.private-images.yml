@@ -1,0 +1,35 @@
+services:
+  private-image-proxy:
+    build:
+      context: ./apps/private-image-proxy
+      dockerfile: Dockerfile
+    environment:
+      AWS_REGION: us-east-1
+      AWS_PROFILE: default
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/aws-credentials
+      PORT: 3002
+    volumes:
+      - type: bind
+        source: ${AWS_SHARED_CREDENTIALS_HOST_PATH:-/home/ubuntu/.aws/credentials}
+        target: /run/secrets/aws-credentials
+        read_only: true
+    expose:
+      - "3002"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3002/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  nginx:
+    depends_on:
+      private-image-proxy:
+        condition: service_healthy
