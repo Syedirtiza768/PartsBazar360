@@ -30,7 +30,7 @@ describe('EnrichmentService', () => {
   beforeEach(() => {
     process.env.ENRICHMENT_ENABLED = '1';
     process.env.ENRICHMENT_PROVIDER = 'realtrack';
-    process.env.REALTRACK_API_URL = 'https://mhn.realtrackapp.com/api';
+    process.env.REALTRACK_API_URL = 'https://app.omnicoreholding.com/api';
     process.env.REALTRACK_API_EMAIL = 'api@test';
     process.env.OPENROUTER_API_KEY = 'sk-or-test';
     delete process.env.ENRICHMENT_PREWARM;

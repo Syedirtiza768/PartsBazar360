@@ -16,7 +16,7 @@ export class RealtrackClientService {
   private readonly baseUrl = (
     process.env.REALTRACK_BRIDGE_API_URL ||
     process.env.REALTRACK_API_URL ||
-    'http://localhost:4191/api'
+    'https://app.omnicoreholding.com/api'
   ).replace(/\/$/, '');
   // Reuse the existing RealTrack reader credentials unless dedicated bridge
   // credentials are supplied. RealTrack permissions still decide whether the

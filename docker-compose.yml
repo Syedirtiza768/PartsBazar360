@@ -70,12 +70,11 @@ services:
       OPENSEARCH_URL: http://opensearch:9200
       PORT: 3001
       CORS_ORIGIN: https://partsbazar360.com
-      REALTRACK_API_URL: https://mhn.realtrackapp.com/api
-      REALTRACK_API_EMAIL: api-published-listings@realtrack.local
-      REALTRACK_API_PASSWORD: Ebay$321
-      # Optional bridge overrides. If blank, the bridge reuses the existing
-      # REALTRACK_API_EMAIL / REALTRACK_API_PASSWORD values above.
-      REALTRACK_BRIDGE_API_URL: ${REALTRACK_BRIDGE_API_URL:-https://mhn.realtrackapp.com/api}
+      REALTRACK_API_URL: ${REALTRACK_API_URL:-https://app.omnicoreholding.com/api}
+      REALTRACK_API_EMAIL: ${REALTRACK_API_EMAIL:-}
+      REALTRACK_API_PASSWORD: ${REALTRACK_API_PASSWORD:-}
+      # Bridge credentials may use separate protected overrides; otherwise they fall back to the read-only API account.
+      REALTRACK_BRIDGE_API_URL: ${REALTRACK_BRIDGE_API_URL:-https://app.omnicoreholding.com/api}
       REALTRACK_BRIDGE_EMAIL: ${REALTRACK_BRIDGE_EMAIL:-}
       REALTRACK_BRIDGE_PASSWORD: ${REALTRACK_BRIDGE_PASSWORD:-}
       REALTRACK_BRIDGE_SOURCE_CURRENCY: ${REALTRACK_BRIDGE_SOURCE_CURRENCY:-USD}
@@ -167,10 +166,10 @@ services:
       # SEO taxonomy caches belong to the request-serving API. Priming from
       # this separate process duplicates full-catalog scans against Postgres.
       SEO_CACHE_PRIME: "0"
-      REALTRACK_API_URL: https://mhn.realtrackapp.com/api
-      REALTRACK_API_EMAIL: api-published-listings@realtrack.local
-      REALTRACK_API_PASSWORD: Ebay$321
-      REALTRACK_BRIDGE_API_URL: ${REALTRACK_BRIDGE_API_URL:-https://mhn.realtrackapp.com/api}
+      REALTRACK_API_URL: ${REALTRACK_API_URL:-https://app.omnicoreholding.com/api}
+      REALTRACK_API_EMAIL: ${REALTRACK_API_EMAIL:-}
+      REALTRACK_API_PASSWORD: ${REALTRACK_API_PASSWORD:-}
+      REALTRACK_BRIDGE_API_URL: ${REALTRACK_BRIDGE_API_URL:-https://app.omnicoreholding.com/api}
       REALTRACK_BRIDGE_EMAIL: ${REALTRACK_BRIDGE_EMAIL:-}
       REALTRACK_BRIDGE_PASSWORD: ${REALTRACK_BRIDGE_PASSWORD:-}
       REALTRACK_BRIDGE_SOURCE_CURRENCY: ${REALTRACK_BRIDGE_SOURCE_CURRENCY:-USD}
