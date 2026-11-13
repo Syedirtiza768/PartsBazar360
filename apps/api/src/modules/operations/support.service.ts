@@ -9,6 +9,22 @@ import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 
+/**
+ * The public ticket form posts raw input values, so a blank weight field
+ * arrives as "" and a filled one as "12.5". Prisma wants Float | null.
+ */
+export function parseOptionalWeightKg(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new BadRequestException(
+      'estimatedWeightKg must be a positive number',
+    );
+  }
+  return n;
+}
+
 @Injectable()
 export class SupportService {
   private readonly logger = new Logger(SupportService.name);
@@ -30,7 +46,7 @@ export class SupportService {
     subject: string;
     message: string;
     shippingCountry?: string;
-    estimatedWeightKg?: number;
+    estimatedWeightKg?: number | string | null;
     cartSummary?: string;
   }) {
     if (!body.customerEmail?.trim())
@@ -48,6 +64,9 @@ export class SupportService {
         : 'NORMAL';
 
     const isFreightQuote = body.category === 'FREIGHT_QUOTE';
+    const estimatedWeightKg = isFreightQuote
+      ? parseOptionalWeightKg(body.estimatedWeightKg)
+      : null;
 
     const submittedOrderId = body.orderId?.trim();
     let orderId: string | null = null;
@@ -78,9 +97,7 @@ export class SupportService {
         message: body.message,
         priority,
         shippingCountry: isFreightQuote ? body.shippingCountry || null : null,
-        estimatedWeightKg: isFreightQuote
-          ? (body.estimatedWeightKg ?? null)
-          : null,
+        estimatedWeightKg,
         cartSummary: isFreightQuote ? body.cartSummary || null : null,
       },
     });
@@ -106,6 +123,7 @@ export class SupportService {
       category: ticket.category,
       subject: ticket.subject,
       status: ticket.status,
+      priority: ticket.priority,
       createdAt: ticket.createdAt,
     };
   }
