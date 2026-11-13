@@ -66,6 +66,10 @@ export function partNumberVariants(value: unknown): string[] {
     }
   }
 
+  // Mercedes-Benz writes its numbers with an "A" prefix ("A2115410001",
+  // "A 211 541 00 01"); catalogues and sellers mostly drop it.
+  if (/^A\d{10}(?:[A-Z0-9]{2,4})?$/.test(base)) push(base.slice(1));
+
   // Leading zeros are frequently added or dropped between catalogues.
   const noLeadingZeros = base.replace(/^0+/, '');
   if (noLeadingZeros.length >= 4) push(noLeadingZeros);

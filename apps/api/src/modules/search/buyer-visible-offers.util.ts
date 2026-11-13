@@ -180,19 +180,70 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Remove contact details and known supplier identifiers from public copy. */
+const PHONE_LIKE_RE = /(?<![A-Z0-9])\+?\d[\d\s().-]{7,}\d(?![A-Z0-9])/g;
+
+/**
+ * Text immediately before a digit run that marks it as a part number rather
+ * than a phone number: "Part Number 2115410001", "OE: 211 541 00 01",
+ * "MPN 34106891080". Catalogue copy is generated in exactly this shape, so
+ * without this guard every all-digit Mercedes/BMW/Porsche number was being
+ * erased from descriptions and detail bullets as if it were a phone number.
+ */
+const PART_NUMBER_LABEL_RE =
+  /\b(?:part\s*(?:number|no\.?|#)|p\/n|mpn|oem?|oe\s*(?:number|no\.?)|sku|ref(?:erence)?)\s*[:#.]?\s*$/i;
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function protectedDigitKeys(
+  numbers: readonly (string | null | undefined)[] = [],
+): string[] {
+  return numbers
+    .map((number) => digitsOnly(String(number ?? '')))
+    .filter((key) => key.length >= 6);
+}
+
+function isProtectedPartNumber(
+  text: string,
+  match: string,
+  offset: number,
+  protectedKeys: string[],
+): boolean {
+  const before = text.slice(Math.max(0, offset - 24), offset);
+  if (PART_NUMBER_LABEL_RE.test(before)) return true;
+  // "2133331300/64": a slash-suffixed variant code is part-number syntax.
+  if (/^\/[A-Z0-9]/i.test(text.slice(offset + match.length))) return true;
+  const key = digitsOnly(match);
+  return protectedKeys.some(
+    (protectedKey) => protectedKey === key || protectedKey.includes(key),
+  );
+}
+
+/**
+ * Remove contact details and known supplier identifiers from public copy.
+ *
+ * `protectedNumbers` are the listing's own part numbers (MPN, genuine OE
+ * number, OE numbers). Digit runs equal to one of them are never treated as
+ * phone numbers.
+ */
 export function sanitizeBuyerText(
   value: unknown,
   offers: IndexedOfferLike[] = [],
   productBrand?: string | null,
   redactPhone = true,
+  protectedNumbers: readonly (string | null | undefined)[] = [],
 ): string | null {
   if (typeof value !== 'string') return null;
   let text = value
     .replace(/https?:\/\/\S+|www\.\S+/gi, '')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '');
   if (redactPhone) {
-    text = text.replace(/(?<![A-Z0-9])\+?\d[\d\s().-]{7,}\d(?![A-Z0-9])/g, '');
+    const protectedKeys = protectedDigitKeys(protectedNumbers);
+    const source = text;
+    text = source.replace(PHONE_LIKE_RE, (match: string, offset: number) =>
+      isProtectedPartNumber(source, match, offset, protectedKeys) ? match : '',
+    );
   }
   const normalizedBrand = String(productBrand || '')
     .trim()
@@ -225,6 +276,7 @@ export function sanitizeBuyerSpecifics(
   value: unknown,
   offers: IndexedOfferLike[] = [],
   brand?: string | null,
+  protectedNumbers: readonly (string | null | undefined)[] = [],
 ) {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     return undefined;
@@ -237,6 +289,7 @@ export function sanitizeBuyerSpecifics(
         offers,
         brand,
         !/number|oe_numbers|supersedes|interchange/i.test(key),
+        protectedNumbers,
       );
     } else if (Array.isArray(entry)) {
       result[key] = entry
@@ -251,6 +304,16 @@ export function sanitizeBuyerSpecifics(
     }
   }
   return result;
+}
+
+/** The listing's own part numbers, which public-copy redaction must keep. */
+export function listingPartNumbers(item: unknown): string[] {
+  if (!item || typeof item !== 'object') return [];
+  const part = item as Record<string, unknown>;
+  const oe = Array.isArray(part.oeNumbers) ? part.oeNumbers : [];
+  return [part.manufacturerPartNumber, part.genuineOemPartNumber, ...oe]
+    .filter((value): value is string => typeof value === 'string')
+    .filter(Boolean);
 }
 
 export function isBuyerVisibleIndexedOffer(
@@ -344,16 +407,20 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
       publicItem[field] = item[field];
     }
   }
+  const ownPartNumbers = listingPartNumbers(item);
   publicItem.title = sanitizeBuyerText(item.title, offers, item.brand, false);
   publicItem.description = sanitizeBuyerText(
     item.description,
     offers,
     item.brand,
+    true,
+    ownPartNumbers,
   );
   publicItem.itemSpecifics = sanitizeBuyerSpecifics(
     item.itemSpecifics,
     offers,
     item.brand,
+    ownPartNumbers,
   );
   publicItem.fitmentFlags = Array.isArray(item.fitmentFlags)
     ? item.fitmentFlags.filter((flag) =>

@@ -23,6 +23,7 @@ import { MvlOeCatalogService } from './mvl-oe-catalog.service';
 import {
   applySuperiorPriority,
   sanitizeBuyerSpecifics,
+  listingPartNumbers,
   sanitizeBuyerText,
   sanitizeSearchItems,
 } from './buyer-visible-offers.util';
@@ -951,6 +952,8 @@ export class SearchController implements OnModuleDestroy {
         partWithOffers.description,
         buyerOffers,
         partWithOffers.brand,
+        true,
+        listingPartNumbers(partWithOffers),
       ),
       brand: canonicalizeCatalogBrand(partWithOffers.brand),
       manufacturer: sanitizeBuyerText(
@@ -1038,6 +1041,7 @@ export class SearchController implements OnModuleDestroy {
         normalizedItemSpecifics,
         buyerOffers,
         partWithOffers.brand,
+        listingPartNumbers(partWithOffers),
       ),
       // Always resolvable, so the PDP can render a shipping figure on first
       // paint instead of waiting on background enrichment.
@@ -1139,7 +1143,12 @@ export class SearchController implements OnModuleDestroy {
       throw new NotFoundException(`Part ${id} not found`);
     }
 
-    const publicItemSpecifics = sanitizeBuyerSpecifics(part.itemSpecifics);
+    const publicItemSpecifics = sanitizeBuyerSpecifics(
+      part.itemSpecifics,
+      [],
+      undefined,
+      listingPartNumbers(part),
+    );
 
     const locationDiagram = part.media.find(
       (m) => m.mediaType === 'LOCATION_DIAGRAM',

@@ -1,6 +1,17 @@
 # Decision log
 
-**Last reviewed:** 2026-11-13
+**Last reviewed:** 2026-11-14
+
+## 2026-11-14 — Part numbers are not phone numbers; OE numbers must look like part numbers
+
+**Decision:**
+- The buyer-text phone redaction (`sanitizeBuyerText` in `buyer-visible-offers.util.ts`) keeps a digit run when it is the listing's own MPN, genuine OEM number or OE number, when a part-number label (`Part Number`, `P/N`, `OE`, `MPN`, `SKU`, `Ref`) precedes it, or when it is followed by `/<suffix>`. Callers pass the listing's numbers via `listingPartNumbers()`. Other phone-like runs are still removed.
+- `extractOeNumbers` only keeps tokens that pass `looksLikeOeNumber`: at least five digits and not a year. Spreadsheet titles such as "OE AUXILIARY – 2115410001" no longer store `AUXILIARY` as an OE number.
+- `partNumberVariants` also searches a Mercedes `A`-prefixed number without the `A` (`A2115410001` → `2115410001`).
+
+**Why:** The 2026-11-13 audit of new listings found about 12,000 descriptions reading "Part Number," with the number blanked by the phone filter, about 6,500 listings with words stored as OE numbers, and Mercedes searches with the `A` prefix returning nothing. The stored data was cleaned directly in production the same day (backups in schema `la_20261113`, rollback script in `~/listing-audit-2026-11-13/` on the server). This change stops the display bug and stops new imports recreating the OE problem.
+
+**Revisit when:** sellers start putting real contact numbers next to part-number labels, or a make other than Mercedes needs prefix-stripping in search.
 
 ## 2026-11-13 — Admin listing tools: fixed shipping override and local photo storage
 

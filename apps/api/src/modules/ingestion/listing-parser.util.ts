@@ -375,19 +375,37 @@ const OEM_PREFIXED_PATTERN =
   /\bOEM?\.?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9-]{3,16})\b/gi;
 const GENERIC_CODE_PATTERN = /\b[A-Za-z0-9][A-Za-z0-9-]{4,15}[A-Za-z0-9]\b/g;
 
+/**
+ * An OE number carries at least five digits once separators are removed.
+ * Without this, catalogue titles shaped "OE CARRIER – 6422000200" or
+ * "OE RADIATOR HOSE-6(E63) – …" stored the part *name* as its OE number
+ * (`CARRIER`, `HOSE-6`, `COOLING-X5`), which then rendered under
+ * "OE numbers" on the product page.
+ */
+export function looksLikeOeNumber(token: string): boolean {
+  const norm = String(token ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (/^(19[5-9]\d|20[0-4]\d)$/.test(norm)) return false;
+  return (norm.match(/\d/g) || []).length >= 5;
+}
+
 export function extractOeNumbers(title: string): string[] {
   const codes = new Set<string>();
 
   let match: RegExpExecArray | null;
   OEM_PREFIXED_PATTERN.lastIndex = 0;
   while ((match = OEM_PREFIXED_PATTERN.exec(title))) {
-    codes.add(match[1].toUpperCase());
+    if (looksLikeOeNumber(match[1])) codes.add(match[1].toUpperCase());
   }
 
   const generic = title.match(GENERIC_CODE_PATTERN) || [];
   for (const token of generic) {
     const isYear = /^(19[5-9]\d|20[0-4]\d)$/.test(token);
-    if (!isYear && looksLikePartCode(token) && token.length >= 6) {
+    if (
+      !isYear &&
+      looksLikePartCode(token) &&
+      token.length >= 6 &&
+      looksLikeOeNumber(token)
+    ) {
       codes.add(token.toUpperCase());
     }
   }
