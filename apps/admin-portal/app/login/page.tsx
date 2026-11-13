@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/field";
-import { SEO_EDITOR_ROLE, useAdminAuth } from "@/lib/auth-context";
+import { getStaffHomePath, useAdminAuth } from "@/lib/auth-context";
 
 export default function AdminLoginPage() {
   const { login, ready, isAdmin, user } = useAdminAuth();
@@ -15,8 +15,7 @@ export default function AdminLoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (ready && isAdmin)
-      router.replace(user?.role === SEO_EDITOR_ROLE ? "/blog" : "/");
+    if (ready && isAdmin) router.replace(getStaffHomePath(user?.role));
   }, [ready, isAdmin, user, router]);
 
   const onSubmit = async (e: FormEvent) => {
@@ -25,7 +24,7 @@ export default function AdminLoginPage() {
     setError(null);
     try {
       const loggedInUser = await login(email.trim(), password);
-      router.replace(loggedInUser.role === SEO_EDITOR_ROLE ? "/blog" : "/");
+      router.replace(getStaffHomePath(loggedInUser.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {

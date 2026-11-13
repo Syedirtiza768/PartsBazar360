@@ -1,0 +1,33 @@
+{
+  "cx": 26.847,
+  "cy": 31.0,
+  "R": 31.0,
+  "r": 12.525,
+  "T": 16.0,
+  "W": 53.694,
+  "H": 92.0,
+  "shoulder": 15.5,
+  "base": 62.0,
+  "counter_w": 21.694,
+  "counter_h": 25.05,
+  "cap": 46.5,
+  "gap": 21.694,
+  "ratios": {
+    "pb-horizontal": 4.9919,
+    "pb-stacked": 1.2955,
+    "pb-symbol": 0.5836,
+    "pb-wordmark": 8.0307,
+    "pb-production": 5.2284,
+    "pb-micro16": 1.0,
+    "pb-c1-fit-frame-lockup": 6.7247,
+    "pb-c2-exchange-lockup": 6.4696,
+    "pb-c3-full-turn-lockup": 4.4376,
+    "pb-c4-hex-p-lockup": 4.9919,
+    "pb-c5-ledger-tag-lockup": 6.1148,
+    "pb-c1-fit-frame-symbol": 1.0,
+    "pb-c2-exchange-symbol": 1.466,
+    "pb-c3-full-turn-symbol": 0.866,
+    "pb-c4-hex-p-symbol": 0.5836,
+    "pb-c5-ledger-tag-symbol": 1.75
+  }
+}

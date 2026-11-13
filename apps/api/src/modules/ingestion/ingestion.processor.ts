@@ -315,7 +315,9 @@ export class IngestionProcessor extends WorkerHost {
 
     const MAX_ATTEMPTS = 8;
     while (remaining.size > 0) {
-      let result: Awaited<ReturnType<typeof this.realTrackService.fetchListings>> | undefined;
+      let result:
+        | Awaited<ReturnType<typeof this.realTrackService.fetchListings>>
+        | undefined;
       let lastErr: unknown;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         try {
@@ -1070,10 +1072,13 @@ export class IngestionProcessor extends WorkerHost {
         where: { id: canonicalPart.id },
         data: {
           compatibility: compatibility as unknown as Prisma.InputJsonValue,
-          fitmentStatus: 'CONFIRMED',
-          fitmentConfidence: 0.9,
+          fitmentStatus: 'LIKELY',
+          fitmentConfidence: 0.65,
           fitmentFlags: [
-            ...new Set([...(canonicalPart.fitmentFlags || []), 'MVL_VERIFIED']),
+            ...new Set([
+              ...(canonicalPart.fitmentFlags || []),
+              'MVL_VEHICLE_IDENTITY_VERIFIED',
+            ]),
           ],
         },
       });
@@ -1268,7 +1273,11 @@ export class IngestionProcessor extends WorkerHost {
           },
         });
         if (part) await this.searchService.indexPart(part);
-        await this.searchOutbox.enqueue(offer.canonicalPartId, 'UPSERT', 'INGESTION_DEACTIVATE');
+        await this.searchOutbox.enqueue(
+          offer.canonicalPartId,
+          'UPSERT',
+          'INGESTION_DEACTIVATE',
+        );
       } catch (err) {
         this.logger.warn(
           `Failed to reindex after deactivating offer ${offer.id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -1325,7 +1334,11 @@ export class IngestionProcessor extends WorkerHost {
           },
         });
         if (part) await this.searchService.indexPart(part);
-        await this.searchOutbox.enqueue(partId, 'UPSERT', 'INGESTION_TOMBSTONE');
+        await this.searchOutbox.enqueue(
+          partId,
+          'UPSERT',
+          'INGESTION_TOMBSTONE',
+        );
       } catch (err) {
         this.logger.warn(
           `tombstone: failed to reindex ${partId}: ${err instanceof Error ? err.message : String(err)}`,

@@ -48,6 +48,7 @@ const SUPERFLOUS_SELLER_NAME_RE = /\b(?:blackline|salvage)\s+auto\s+parts\b/i;
 
 /** Buyer-visible offers only — drops legacy/suspended sellers from card/PDP payloads. */
 export function buyerVisibleOffers<T extends {
+  id?: string;
   price?: number;
   sellerId?: string | null;
   sellerName?: string | null;
@@ -63,7 +64,9 @@ export function buyerVisibleOffers<T extends {
       if (offer.status && offer.status !== "ACTIVE") return false;
       if (offer.seller?.onboardingStatus && offer.seller.onboardingStatus !== "ACTIVE") return false;
       if (offer.price === null || offer.price === undefined || Number(offer.price) <= 0) return false;
-      return Boolean(offer.sellerId || name);
+      // The buyer API deliberately removes seller identity. An eligible offer
+      // therefore remains visible by its public offer id after server filtering.
+      return Boolean(offer.sellerId || name || offer.id);
     });
 
   const nameOf = (o: T) => o.sellerName || o.seller?.name || "";

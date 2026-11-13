@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Badge } from "@repo/ui/badge";
 import { Button, buttonClasses } from "@repo/ui/button";
@@ -9,6 +8,7 @@ import { Input, Textarea, Select } from "@repo/ui/field";
 import { PageHeader } from "@repo/ui/page-header";
 import { useAdminAuth } from "@/lib/auth-context";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { BlogContentEditor } from "./BlogContentEditor";
 
 type Status = "DRAFT" | "PUBLISHED";
 type Post = {
@@ -330,12 +330,11 @@ export default function BlogCmsPage() {
             onChange={(event) => updateField("excerpt", event.target.value)}
             hint="Short summary shown on the blog index and used as a fallback description."
           />
-          <Textarea
-            label="Content"
-            required
-            value={form.content}
-            onChange={(event) => updateField("content", event.target.value)}
-            className="min-h-[260px]"
+          <BlogContentEditor
+            key={selectedId ?? "new"}
+            content={form.content}
+            onChange={(content) => updateField("content", content)}
+            disabled={loading || saving}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
@@ -376,13 +375,14 @@ export default function BlogCmsPage() {
               {selectedId ? "Save changes" : "Create post"}
             </Button>
             {form.slug && (
-              <Link
+              <a
                 href={"/buyer/blog/" + form.slug}
                 target="_blank"
+                rel="noopener noreferrer"
                 className={buttonClasses({ variant: "outline" })}
               >
                 Open public page
-              </Link>
+              </a>
             )}
           </div>
         </form>

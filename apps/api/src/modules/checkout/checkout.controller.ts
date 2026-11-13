@@ -13,12 +13,15 @@ import {
 } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsIn,
   IsEmail,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   MaxLength,
   MinLength,
@@ -73,6 +76,14 @@ class CheckoutDto {
   @IsString()
   @IsIn([...CHARGE_CURRENCIES])
   chargeCurrency?: string;
+
+  @IsUUID()
+  validationId!: string;
+
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  acknowledgedCartItemIds!: string[];
 }
 
 class CouponDto {
@@ -105,6 +116,35 @@ class ShippingQuoteDto {
   @IsString()
   @IsIn([...CHARGE_CURRENCIES])
   currency?: string;
+}
+
+class CheckoutValidationDto {
+  @IsObject()
+  shippingAddress!: Record<string, unknown>;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsIn([...CHARGE_CURRENCIES])
+  chargeCurrency?: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsString()
+  @IsIn(['stripe', 'tamara'])
+  paymentProvider?: 'stripe' | 'tamara';
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @MaxLength(64)
+  couponCode?: string;
 }
 
 class CheckoutSessionDto {
@@ -307,6 +347,23 @@ export class CheckoutController {
     );
   }
 
+  @Post(':cartId/validate')
+  validateCheckout(
+    @Param('cartId') cartId: string,
+    @Headers('x-checkout-session') checkoutSessionId: string | undefined,
+    @Headers('x-checkout-token') checkoutToken: string | undefined,
+    @Body() body: CheckoutValidationDto,
+  ) {
+    return this.checkoutService.validateCheckout(
+      cartId,
+      body.shippingAddress,
+      body.chargeCurrency,
+      body.paymentProvider,
+      body.couponCode,
+      { checkoutSessionId, checkoutToken },
+    );
+  }
+
   @Post(':cartId')
   async checkout(
     @Param('cartId') cartId: string,
@@ -341,7 +398,13 @@ export class CheckoutController {
       body.shippingAddress,
       body.chargeCurrency,
       body.paymentProvider,
-      { checkoutSessionId, checkoutToken, idempotencyKey },
+      {
+        checkoutSessionId,
+        checkoutToken,
+        idempotencyKey,
+        validationId: body.validationId,
+        acknowledgedCartItemIds: body.acknowledgedCartItemIds,
+      },
       body.couponCode,
     );
   }

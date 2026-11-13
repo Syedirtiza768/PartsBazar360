@@ -13,14 +13,12 @@ import type { CompatibilityRow, CompatibleVehicle } from "@/lib/types";
 
 /**
  * Vehicle compatibility with honest evidence separation:
- *  1. Verified fitment (structured A/B evidence ≥ 0.8) — green, prominent.
- *  2. Advisory matches (title-inferred / low confidence) — amber, clearly
+ *  1. Confirmed exact fitment — green, prominent.
+ *  2. Advisory matches (YMM/catalog compatibility) — amber, clearly
  *     labeled as requiring confirmation.
  *  3. The full per-year vehicle table.
  * Uncertain data is never dressed up as verified.
  */
-
-const VERIFIED_LEVELS = new Set(["A", "B"]);
 
 export function CompatibilitySection({
   rows,
@@ -32,9 +30,7 @@ export function CompatibilitySection({
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
 
-  const verified = compatibleVehicles.filter(
-    (v) => VERIFIED_LEVELS.has((v.evidenceLevel || "").toUpperCase()) && Number(v.confidence || 0) >= 0.8,
-  );
+  const verified = compatibleVehicles.filter((v) => v.verified);
   const advisory = compatibleVehicles.filter((v) => !verified.includes(v));
 
   const tableRows = useMemo(() => {
@@ -46,7 +42,13 @@ export function CompatibilitySection({
       const from = Math.min(v.startYear, v.endYear);
       const to = Math.max(v.startYear, v.endYear);
       for (let year = from; year <= Math.min(to, from + 40); year++) {
-        out.push({ year, make: v.make, model: v.model, trim: "-", engine: "-", source: "title" });
+        out.push({
+          year,
+          make: v.make,
+          model: v.model,
+          trim: "-",
+          engine: "-",
+        });
       }
     }
     return out;
@@ -56,17 +58,24 @@ export function CompatibilitySection({
     const q = query.trim().toLowerCase();
     if (!q) return tableRows;
     return tableRows.filter((r) =>
-      [r.year, r.make, r.model, r.trim, r.engine].filter(Boolean).join(" ").toLowerCase().includes(q),
+      [r.year, r.make, r.model, r.trim, r.engine]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
     );
   }, [tableRows, query]);
 
   const visible = showAll ? filtered : filtered.slice(0, 10);
-  const hasMvlCatalog = tableRows.some((r) => r.source === "mvl_catalog");
-  const hasAnything = verified.length > 0 || advisory.length > 0 || tableRows.length > 0;
+  const hasAnything =
+    verified.length > 0 || advisory.length > 0 || tableRows.length > 0;
 
   return (
     <section aria-labelledby="compatibility-heading" className="space-y-4">
-      <h2 id="compatibility-heading" className="text-lg font-bold tracking-tight text-slate-900">
+      <h2
+        id="compatibility-heading"
+        className="text-lg font-bold tracking-tight text-slate-900"
+      >
         Vehicle compatibility
       </h2>
 
@@ -74,10 +83,13 @@ export function CompatibilitySection({
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <AlertTriangleIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div>
-            <p className="text-sm font-semibold text-amber-900">No compatibility data yet</p>
+            <p className="text-sm font-semibold text-amber-900">
+              No compatibility data yet
+            </p>
             <p className="mt-1 text-sm leading-relaxed text-amber-800">
-              This listing has no structured fitment information. Match the OE number against your
-              vehicle&apos;s parts catalog, or ask support to verify before ordering.
+              This listing has no structured fitment information. Match the OE
+              number against your vehicle&apos;s parts catalog, or ask support
+              to verify before ordering.
             </p>
           </div>
         </div>
@@ -113,8 +125,9 @@ export function CompatibilitySection({
                 Possible matches — confirm before ordering
               </p>
               <p className="mt-1 text-[13px] leading-relaxed text-amber-800">
-                Inferred from the listing title or low-confidence data. Confirm the exact trim,
-                engine, and OE number first.
+                Compatibility rows identify a candidate vehicle, not a
+                guaranteed exact fit. Confirm the trim, engine, and OE number
+                before ordering.
               </p>
               <ul className="mt-2.5 flex flex-wrap gap-2">
                 {advisory.map((v, i) => (
@@ -136,7 +149,8 @@ export function CompatibilitySection({
                   <h3 className="text-sm font-semibold text-slate-900">
                     Compatibility table
                     <span className="ml-2 font-normal text-graphite-600">
-                      {filtered.length} vehicle{filtered.length === 1 ? "" : "s"}
+                      {filtered.length} vehicle
+                      {filtered.length === 1 ? "" : "s"}
                     </span>
                   </h3>
                 </div>
@@ -160,41 +174,62 @@ export function CompatibilitySection({
                 keyboard-focusable scroll region with the Year column pinned, so
                 a row never loses its identifier while the buyer swipes across.
               */}
-              <TableScroller label="Compatibility table" className="rounded-none border-0">
+              <TableScroller
+                label="Compatibility table"
+                className="rounded-none border-0"
+              >
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {["Year", "Make", "Model", "Trim", "Engine"].map((h, hi) => (
-                        <th
-                          key={h}
-                          scope="col"
-                          className={
-                            "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-graphite-600" +
-                            (hi === 0 ? " sticky left-0 z-10 bg-slate-50" : "")
-                          }
-                        >
-                          {h}
-                        </th>
-                      ))}
+                      {["Year", "Make", "Model", "Trim", "Engine"].map(
+                        (h, hi) => (
+                          <th
+                            key={h}
+                            scope="col"
+                            className={
+                              "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-graphite-600" +
+                              (hi === 0
+                                ? " sticky left-0 z-10 bg-slate-50"
+                                : "")
+                            }
+                          >
+                            {h}
+                          </th>
+                        ),
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {visible.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-graphite-600">
+                        <td
+                          colSpan={5}
+                          className="px-4 py-8 text-center text-graphite-600"
+                        >
                           No vehicles match “{query}”.
                         </td>
                       </tr>
                     ) : (
                       visible.map((item, i) => (
-                        <tr key={`${item.year}-${item.make}-${item.model}-${i}`} className={i % 2 === 1 ? "bg-slate-50" : "bg-white"}>
+                        <tr
+                          key={`${item.year}-${item.make}-${item.model}-${i}`}
+                          className={i % 2 === 1 ? "bg-slate-50" : "bg-white"}
+                        >
                           <td className="sticky left-0 z-10 whitespace-nowrap bg-inherit px-4 py-2.5 font-medium tabular-nums text-slate-900">
                             {item.year || "—"}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">{item.make || "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">{item.model || "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.trim || "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{item.engine || "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">
+                            {item.make || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-800">
+                            {item.model || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {item.trim || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {item.engine || "—"}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -209,7 +244,9 @@ export function CompatibilitySection({
                     onClick={() => setShowAll((v) => !v)}
                     className="text-sm font-semibold text-brand-600 transition-colors hover:text-brand-700"
                   >
-                    {showAll ? "Show fewer vehicles" : `Show all ${filtered.length} vehicles`}
+                    {showAll
+                      ? "Show fewer vehicles"
+                      : `Show all ${filtered.length} vehicles`}
                   </button>
                 </div>
               )}
@@ -218,9 +255,9 @@ export function CompatibilitySection({
 
           <p className="flex items-start gap-2 text-xs leading-relaxed text-graphite-600">
             <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            {hasMvlCatalog
-              ? "Compatibility is expanded from the OE number\u2019s donor vehicle to the matching MVL chassis generation (all listed trims/engines/years). When in doubt, match the OE number against your vehicle\u2019s parts catalog or ask our team."
-              : "Compatibility data comes from structured seller fitment and listing metadata. When in doubt, the OE number is the ground truth — match it against your vehicle\u2019s parts catalog or ask our team."}
+            Compatibility rows are references, not proof of exact fit. Match the
+            OE number against your vehicle&apos;s parts catalog or ask our team
+            to verify the configuration.
           </p>
         </>
       )}

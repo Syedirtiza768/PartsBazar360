@@ -68,8 +68,13 @@ function makePart(overrides: Partial<SeoPartInput> = {}): SeoPartInput {
     manufacturerPartNumber: '86401-12020',
     genuineOemPartNumber: '86401-12020',
     oeNumbers: ['86401-12020', '8640112020A'],
-    imageUrls: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'],
-    media: [{ url: 'https://cdn.example.com/a.jpg', isPrimary: true, sortOrder: 0 }],
+    imageUrls: [
+      'https://cdn.example.com/a.jpg',
+      'https://cdn.example.com/b.jpg',
+    ],
+    media: [
+      { url: 'https://cdn.example.com/a.jpg', isPrimary: true, sortOrder: 0 },
+    ],
     offers: [
       {
         price: 1250,
@@ -170,7 +175,13 @@ describe('a newly published listing', () => {
   it('is not an orphan — it links into its taxonomy', () => {
     const relations = doc.internalLinks.map((link) => link.relation);
     expect(relations).toEqual(
-      expect.arrayContaining(['category', 'categoryGroup', 'brand', 'make', 'model']),
+      expect.arrayContaining([
+        'category',
+        'categoryGroup',
+        'brand',
+        'make',
+        'model',
+      ]),
     );
   });
 
@@ -187,38 +198,58 @@ describe('a newly published listing', () => {
 describe('fallback hierarchy', () => {
   const cases: Array<[string, Partial<SeoPartInput>]> = [
     ['no brand', { brand: null, manufacturer: null }],
-    ['no part number', { manufacturerPartNumber: null, genuineOemPartNumber: null, oeNumbers: [] }],
+    [
+      'no part number',
+      {
+        manufacturerPartNumber: null,
+        genuineOemPartNumber: null,
+        oeNumbers: [],
+      },
+    ],
     ['no category', { category: null, categoryGroup: null }],
     ['no vehicle', { compatibleVehicles: [] }],
     ['no description', { description: null }],
     ['no images', { imageUrls: [], media: [] }],
     ['no offers', { offers: [] }],
-    ['title only', {
-      brand: null, manufacturer: null, category: null, categoryGroup: null,
-      manufacturerPartNumber: null, genuineOemPartNumber: null, oeNumbers: [],
-      compatibleVehicles: [], description: null,
-    }],
+    [
+      'title only',
+      {
+        brand: null,
+        manufacturer: null,
+        category: null,
+        categoryGroup: null,
+        manufacturerPartNumber: null,
+        genuineOemPartNumber: null,
+        oeNumbers: [],
+        compatibleVehicles: [],
+        description: null,
+      },
+    ],
   ];
 
-  it.each(cases)('with %s, still emits usable metadata', (_label, overrides) => {
-    const doc = buildPartSeoDocument(makePart(overrides));
+  it.each(cases)(
+    'with %s, still emits usable metadata',
+    (_label, overrides) => {
+      const doc = buildPartSeoDocument(makePart(overrides));
 
-    for (const value of [doc.title, doc.description, doc.h1, doc.canonical]) {
-      expect(value).toBeTruthy();
-      expect(value).not.toMatch(/undefined|null|NaN|\[object Object\]/i);
-      // No dangling or doubled separators from an empty template slot.
-      expect(value).not.toMatch(/\|\s*\||,\s*,|\s-\s-\s/);
-      expect(value.trim()).toBe(value);
-    }
-    expect(doc.breadcrumbs.length).toBeGreaterThanOrEqual(2);
-  });
+      for (const value of [doc.title, doc.description, doc.h1, doc.canonical]) {
+        expect(value).toBeTruthy();
+        expect(value).not.toMatch(/undefined|null|NaN|\[object Object\]/i);
+        // No dangling or doubled separators from an empty template slot.
+        expect(value).not.toMatch(/\|\s*\||,\s*,|\s-\s-\s/);
+        expect(value.trim()).toBe(value);
+      }
+      expect(doc.breadcrumbs.length).toBeGreaterThanOrEqual(2);
+    },
+  );
 
   it('an admin override always wins over the generated value', () => {
     const doc = buildPartSeoDocument(
       makePart({
         seo: {
           title: 'Custom Title For This Listing',
-          description: 'Custom description that the admin wrote by hand for this listing.',
+          description:
+            'Custom description that the admin wrote by hand for this listing.',
           h1: 'Custom H1',
         },
       }),
@@ -226,11 +257,15 @@ describe('fallback hierarchy', () => {
     expect(doc.titleCore).toBe('Custom Title For This Listing');
     expect(doc.h1).toBe('Custom H1');
     expect(doc.description).toContain('Custom description');
-    expect(doc.overridden).toEqual(expect.arrayContaining(['title', 'description', 'h1']));
+    expect(doc.overridden).toEqual(
+      expect.arrayContaining(['title', 'description', 'h1']),
+    );
   });
 
   it('an admin noindex override suppresses an otherwise-indexable page', () => {
-    const decision = decidePartIndexability(makePart({ seo: { robots: 'noindex' } }));
+    const decision = decidePartIndexability(
+      makePart({ seo: { robots: 'noindex' } }),
+    );
     expect(decision.robots.index).toBe(false);
     expect(decision.sitemapEligible).toBe(false);
     expect(decision.reasons).toContain('Admin override: noindex');
@@ -265,7 +300,9 @@ describe('slug generation', () => {
     expect(slugify('Bremsbeläge vorne für Citroën C4 — Größe')).toBe(
       'bremsbelage-vorne-fur-citroen-c4-grosse',
     );
-    expect(slugify('  MULTIPLE   spaces & symbols!!! ')).toBe('multiple-spaces-and-symbols');
+    expect(slugify('  MULTIPLE   spaces & symbols!!! ')).toBe(
+      'multiple-spaces-and-symbols',
+    );
     expect(slugify('86401-12020')).toBe('86401-12020');
   });
 
@@ -296,7 +333,11 @@ describe('slug generation', () => {
   });
 
   it('never produces an empty slug, even with no usable text', () => {
-    const slug = buildPartSlugBase({ id: 'x', title: '日本語のみ', slug: null });
+    const slug = buildPartSlugBase({
+      id: 'x',
+      title: '日本語のみ',
+      slug: null,
+    });
     expect(slug.length).toBeGreaterThan(0);
     expect(slug).toMatch(/^[a-z0-9-]+$/);
   });
@@ -315,13 +356,19 @@ describe('slug generation', () => {
     );
     // Re-running a backfill must not hand the same part a different URL.
     expect(first).toBe(second);
-    expect(first).toBe(`bosch-brake-pad-set-0986494104-${stableSuffix('part-id-one')}`);
+    expect(first).toBe(
+      `bosch-brake-pad-set-0986494104-${stableSuffix('part-id-one')}`,
+    );
   });
 
   it('gives different parts different suffixes', async () => {
     const taken = new Set(['duplicate-title']);
-    const a = await resolveUniqueSlug('duplicate-title', 'id-a', (c) => taken.has(c));
-    const b = await resolveUniqueSlug('duplicate-title', 'id-b', (c) => taken.has(c));
+    const a = await resolveUniqueSlug('duplicate-title', 'id-a', (c) =>
+      taken.has(c),
+    );
+    const b = await resolveUniqueSlug('duplicate-title', 'id-b', (c) =>
+      taken.has(c),
+    );
     expect(a).not.toBe(b);
   });
 
@@ -335,11 +382,17 @@ describe('slug generation', () => {
   it('picks the strongest available part number', () => {
     expect(primaryPartNumber(makePart())).toBe('86401-12020');
     expect(
-      primaryPartNumber(makePart({ manufacturerPartNumber: null, genuineOemPartNumber: null })),
+      primaryPartNumber(
+        makePart({ manufacturerPartNumber: null, genuineOemPartNumber: null }),
+      ),
     ).toBe('86401-12020');
     expect(
       primaryPartNumber(
-        makePart({ manufacturerPartNumber: null, genuineOemPartNumber: null, oeNumbers: [] }),
+        makePart({
+          manufacturerPartNumber: null,
+          genuineOemPartNumber: null,
+          oeNumbers: [],
+        }),
       ),
     ).toBe('');
   });
@@ -350,7 +403,9 @@ describe('slug generation', () => {
 // ---------------------------------------------------------------------------
 describe('index decision engine', () => {
   it('suppresses a listing with no image', () => {
-    const decision = decidePartIndexability(makePart({ imageUrls: [], media: [] }));
+    const decision = decidePartIndexability(
+      makePart({ imageUrls: [], media: [] }),
+    );
     expect(decision.robots).toEqual({ index: false, follow: true });
     expect(decision.reasons).toContain('No product image');
   });
@@ -361,9 +416,9 @@ describe('index decision engine', () => {
   });
 
   it('suppresses a draft listing', () => {
-    expect(decidePartIndexability(makePart({ status: 'DRAFT' })).reasons).toContain(
-      'Listing status is DRAFT',
-    );
+    expect(
+      decidePartIndexability(makePart({ status: 'DRAFT' })).reasons,
+    ).toContain('Listing status is DRAFT');
   });
 
   it('keeps a temporarily out-of-stock listing followable and declares OutOfStock', () => {
@@ -374,7 +429,9 @@ describe('index decision engine', () => {
     const product = graph.find((node) => node['@type'] === 'Product')!;
     expect(product.offers.availability).toBe('https://schema.org/OutOfStock');
     // The URL is unchanged — a stock-out must not throw away a ranked page.
-    expect(doc.canonical).toContain('/parts/toyota-corolla-lane-departure-camera-86401-12020/');
+    expect(doc.canonical).toContain(
+      '/parts/toyota-corolla-lane-departure-camera-86401-12020/',
+    );
   });
 
   it('declares SoldOut for a permanently sold listing', () => {
@@ -385,13 +442,17 @@ describe('index decision engine', () => {
   });
 
   it('restocking makes a listing indexable again', () => {
-    expect(decidePartIndexability(makePart({ offers: [] })).robots.index).toBe(false);
+    expect(decidePartIndexability(makePart({ offers: [] })).robots.index).toBe(
+      false,
+    );
     expect(decidePartIndexability(makePart()).robots.index).toBe(true);
   });
 
   it('never indexes a non-production environment, even with a force-index override', () => {
     process.env.SEO_INDEXING_ENABLED = '0';
-    const decision = decidePartIndexability(makePart({ seo: { robots: 'index' } }));
+    const decision = decidePartIndexability(
+      makePart({ seo: { robots: 'index' } }),
+    );
     expect(decision.robots).toEqual({ index: false, follow: false });
     expect(decision.sitemapEligible).toBe(false);
   });
@@ -424,18 +485,23 @@ describe('taxonomy eligibility', () => {
   it('holds vehicle-model pages to a higher bar than category pages', () => {
     // The same count that qualifies a category must not qualify a model page,
     // because the model pattern can generate far more URLs.
-    expect(decideTaxonomyIndexability(node({ productCount: 9 })).robots.index).toBe(true);
     expect(
-      decideTaxonomyIndexability(node({ kind: 'model', productCount: 9 })).robots.index,
+      decideTaxonomyIndexability(node({ productCount: 9 })).robots.index,
+    ).toBe(true);
+    expect(
+      decideTaxonomyIndexability(node({ kind: 'model', productCount: 9 }))
+        .robots.index,
     ).toBe(false);
   });
 
   it('holds make+model+year to the highest bar', () => {
     expect(
-      decideTaxonomyIndexability(node({ kind: 'modelYear', productCount: 20 })).robots.index,
+      decideTaxonomyIndexability(node({ kind: 'modelYear', productCount: 20 }))
+        .robots.index,
     ).toBe(false);
     expect(
-      decideTaxonomyIndexability(node({ kind: 'modelYear', productCount: 30 })).robots.index,
+      decideTaxonomyIndexability(node({ kind: 'modelYear', productCount: 30 }))
+        .robots.index,
     ).toBe(true);
   });
 
@@ -446,16 +512,23 @@ describe('taxonomy eligibility', () => {
   });
 
   it('generates complete metadata for a new category with no configuration', () => {
-    const doc = buildTaxonomySeoDocument(node({ name: 'Turbochargers', productCount: 42 }));
+    const doc = buildTaxonomySeoDocument(
+      node({ name: 'Turbochargers', productCount: 42 }),
+    );
     expect(doc.canonical).toBe(
       'https://partsbazar360.com/buyer/parts/category/turbochargers/',
     );
     expect(doc.h1).toBe('Turbochargers');
     expect(doc.description).toContain('42');
     expect(doc.robots.index).toBe(true);
-    expect(doc.breadcrumbs.map((crumb) => crumb.name)).toEqual(['Home', 'Turbochargers']);
+    expect(doc.breadcrumbs.map((crumb) => crumb.name)).toEqual([
+      'Home',
+      'Turbochargers',
+    ]);
     const graph = doc.structuredData['@graph'] as Array<Record<string, any>>;
-    expect(graph.some((entry) => entry['@type'] === 'CollectionPage')).toBe(true);
+    expect(graph.some((entry) => entry['@type'] === 'CollectionPage')).toBe(
+      true,
+    );
   });
 });
 
@@ -482,7 +555,9 @@ describe('faceted navigation policy', () => {
   });
 
   it('never puts a search URL in a sitemap, even an indexable one', () => {
-    expect(decideFacetIndexability({ category: 'Brake Pads' }).sitemapEligible).toBe(false);
+    expect(
+      decideFacetIndexability({ category: 'Brake Pads' }).sitemapEligible,
+    ).toBe(false);
   });
 });
 
@@ -525,8 +600,16 @@ describe('validation and duplicate detection', () => {
 
   it('flags duplicate slugs across the catalog', () => {
     const issues = findDuplicates([
-      { id: 'a', slug: 'brake-pad-set', canonical: 'https://x/parts/brake-pad-set/' },
-      { id: 'b', slug: 'brake-pad-set', canonical: 'https://x/parts/brake-pad-set/' },
+      {
+        id: 'a',
+        slug: 'brake-pad-set',
+        canonical: 'https://x/parts/brake-pad-set/',
+      },
+      {
+        id: 'b',
+        slug: 'brake-pad-set',
+        canonical: 'https://x/parts/brake-pad-set/',
+      },
     ]);
     expect(issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining(['slug.duplicate', 'canonical.duplicate']),
@@ -537,8 +620,16 @@ describe('validation and duplicate detection', () => {
     // Distinct listings for the same physical part are legitimate commerce;
     // they get distinct slugs and must not be canonicalised into each other.
     const issues = findDuplicates([
-      { id: 'a', slug: 'bosch-brake-pad-0986494104', canonical: 'https://x/parts/bosch-brake-pad-0986494104/' },
-      { id: 'b', slug: 'bosch-brake-pad-0986494104-x9k2mq', canonical: 'https://x/parts/bosch-brake-pad-0986494104-x9k2mq/' },
+      {
+        id: 'a',
+        slug: 'bosch-brake-pad-0986494104',
+        canonical: 'https://x/parts/bosch-brake-pad-0986494104/',
+      },
+      {
+        id: 'b',
+        slug: 'bosch-brake-pad-0986494104-x9k2mq',
+        canonical: 'https://x/parts/bosch-brake-pad-0986494104-x9k2mq/',
+      },
     ]);
     expect(issues).toEqual([]);
   });
@@ -582,8 +673,18 @@ describe('related products', () => {
     const selected = selectRelated(
       base,
       [
-        { id: 'a', slug: 'a', category: 'Cameras', imageUrls: ['https://cdn/a.jpg'] },
-        { id: 'b', slug: 'b', category: 'Tyres', imageUrls: ['https://cdn/b.jpg'] },
+        {
+          id: 'a',
+          slug: 'a',
+          category: 'Cameras',
+          imageUrls: ['https://cdn/a.jpg'],
+        },
+        {
+          id: 'b',
+          slug: 'b',
+          category: 'Tyres',
+          imageUrls: ['https://cdn/b.jpg'],
+        },
       ],
       8,
     );
@@ -594,7 +695,12 @@ describe('related products', () => {
   it('excludes candidates with no image or no slug', () => {
     const selected = selectRelated(base, [
       { id: 'no-image', slug: 'no-image', category: 'Cameras', imageUrls: [] },
-      { id: 'no-slug', slug: null, category: 'Cameras', imageUrls: ['https://cdn/a.jpg'] },
+      {
+        id: 'no-slug',
+        slug: null,
+        category: 'Cameras',
+        imageUrls: ['https://cdn/a.jpg'],
+      },
     ]);
     expect(selected).toEqual([]);
   });
@@ -602,7 +708,9 @@ describe('related products', () => {
 
 describe('taxonomy derivation', () => {
   it('files a listing under every dimension its data supports', () => {
-    expect(partTaxonomy(makePart()).map((node) => `${node.kind}:${node.name}`)).toEqual([
+    expect(
+      partTaxonomy(makePart()).map((node) => `${node.kind}:${node.name}`),
+    ).toEqual([
       'categoryGroup:Electrical',
       'category:Cameras',
       'brand:Toyota',
@@ -625,7 +733,11 @@ describe('taxonomy derivation', () => {
 describe('sitemap and robots output', () => {
   it('renders valid sitemap XML and escapes ampersands', () => {
     const xml = renderSitemap([
-      { url: 'https://x/a/?b=1&c=2', lastModified: '2026-08-01T00:00:00.000Z', priority: 0.7 },
+      {
+        url: 'https://x/a/?b=1&c=2',
+        lastModified: '2026-08-01T00:00:00.000Z',
+        priority: 0.7,
+      },
     ]);
     expect(xml).toContain('<?xml version="1.0" encoding="UTF-8"?>');
     expect(xml).toContain('<loc>https://x/a/?b=1&amp;c=2</loc>');
@@ -634,23 +746,31 @@ describe('sitemap and robots output', () => {
   });
 
   it('renders a sitemap index', () => {
-    expect(renderSitemapIndex([{ url: 'https://x/sitemaps/parts-1.xml' }])).toContain(
-      '<sitemapindex',
-    );
+    expect(
+      renderSitemapIndex([{ url: 'https://x/sitemaps/parts-1.xml' }]),
+    ).toContain('<sitemapindex');
   });
 
   it('blocks everything in a non-indexable environment', () => {
     process.env.SEO_INDEXING_ENABLED = '0';
     expect(renderRobotsTxt('https://staging/sitemap.xml').trim()).toBe(
-      'User-agent: *\nDisallow: /',
+      [
+        'User-agent: *\nDisallow: /',
+        'User-agent: Googlebot\nDisallow: /',
+        'User-agent: Googlebot-Image\nDisallow: /',
+      ].join('\n\n'),
     );
   });
 
   it('disallows private paths but never blocks render-critical assets', () => {
-    const robots = renderRobotsTxt('https://partsbazar360.com/buyer/sitemap.xml');
+    const robots = renderRobotsTxt(
+      'https://partsbazar360.com/buyer/sitemap.xml',
+    );
     expect(robots).toContain('Disallow: /buyer/checkout');
     expect(robots).toContain('Disallow: /buyer/account');
-    expect(robots).toContain('Sitemap: https://partsbazar360.com/buyer/sitemap.xml');
+    expect(robots).toContain(
+      'Sitemap: https://partsbazar360.com/buyer/sitemap.xml',
+    );
     // Blocking these would stop Google rendering the page at all.
     expect(robots).not.toMatch(/^Disallow: \/buyer\/_next/m);
     expect(robots).toContain('Allow: /buyer/_next/static/');
@@ -676,7 +796,9 @@ describe('image SEO', () => {
   });
 
   it('prefers curated ALT text when a media row has it', () => {
-    expect(imageAlt(makePart(), 0, 1, 'Hand-written alt')).toBe('Hand-written alt');
+    expect(imageAlt(makePart(), 0, 1, 'Hand-written alt')).toBe(
+      'Hand-written alt',
+    );
   });
 
   it('keeps ALT text inside the length budget', () => {
@@ -690,7 +812,10 @@ describe('image SEO', () => {
 
   it('de-duplicates repeated image URLs', () => {
     const images = partImages(
-      makePart({ imageUrls: ['https://cdn/a.jpg', 'https://cdn/a.jpg'], media: [] }),
+      makePart({
+        imageUrls: ['https://cdn/a.jpg', 'https://cdn/a.jpg'],
+        media: [],
+      }),
     );
     expect(images).toHaveLength(1);
   });
@@ -710,7 +835,9 @@ describe('social card image', () => {
         media: [],
       }),
     );
-    expect(doc.openGraph.images[0]!.url).toBe('https://cdn.example.com/photo.jpg');
+    expect(doc.openGraph.images[0]!.url).toBe(
+      'https://cdn.example.com/photo.jpg',
+    );
     // The SVG is still a gallery image — it is only unfit as a social card.
     expect(doc.images.map((image) => image.url)).toContain(
       'https://api.example.com/parts/x/infographic.svg',
@@ -743,7 +870,9 @@ describe('non-brand values in the brand column', () => {
       oeNumbers: ['51118069942'],
       category: 'Body',
       categoryGroup: null,
-      compatibleVehicles: [{ make: 'BMW', model: 'X6', startYear: 2019, endYear: 2023 }],
+      compatibleVehicles: [
+        { make: 'BMW', model: 'X6', startYear: 2019, endYear: 2023 },
+      ],
     });
 
   it('keeps the label out of the slug', () => {
@@ -772,7 +901,9 @@ describe('non-brand values in the brand column', () => {
   it('never files it under a brand taxonomy page', () => {
     // A /brands/genuine-oem page would clear the inventory threshold many
     // times over while meaning nothing to a buyer.
-    expect(partTaxonomy(genuineOem()).some((node) => node.kind === 'brand')).toBe(false);
+    expect(
+      partTaxonomy(genuineOem()).some((node) => node.kind === 'brand'),
+    ).toBe(false);
     expect(
       buildPartSeoDocument({ ...genuineOem(), slug: 'x' }).internalLinks.some(
         (link) => link.relation === 'brand',
@@ -781,10 +912,25 @@ describe('non-brand values in the brand column', () => {
   });
 
   it('still recognises real brands', () => {
-    for (const brand of ['Bosch', 'FEBEST', 'BMW', 'Mercedes-Benz', 'FEBI', 'MAXPART']) {
+    for (const brand of [
+      'Bosch',
+      'FEBEST',
+      'BMW',
+      'Mercedes-Benz',
+      'FEBI',
+      'MAXPART',
+    ]) {
       expect(isMeaningfulBrand(brand)).toBe(true);
     }
-    for (const label of ['Genuine OEM', 'ORIGINAL', 'OEM', 'Unbranded', 'N/A', 'generic', '']) {
+    for (const label of [
+      'Genuine OEM',
+      'ORIGINAL',
+      'OEM',
+      'Unbranded',
+      'N/A',
+      'generic',
+      '',
+    ]) {
       expect(isMeaningfulBrand(label)).toBe(false);
     }
   });

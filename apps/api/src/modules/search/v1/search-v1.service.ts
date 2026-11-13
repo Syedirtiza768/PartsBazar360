@@ -25,6 +25,7 @@ import {
   SEARCH_INDEX_VERSION,
   physicalIndexName,
 } from '../index/search-index.schema';
+import { sanitizeSearchItems } from '../buyer-visible-offers.util';
 import type { SearchQueryDto } from './search-query.dto';
 
 const DEFAULT_PAGE_SIZE = 24;
@@ -93,7 +94,9 @@ export class SearchV1Service {
   /** Alias when promoted, otherwise the physical v2 index. */
   private async resolveIndex(): Promise<string> {
     try {
-      const response = await this.client.indices.existsAlias({ name: SEARCH_ALIAS });
+      const response = await this.client.indices.existsAlias({
+        name: SEARCH_ALIAS,
+      });
       if (Boolean((response as any)?.body ?? response)) return SEARCH_ALIAS;
     } catch {
       /* fall through */
@@ -130,7 +133,9 @@ export class SearchV1Service {
   private buildAggregations(dto: SearchQueryDto, core: any) {
     const aggs: Record<string, any> = {};
 
-    for (const [key, field] of Object.entries(FACET_FIELDS) as Array<[FacetKey, string]>) {
+    for (const [key, field] of Object.entries(FACET_FIELDS) as Array<
+      [FacetKey, string]
+    >) {
       const scoped = this.toFilters(dto);
       delete (scoped as Record<string, unknown>)[key];
 
@@ -174,7 +179,9 @@ export class SearchV1Service {
 
     // Availability toggles.
     aggs.availability = {
-      filter: { bool: { filter: buildFilters(this.toFilters(dto)), must: [core] } },
+      filter: {
+        bool: { filter: buildFilters(this.toFilters(dto)), must: [core] },
+      },
       aggs: {
         hasImage: { filter: { term: { hasImage: true } } },
         inStock: { filter: { term: { inStock: true } } },
@@ -220,7 +227,11 @@ export class SearchV1Service {
     const sort: SortOption = dto.sort ?? 'relevance';
     const filters = this.toFilters(dto);
 
-    let { parsed, query, sort: sortClause } = buildSearchQuery(dto.q, filters, sort);
+    let {
+      parsed,
+      query,
+      sort: sortClause,
+    } = buildSearchQuery(dto.q, filters, sort);
     const index = await this.resolveIndex();
 
     // Strict matching requires every term of a short query, which is what makes
@@ -236,12 +247,11 @@ export class SearchV1Service {
       const strictTotal = Number(probe?.body?.count ?? -1);
       if (strictTotal >= 0 && strictTotal < RELAX_THRESHOLD) {
         relaxed = true;
-        ({ parsed, query, sort: sortClause } = buildSearchQuery(
-          dto.q,
-          filters,
-          sort,
-          'relaxed',
-        ));
+        ({
+          parsed,
+          query,
+          sort: sortClause,
+        } = buildSearchQuery(dto.q, filters, sort, 'relaxed'));
       }
     }
 
@@ -256,7 +266,8 @@ export class SearchV1Service {
     if (parsed.positions.length) interpreted.positions = parsed.positions;
     if (parsed.condition) interpreted.condition = parsed.condition;
     if (parsed.partNumbers.length) interpreted.partNumbers = parsed.partNumbers;
-    if (parsed.synonymGroups.length) interpreted.partType = parsed.synonymGroups[0];
+    if (parsed.synonymGroups.length)
+      interpreted.partType = parsed.synonymGroups[0];
 
     const corrections: SearchV1Response['corrections'] = [];
     if (relaxed) {
@@ -293,12 +304,16 @@ export class SearchV1Service {
       const totalResults =
         typeof totalRaw === 'number' ? totalRaw : Number(totalRaw?.value ?? 0);
       const totalRelation: 'eq' | 'gte' =
-        typeof totalRaw !== 'number' && totalRaw?.relation === 'gte' ? 'gte' : 'eq';
+        typeof totalRaw !== 'number' && totalRaw?.relation === 'gte'
+          ? 'gte'
+          : 'eq';
       const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
 
       const results = response.body.hits.hits.map((hit: any) => {
         const matched: string[] = hit.matched_queries ?? [];
-        const primary = ['oem', 'sku', 'normalized'].some((name) => matched.includes(name));
+        const primary = ['oem', 'sku', 'normalized'].some((name) =>
+          matched.includes(name),
+        );
         return {
           id: hit._id,
           score: hit._score,
@@ -306,14 +321,26 @@ export class SearchV1Service {
           // Tell the buyer *why* this matched — the brief's "why this fits".
           matchedVia: matched.length ? matched : undefined,
           matchedViaInterchange:
-            !primary && (matched.includes('interchange') || matched.includes('superseded')),
+            !primary &&
+            (matched.includes('interchange') || matched.includes('superseded')),
         };
       });
 
+      const buyerResults = sanitizeSearchItems(results);
+      const facets = this.readFacets(response.body.aggregations);
+      // Supplier identity and provenance remain private. These dimensions are
+      // kept in the index for operations, but never emitted by buyer search.
+      facets.seller = [];
+      facets.sourceTag = [];
+
       return {
-        query: { original: parsed.original, normalized: parsed.normalized, interpreted },
-        results,
-        facets: this.readFacets(response.body.aggregations),
+        query: {
+          original: parsed.original,
+          normalized: parsed.normalized,
+          interpreted,
+        },
+        results: buyerResults,
+        facets,
         appliedFilters: Object.fromEntries(
           Object.entries(filters).filter(([, value]) =>
             Array.isArray(value) ? value.length > 0 : value != null,
@@ -341,7 +368,11 @@ export class SearchV1Service {
         error?.stack,
       );
       return {
-        query: { original: parsed.original, normalized: parsed.normalized, interpreted },
+        query: {
+          original: parsed.original,
+          normalized: parsed.normalized,
+          interpreted,
+        },
         results: [],
         facets: {},
         appliedFilters: {},
@@ -355,7 +386,10 @@ export class SearchV1Service {
           hasPreviousPage: page > 1,
         },
         corrections: [
-          { type: 'error', message: 'Search is temporarily unavailable. Please retry.' },
+          {
+            type: 'error',
+            message: 'Search is temporarily unavailable. Please retry.',
+          },
         ],
         meta: { tookMs: Date.now() - startedAt, index, degraded: true },
         requestId,

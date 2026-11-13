@@ -1,6 +1,6 @@
 # PartsBazar360 — Map of Content
 
-**Last reviewed:** 2026-09-29
+**Last reviewed:** 2026-10-25
 
 Entry point for the vault. This is a monorepo (Turborepo + npm workspaces) for an auto-parts marketplace: buyers, sellers, workshops, and an admin console sit on top of one shared catalog and API.
 
@@ -8,6 +8,7 @@ Open this vault in Obsidian at the repo root (`F:\apps\PartsBazar360`) — the g
 
 ## Apps
 - [[apps/api]] — NestJS backend: catalog, orders, checkout, search, ingestion
+- [[apps/private-image-proxy]] — private S3 listing-image delivery for the buyer storefront
 - [[apps/buyer-marketplace]] — public storefront (Next.js)
 - [[apps/seller-portal]] — seller-facing listing/inventory management (Next.js)
 - [[apps/admin-portal]] — internal admin console (Next.js)
@@ -20,6 +21,8 @@ Open this vault in Obsidian at the repo root (`F:\apps\PartsBazar360`) — the g
 - [[packages/scraper-engine]] — eBay/supplier scraping and enrichment engine
 
 ## Cross-cutting references
+- [[audits/DEVELOPER_OPTIMIZATION_COMPARISON_AND_PLAN_2026-10-09]] — comparison of the 30-page developer optimization report with current source and sampled production behavior, plus phased implementation, migration, QA and rollout plan
+- [[audits/BUYER_UX_CRO_AUDIT_2026-09-17]] — evidence-backed buyer UX/CRO audit, screen architecture, ranked backlog and four-phase roadmap
 - [[decisions]] — running log of non-obvious decisions and why they were made
 - [[MOTOR_PARTS_CATALOG_ARCHITECTURE]] — catalog data model and buyer experience
 - [[IMPLEMENTATION_PLAN]] — living plan tying catalog/import/seed/buyer/seller/admin together
@@ -33,6 +36,10 @@ Open this vault in Obsidian at the repo root (`F:\apps\PartsBazar360`) — the g
 - [[QA_AUDIT_2026-08-14]] — end-to-end QA audit: search/filter/pagination determinism, dual search stacks, vehicle-config dedupe, remediation plan
 - [[MARKETPLACE_TRANSFORMATION]] — eBay-Motors-style transformation history
 - [[REALTRACK_API_REQUIREMENTS]] — external data source requirements
+
+## Brand assets
+- [[brand/partsbazar360-logo]] — PartsBazar360 identity draft v1.0: Hex P symbol, logo family, build scripts, brand book and open items
+- [[brand/gbc-atlas]] — GBC's gender-neutral golden eagle character, saved image references, animation prompt, and Blender modeling/rigging brief
 
 ## Operational context
 - Local dev, deploy, and infra gotchas: see `memory/dev-workflow-no-docker.md`, `memory/deploy-must-use-update-sh.md`, and `memory/long-jobs-need-standalone-container.md` in Claude's memory store (not part of this vault, but load-bearing — ask Claude to check them).

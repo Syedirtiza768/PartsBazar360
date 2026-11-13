@@ -73,7 +73,7 @@ describe('buildPurchaseTrackingPayload', () => {
     });
   });
 
-  it('falls back to backend offer identifiers without inventing values', () => {
+  it('uses a safe generic item identity when the canonical item is unavailable', () => {
     expect(
       buildPurchaseTrackingPayload({
         ...paidOrder,
@@ -98,8 +98,8 @@ describe('buildPurchaseTrackingPayload', () => {
       transaction_id: 'order-uuid',
       items: [
         {
-          item_id: 'offer-fallback',
-          item_name: 'offer-fallback',
+          item_id: 'marketplace-part',
+          item_name: 'Marketplace part',
         },
       ],
     });

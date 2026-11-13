@@ -15,12 +15,20 @@ const TOKEN_KEY = "pb360_admin_access_token";
 // Staff roles allowed into this console. The portal and API both apply
 // role-specific access; SEO_EDITOR is limited to the Blog CMS surface.
 export const SEO_EDITOR_ROLE = "SEO_EDITOR";
+export const PAYMENT_LINKS_ADMIN_ROLE = "PAYMENT_LINKS_ADMIN";
 const STAFF_ROLES = [
   "ADMIN",
   "SUPPORT_AGENT",
   "FULFILLMENT_OPERATOR",
   SEO_EDITOR_ROLE,
+  PAYMENT_LINKS_ADMIN_ROLE,
 ];
+
+export function getStaffHomePath(role: string | null | undefined) {
+  if (role === SEO_EDITOR_ROLE) return "/blog";
+  if (role === PAYMENT_LINKS_ADMIN_ROLE) return "/payment-links";
+  return "/";
+}
 
 export type AdminUser = {
   id: string;
@@ -35,6 +43,7 @@ type AuthContextValue = {
   ready: boolean;
   isAdmin: boolean;
   isSeoEditor: boolean;
+  isPaymentLinksAdmin: boolean;
   login: (email: string, password: string) => Promise<AdminUser>;
   logout: () => void;
 };
@@ -132,6 +141,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       ready,
       isAdmin: Boolean(user && token && STAFF_ROLES.includes(user.role)),
       isSeoEditor: Boolean(user && user.role === SEO_EDITOR_ROLE),
+      isPaymentLinksAdmin: Boolean(
+        user && user.role === PAYMENT_LINKS_ADMIN_ROLE,
+      ),
       login,
       logout,
     }),

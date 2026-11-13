@@ -18,7 +18,6 @@ const UAE_FLAT_TIERS = [
   { maxKg: 2, amount: 20, label: 'small' },
   { maxKg: 10, amount: 50, label: 'medium' },
   { maxKg: 25, amount: 75, label: 'large' },
-  { maxKg: Number.POSITIVE_INFINITY, amount: 150, label: 'heavy' },
 ] as const;
 
 const UAE_COUNTRY_ALIASES = new Set([
@@ -41,7 +40,8 @@ const UAE_COUNTRY_ALIASES = new Set([
  * This list is exhaustive for naming mismatches: every dropdown entry not
  * covered here and not resolved via `rowsByCountry` genuinely has no EMX row
  * at all (small/embargoed markets the sheet doesn't service), so no alias
- * would help — those fall back to `averageRates`/`AVERAGE_LEAD_TIME` below.
+ * would help — those require a manual shipping arrangement and must not be
+ * assigned an averaged buyer charge.
  */
 const COUNTRY_ALIASES: Record<string, string> = {
   brunei: 'brunei darussalam',
@@ -55,15 +55,6 @@ const COUNTRY_ALIASES: Record<string, string> = {
   'united states': 'united states of america',
 };
 
-/**
- * Delivery window shown alongside `averageRates` for destinations with no
- * EMX row at all. Deliberately the widest band on the sheet (see
- * buildAverageRates' sibling) since there's no carrier data for these
- * markets to average — better to under-promise than quote a number we can't
- * back up.
- */
-const AVERAGE_LEAD_TIME = '08 to 14 Business Days';
-
 export interface ShippingQuoteItem {
   quantity: number;
   /** Canonical part id, used for tightly scoped shipping exceptions. */
@@ -75,6 +66,43 @@ export interface ShippingQuoteItem {
   dimensionsCm?: DimensionsCm | null;
   weightSource?: WeightSource | string | null;
   partClassKey?: string | null;
+  requiresSpecialHandling?: boolean;
+}
+
+/** Only explicit catalog restriction flags trigger this block; title keywords do not. */
+export function partRequiresSpecialHandling(itemSpecifics: unknown): boolean {
+  const positive = (value: unknown) =>
+    value === true ||
+    (typeof value === 'string' &&
+      /^(?:true|yes|required|dangerous goods|hazmat|restricted)$/i.test(
+        value.trim(),
+      ));
+  const source = Array.isArray(itemSpecifics)
+    ? Object.fromEntries(
+        itemSpecifics
+          .filter((entry: any) => entry && typeof entry.field === 'string')
+          .map((entry: any) => [entry.field, entry.value]),
+      )
+    : itemSpecifics;
+  if (!source || typeof source !== 'object') return false;
+
+  for (const [key, value] of Object.entries(
+    source as Record<string, unknown>,
+  )) {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+    if (
+      [
+        'dangerousgoods',
+        'hazmat',
+        'requiresspecialhandling',
+        'shippingrestriction',
+      ].includes(normalized) &&
+      positive(value)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export interface ShippingQuote {
@@ -84,6 +112,13 @@ export interface ShippingQuote {
   /** Customer-facing estimated delivery window, e.g. "04 to 06 Business Days". */
   leadTime: string | null;
   matchedCountry: boolean;
+  /** Whether a priced carrier service is available for this shipment. */
+  available: boolean;
+  availabilityReason:
+    | 'DESTINATION_UNSUPPORTED'
+    | 'FREIGHT_QUOTE_REQUIRED'
+    | 'SPECIAL_HANDLING_REVIEW'
+    | null;
   totalWeightGrams: number;
   billableWeightGrams: number;
   amount: number;
@@ -95,13 +130,9 @@ export interface ShippingQuote {
   estimated: boolean;
   /** Safety margin applied because at least one weight was estimated. */
   marginPct: number;
-  /**
-   * True when the parcel exceeds the courier ceiling. `amount` is then only the
-   * price at that ceiling — a floor, not a quotable total. Callers must route
-   * these to a manual freight quote rather than charging the buyer.
-   */
+  /** True when no supported parcel rate covers the shipment's billable weight. */
   requiresFreightQuote: boolean;
-  /** Billable kg the quote was priced at, after any freight capping. */
+  /** Billable kg used for eligibility; manual freight quotes are not priced. */
   quotedWeightKg: number;
 }
 
@@ -115,7 +146,6 @@ export class ShippingService {
   private readonly rowsByCountry = new Map(
     EMX_RATE_SHEET.map((row) => [this.normalizeCountry(row.country), row]),
   );
-  private readonly averageRates = this.buildAverageRates();
 
   quoteSellerShipping(
     items: ShippingQuoteItem[],
@@ -127,13 +157,15 @@ export class ShippingService {
     );
     const resolved = this.resolveWeights(chargeableItems);
 
-    const maxParcelGrams = maxParcelKgFromEnv() * 1000;
-    const requiresFreightQuote = resolved.chargeableGrams > maxParcelGrams;
-    // Price at the ceiling rather than extrapolating the rate sheet into
-    // freight territory; the flag tells callers this is a floor.
-    const pricedGrams = requiresFreightQuote
-      ? maxParcelGrams
-      : resolved.chargeableGrams;
+    const row = this.rowsByCountry.get(countryKey);
+    const isUae = this.isUae(countryKey);
+    const supportedParcelGrams = Math.min(
+      maxParcelKgFromEnv() * 1000,
+      isUae ? 25_000 : this.highestBand,
+    );
+    const countrySupported = isUae || Boolean(row);
+    const requiresFreightQuote =
+      countrySupported && resolved.chargeableGrams > supportedParcelGrams;
 
     const common = {
       destinationCountry: destinationCountry.trim(),
@@ -144,46 +176,102 @@ export class ShippingService {
       estimated: resolved.estimated,
       marginPct: resolved.marginPct,
       requiresFreightQuote,
-      quotedWeightKg: this.round(pricedGrams / 1000),
+      quotedWeightKg: this.round(resolved.chargeableGrams / 1000),
     };
 
     if (chargeableItems.length === 0) {
       const row = this.rowsByCountry.get(countryKey);
       return {
         ...common,
+        available: true,
+        availabilityReason: null,
         serviceType: 'FREE',
         leadTime: this.isUae(countryKey)
           ? '01 to 02 Business Days'
-          : (row?.leadTime ?? AVERAGE_LEAD_TIME),
+          : (row?.leadTime ?? null),
         matchedCountry: this.isUae(countryKey) || Boolean(row),
         billableWeightGrams: 0,
         amount: 0,
       };
     }
 
-    if (this.isUae(countryKey)) {
-      const tier = this.uaeFlatTier(pricedGrams);
+    if (chargeableItems.some((item) => item.requiresSpecialHandling)) {
       return {
         ...common,
+        serviceType: 'SPECIAL_HANDLING_REVIEW',
+        leadTime: null,
+        matchedCountry: false,
+        available: false,
+        availabilityReason: 'SPECIAL_HANDLING_REVIEW',
+        billableWeightGrams: resolved.chargeableGrams,
+        amount: 0,
+      };
+    }
+
+    if (this.isUae(countryKey)) {
+      if (requiresFreightQuote) {
+        return {
+          ...common,
+          available: false,
+          availabilityReason: 'FREIGHT_QUOTE_REQUIRED',
+          serviceType: 'FREIGHT_QUOTE_REQUIRED',
+          leadTime: null,
+          matchedCountry: true,
+          billableWeightGrams: resolved.chargeableGrams,
+          amount: 0,
+        };
+      }
+
+      const tier = this.uaeFlatTier(resolved.chargeableGrams);
+      return {
+        ...common,
+        available: true,
+        availabilityReason: null,
         serviceType: `UAE FLAT (${tier.label})`,
         leadTime: '01 to 02 Business Days',
         matchedCountry: true,
-        billableWeightGrams: pricedGrams,
+        billableWeightGrams: resolved.chargeableGrams,
         amount: tier.amount,
       };
     }
 
-    const billableWeightGrams = this.billableWeight(pricedGrams);
-    const row = this.rowsByCountry.get(countryKey);
-    const rates = row?.rates ?? this.averageRates;
+    if (!row) {
+      return {
+        ...common,
+        serviceType: 'UNAVAILABLE',
+        leadTime: null,
+        matchedCountry: false,
+        available: false,
+        availabilityReason: 'DESTINATION_UNSUPPORTED' as const,
+        billableWeightGrams: resolved.chargeableGrams,
+        amount: 0,
+      };
+    }
+
+    if (requiresFreightQuote) {
+      return {
+        ...common,
+        serviceType: 'FREIGHT_QUOTE_REQUIRED',
+        leadTime: null,
+        matchedCountry: true,
+        available: false,
+        availabilityReason: 'FREIGHT_QUOTE_REQUIRED',
+        billableWeightGrams: resolved.chargeableGrams,
+        amount: 0,
+      };
+    }
+
+    const billableWeightGrams = this.billableWeight(resolved.chargeableGrams);
 
     return {
       ...common,
-      serviceType: row?.serviceType ?? 'REGISTERED (POD)',
-      leadTime: row?.leadTime ?? AVERAGE_LEAD_TIME,
-      matchedCountry: Boolean(row),
+      serviceType: row.serviceType,
+      leadTime: row.leadTime,
+      matchedCountry: true,
+      available: true,
+      availabilityReason: null,
       billableWeightGrams,
-      amount: this.lookupAmount(rates, billableWeightGrams),
+      amount: this.lookupAmount(row.rates, billableWeightGrams),
     };
   }
 
@@ -292,20 +380,6 @@ export class ShippingService {
     return this.round(cappedBase + increment * extraSteps);
   }
 
-  private buildAverageRates() {
-    const out: Record<number, number> = {};
-    for (const band of this.rateBands) {
-      const values = EMX_RATE_SHEET.map((row) => row.rates[band]).filter(
-        (value): value is number => typeof value === 'number',
-      );
-      const avg =
-        values.reduce((sum, value) => sum + value, 0) /
-        Math.max(1, values.length);
-      out[band] = this.round(avg);
-    }
-    return out;
-  }
-
   private normalizeCountry(country: string) {
     const normalized = country.trim().toLowerCase().replace(/\s+/g, ' ');
     return COUNTRY_ALIASES[normalized] ?? normalized;
@@ -317,10 +391,7 @@ export class ShippingService {
 
   private uaeFlatTier(totalWeightGrams: number) {
     const weightKg = Math.max(totalWeightGrams, 0) / 1000;
-    return (
-      UAE_FLAT_TIERS.find((tier) => weightKg <= tier.maxKg) ??
-      UAE_FLAT_TIERS[UAE_FLAT_TIERS.length - 1]
-    );
+    return UAE_FLAT_TIERS.find((tier) => weightKg <= tier.maxKg)!;
   }
 
   private round(value: number) {

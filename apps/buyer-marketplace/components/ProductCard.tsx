@@ -3,19 +3,23 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Skeleton } from "@repo/ui/skeleton";
-import { UserIcon, TagIcon, RefreshIcon } from "@repo/ui/icons";
+import { TagIcon, RefreshIcon } from "@repo/ui/icons";
 import { partHref } from "@/lib/seo";
 import { PartImage } from "./PartImage";
 import { FitmentBadge } from "./FitmentBadge";
 import { ConditionBadge, SourceBadge } from "./ConditionBadge";
-import { SourcePill } from "./SourcePill";
 import { Price } from "./Price";
 import { WatchlistButton } from "./WatchlistButton";
-import { lowestOfferPrice, offerCurrency, buyerVisibleOffers } from "@/lib/format";
+import {
+  lowestOfferPrice,
+  offerCurrency,
+  buyerVisibleOffers,
+} from "@/lib/format";
 import { fitmentForConfig } from "@/lib/fitment";
 import { useGarage, vehicleShortLabel } from "@/lib/garage-context";
 import { prewarmEnrichment } from "@/lib/enrichment-client";
 import type { Part } from "@/lib/types";
+import { partTypeFromLegacy } from "@repo/catalog-contracts";
 
 /**
  * Marketplace product card. Shows, in priority order: image, fitment status
@@ -72,27 +76,41 @@ export function ProductCard({
   const offerCount = offers.length;
   const image = part.imageUrls?.[0];
   const bestOffer = offers[0];
-  const sellerName =
-    bestOffer?.seller?.name || bestOffer?.sellerName || null;
   const oeNumber = part.oeNumbers?.[0] || null;
   // Older index documents carry tier/source only on the offer — fall back
   // through the chain rather than hiding it. Offer condition outranks the
   // offer's qualityTier, which has a schema default that can contradict it.
   const qualityTier =
-    part.qualityTier || bestOffer?.condition || bestOffer?.qualityTier;
+    bestOffer?.condition || part.qualityTier || bestOffer?.qualityTier;
   const partSource = part.partSource || bestOffer?.partSource;
   // part.partType is the indexed title-derived product-category facet (e.g.
   // "Engine Mount"), not provenance — only the offer carries genuine/aftermarket.
-  const partType = bestOffer?.partType || (partSource === "AFTERMARKET" ? "AFTERMARKET" : "GENUINE_OEM");
+  const partType = partTypeFromLegacy(
+    partSource,
+    bestOffer?.partType || part.partType,
+  );
   const isAftermarket = partType === "AFTERMARKET";
   const isSalvage = partType === "SALVAGE_OEM";
-  const referenceMakes = [...new Set((part.oemCrossReferences || []).map((reference) => reference.make).filter(Boolean))];
+  const referenceMakes = [
+    ...new Set(
+      (part.oemCrossReferences || [])
+        .map((reference) => reference.make)
+        .filter(Boolean),
+    ),
+  ];
   const identityNumber = part.manufacturerPartNumber || oeNumber;
-  const sourceTag = part.sourceTags?.[0] || bestOffer?.sourceTag || null;
   // Prefer top-level categoryGroup/category (indexed in OpenSearch, available in
   // browse results) over itemSpecifics (only available on PDP).
-  const inferredProductType = part.categoryGroup || part.itemSpecifics?.inferredProductType || part.itemSpecifics?.productType || null;
-  const inferredSystemCategory = (part.category && part.category !== 'General' ? part.category : null) || part.itemSpecifics?.inferredSystemCategory || part.itemSpecifics?.systemCategory || null;
+  const inferredProductType =
+    part.categoryGroup ||
+    part.itemSpecifics?.inferredProductType ||
+    part.itemSpecifics?.productType ||
+    null;
+  const inferredSystemCategory =
+    (part.category && part.category !== "General" ? part.category : null) ||
+    part.itemSpecifics?.inferredSystemCategory ||
+    part.itemSpecifics?.systemCategory ||
+    null;
 
   if (offerCount === 0) return null;
 
@@ -112,24 +130,32 @@ export function ProductCard({
       onMouseEnter={triggerPrewarm}
       onFocus={triggerPrewarm}
       className="group relative flex min-w-0 flex-col overflow-hidden bg-white transition-all duration-150 hover:z-10 hover:shadow-card-hover focus-within:z-10"
-    >      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
-        <Link href={partHref(part)} className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
-        <PartImage
-          src={image}
-          alt={part.title}
-          className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.035] sm:p-4"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-        />
-        <span className="sr-only">View {part.title}</span>
+    >
+      {" "}
+      <div className="relative aspect-square overflow-hidden border-b border-stone-200 bg-[#f7f6f2]">
+        <Link
+          href={partHref(part)}
+          className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+        >
+          <PartImage
+            src={image}
+            alt={part.title}
+            className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.035] sm:p-4"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          />
+          <span className="sr-only">View {part.title}</span>
         </Link>
         {offerCount > 1 && (
           <span className="absolute left-0 top-0 border-b border-r border-stone-300 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700">
             {offerCount} offers
           </span>
         )}
-        <WatchlistButton part={part} compact className="absolute right-1.5 top-1.5 z-10 bg-white/95 sm:right-2 sm:top-2" />
+        <WatchlistButton
+          part={part}
+          compact
+          className="absolute right-1.5 top-1.5 z-10 bg-white/95 sm:right-2 sm:top-2"
+        />
       </div>
-
       <div className="flex min-w-0 flex-1 flex-col p-3 xs:p-3.5 sm:p-4">
         {/* Fitment for the buyer's vehicle — most important signal. */}
         {fitment && (
@@ -143,14 +169,19 @@ export function ProductCard({
         )}
 
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <ConditionBadge qualityTier={qualityTier} partSource={partSource} partType={partType} size="sm" />
+          <ConditionBadge
+            qualityTier={qualityTier}
+            partSource={partSource}
+            partType={partType}
+            size="sm"
+          />
           <SourceBadge partSource={partSource} partType={partType} size="sm" />
-          <SourcePill tag={sourceTag} size="sm" />
         </div>
 
         {inferredProductType && (
           <p className="mb-1 text-[11px] font-medium text-teal-700">
-            {inferredProductType}{inferredSystemCategory ? ` · ${inferredSystemCategory}` : ''}
+            {inferredProductType}
+            {inferredSystemCategory ? ` · ${inferredSystemCategory}` : ""}
           </p>
         )}
 
@@ -160,9 +191,11 @@ export function ProductCard({
           <p className="mb-1.5 flex items-start gap-1 text-[11px] font-medium leading-tight text-sky-800">
             <RefreshIcon className="mt-0.5 h-3 w-3 shrink-0 text-sky-600" />
             <span>
-              Interchange match{part.matchedNumber ? (
+              Interchange match
+              {part.matchedNumber ? (
                 <>
-                  {" "}for <span className="part-number">{part.matchedNumber}</span>
+                  {" "}
+                  for <span className="part-number">{part.matchedNumber}</span>
                 </>
               ) : null}
             </span>
@@ -181,30 +214,41 @@ export function ProductCard({
         <div className="mt-1.5 flex-1 space-y-1">
           {part.brand && (
             <p className="text-xs text-graphite-600">
-              {isAftermarket ? "Brand" : isSalvage ? "Original make" : "Genuine make"}: <span className="font-semibold text-slate-700">{part.brand}</span>
+              {isAftermarket
+                ? "Brand"
+                : isSalvage
+                  ? "Original make"
+                  : "Genuine make"}
+              :{" "}
+              <span className="font-semibold text-slate-700">{part.brand}</span>
             </p>
           )}
           {identityNumber && (
             <p className="flex items-center gap-1 text-xs text-graphite-600">
               <TagIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="hidden shrink-0 xs:inline">{isAftermarket ? "Brand part no." : "OEM no."}</span>
-              <span className="part-number min-w-0 truncate">{identityNumber}</span>
+              <span className="hidden shrink-0 xs:inline">
+                {isAftermarket ? "Brand part no." : "OEM no."}
+              </span>
+              <span className="part-number min-w-0 truncate">
+                {identityNumber}
+              </span>
             </p>
           )}
           {isAftermarket && referenceMakes.length > 0 && (
-            <p className="line-clamp-2 text-xs text-graphite-600">Replaces OEM numbers for: {referenceMakes.join(", ")}</p>
-          )}
-          {sellerName && (
-            <p className="flex items-center gap-1 text-xs text-graphite-600">
-              <UserIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="truncate">{sellerName}</span>
+            <p className="line-clamp-2 text-xs text-graphite-600">
+              Replaces OEM numbers for: {referenceMakes.join(", ")}
             </p>
           )}
         </div>
 
         <div className="mt-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5 border-t border-stone-200 pt-3">
           <Price amount={price} currency={currency} from={offerCount > 1} />
-          <Link href={partHref(part)} className="inline-flex min-h-9 items-center whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900">View listing</Link>
+          <Link
+            href={partHref(part)}
+            className="inline-flex min-h-9 items-center whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-brand-700 hover:text-brand-900"
+          >
+            View listing
+          </Link>
         </div>
       </div>
     </article>

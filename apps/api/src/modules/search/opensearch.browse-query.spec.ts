@@ -64,6 +64,24 @@ describe('browseParts query construction', () => {
     expect(calls[0].body.query.bool.must[0].bool.minimum_should_match).toBe(1);
   });
 
+  it('normalizes the Bentley OE separator variants to the same exact lookup', async () => {
+    const exactTerms: string[] = [];
+
+    for (const q of ['3W0121064F', '3W0-121-064-F']) {
+      const { service, calls } = stubService([1]);
+      const result = await service.browseParts({ q });
+      const should = calls[0].body.query.bool.must[0].bool.should;
+      const exact = should.find(
+        (clause: any) => clause.term?.['normalizedPartNumbers.keyword'],
+      );
+
+      expect(result.total).toBe(1);
+      exactTerms.push(exact.term['normalizedPartNumbers.keyword'].value);
+    }
+
+    expect(exactTerms).toEqual(['3W0121064F', '3W0121064F']);
+  });
+
   it('does not retry when strict matching finds enough', async () => {
     const { service, calls } = stubService([500]);
     const result = await service.browseParts({ q: 'Audi bumper' });

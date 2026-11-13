@@ -32,7 +32,9 @@ const salvagePart = {
   brand: 'Toyota',
   category: 'General',
   imageUrls: ['https://example.test/a.jpg'],
-  compatibility: [{ make: 'Toyota', model: 'Corolla', yearFrom: 2019, yearTo: 2019 }],
+  compatibility: [
+    { make: 'Toyota', model: 'Corolla', yearFrom: 2019, yearTo: 2019 },
+  ],
   offers: [activeOffer()],
 };
 
@@ -69,9 +71,21 @@ describe('searchNumbers coverage (audit RC-1)', () => {
     const doc = buildSearchDocument({
       ...salvagePart,
       partNumbers: [
-        { numberType: 'BRAND_MPN', normalizedNumber: 'AAA111', displayNumber: 'AAA-111' },
-        { numberType: 'OEM_CROSS_REFERENCE', normalizedNumber: 'BBB222', displayNumber: 'BBB-222' },
-        { numberType: 'SUPERSEDED', normalizedNumber: 'CCC333', displayNumber: 'CCC-333' },
+        {
+          numberType: 'BRAND_MPN',
+          normalizedNumber: 'AAA111',
+          displayNumber: 'AAA-111',
+        },
+        {
+          numberType: 'OEM_CROSS_REFERENCE',
+          normalizedNumber: 'BBB222',
+          displayNumber: 'BBB-222',
+        },
+        {
+          numberType: 'SUPERSEDED',
+          normalizedNumber: 'CCC333',
+          displayNumber: 'CCC-333',
+        },
       ],
     })!;
     expect(doc.oemNumbers).toContain('AAA111');
@@ -84,7 +98,10 @@ describe('searchNumbers coverage (audit RC-1)', () => {
   });
 
   it('drops fragments too short to identify a part', () => {
-    const doc = buildSearchDocument({ ...salvagePart, oeNumbers: ['A', '12'] })!;
+    const doc = buildSearchDocument({
+      ...salvagePart,
+      oeNumbers: ['A', '12'],
+    })!;
     expect(doc.searchNumbers).not.toContain('A');
     expect(doc.searchNumbers).not.toContain('12');
   });
@@ -153,7 +170,10 @@ describe('buyer visibility', () => {
   it('returns null when nothing is buyer-visible, so the caller can delete', () => {
     expect(buildSearchDocument({ ...salvagePart, offers: [] })).toBeNull();
     expect(
-      buildSearchDocument({ ...salvagePart, offers: [activeOffer({ status: 'INACTIVE' })] }),
+      buildSearchDocument({
+        ...salvagePart,
+        offers: [activeOffer({ status: 'INACTIVE' })],
+      }),
     ).toBeNull();
   });
 });
@@ -170,7 +190,10 @@ describe('facet fields that did not previously exist', () => {
   it('exposes price range, stock, image and seller facets', () => {
     const doc = buildSearchDocument({
       ...salvagePart,
-      offers: [activeOffer({ price: 10 }), activeOffer({ id: 'o2', price: 90 })],
+      offers: [
+        activeOffer({ price: 10 }),
+        activeOffer({ id: 'o2', price: 90 }),
+      ],
     })!;
     expect(doc.minPrice).toBe(10);
     expect(doc.maxPrice).toBe(90);
@@ -183,7 +206,9 @@ describe('facet fields that did not previously exist', () => {
   it('expands a compatibility year range into a year facet', () => {
     const doc = buildSearchDocument({
       ...salvagePart,
-      compatibility: [{ make: 'Toyota', model: 'Corolla', yearFrom: 2017, yearTo: 2020 }],
+      compatibility: [
+        { make: 'Toyota', model: 'Corolla', yearFrom: 2017, yearTo: 2020 },
+      ],
     })!;
     expect(doc.years).toEqual([2017, 2018, 2019, 2020]);
   });
@@ -194,7 +219,9 @@ describe('facet fields that did not previously exist', () => {
       compatibility: [{ make: 'PEUGEOT/CITROEN', model: 'Partner' }],
       makes: ['Toyota'],
     })!;
-    expect(doc.makes).toEqual(expect.arrayContaining(['Peugeot', 'Citroen', 'Toyota']));
+    expect(doc.makes).toEqual(
+      expect.arrayContaining(['Peugeot', 'Citroen', 'Toyota']),
+    );
     expect(doc.makes).not.toContain('PEUGEOT/CITROEN');
   });
 
@@ -214,13 +241,34 @@ describe('facet fields that did not previously exist', () => {
     expect(doc.years).toEqual([]);
   });
 
-  it('only treats A/B evidence at >=0.8 confidence as a confirmed fit', () => {
+  it('requires A/B confidence and exact-application provenance for confirmed fit', () => {
     const doc = buildSearchDocument({
       ...salvagePart,
       fitments: [
-        { vehicleConfigId: 'v1', evidenceLevel: 'A', confidence: 0.95 },
-        { vehicleConfigId: 'v2', evidenceLevel: 'D', confidence: 0.99 },
-        { vehicleConfigId: 'v3', evidenceLevel: 'B', confidence: 0.5 },
+        {
+          vehicleConfigId: 'v1',
+          evidenceLevel: 'A',
+          confidence: 0.95,
+          source: 'MANUFACTURER_EXACT_FITMENT',
+        },
+        {
+          vehicleConfigId: 'v2',
+          evidenceLevel: 'D',
+          confidence: 0.99,
+          source: 'MANUFACTURER_EXACT_FITMENT',
+        },
+        {
+          vehicleConfigId: 'v3',
+          evidenceLevel: 'B',
+          confidence: 0.5,
+          source: 'MANUFACTURER_EXACT_FITMENT',
+        },
+        {
+          vehicleConfigId: 'v4',
+          evidenceLevel: 'A',
+          confidence: 0.99,
+          source: 'TITLE_MVL',
+        },
       ],
     })!;
     expect(doc.verifiedFitments).toEqual(['v1']);
@@ -229,11 +277,15 @@ describe('facet fields that did not previously exist', () => {
 
 describe('part-type classification (audit RC-5)', () => {
   it('derives a real part type from the title', () => {
-    expect(classifyPartType('2019 Toyota Corolla Lane Departure Camera Used OEM')).toBe(
-      'Lane Camera',
+    expect(
+      classifyPartType('2019 Toyota Corolla Lane Departure Camera Used OEM'),
+    ).toBe('Lane Camera');
+    expect(classifyPartType('Mercedes-Benz tail light A2218200264')).toBe(
+      'Tail Light',
     );
-    expect(classifyPartType('Mercedes-Benz tail light A2218200264')).toBe('Tail Light');
-    expect(classifyPartType('Used OEM Headlight Bracket for BMW 335i')).toBe('Headlight');
+    expect(classifyPartType('Used OEM Headlight Bracket for BMW 335i')).toBe(
+      'Headlight',
+    );
   });
 
   it('prefers the more specific part type', () => {

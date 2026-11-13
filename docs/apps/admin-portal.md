@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-08-31
+**Last reviewed:** 2026-11-13
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -24,6 +24,11 @@ admin navigation or pages. Provision them with the API image's
 `SEO_EDITOR_PASSWORD` environment variables; the normal marketplace seed does
 not create or reset the account unless `SEED_SEO_EDITOR_PASSWORD` is supplied.
 
+In Content, select text and choose **Add or edit internal link**. Enter a
+PartsBazar360 URL or a site-relative path such as `/buyer/search/`. Place the
+cursor inside an existing link and open the same control to update or remove
+it. Save the draft or publish the post to apply the edit.
+
 The Orders detail page shows each seller shipment independently. Admins and
 fulfillment operators can select only the next valid delivery state, update a
 tracking number/carrier, and save through the authenticated operations API.
@@ -39,6 +44,20 @@ supports creating or editing a code, discount percentage, enabled state, and
 optional start/end dates. Disabling a coupon keeps its order history while the
 checkout API rejects it for new orders. The API remains authoritative for all
 validation and the acting admin is recorded in the audit log.
+
+## Stripe Payment Links
+
+`/payment-links` is available to platform admins and the scoped
+`PAYMENT_LINKS_ADMIN` role. The scoped role can open only this workspace and
+create fixed-amount, one-time Stripe Payment Links in AED or USD; it cannot
+open other admin pages or use their API routes. Admins can add checkout details
+and a reconciliation reference, then copy or open the hosted Stripe checkout
+URL. Each link accepts one completed payment. The API uses the configured
+`STRIPE_SECRET_KEY` and records link creation in the audit log; standalone link
+payments are visible in Stripe and are not attached to marketplace orders.
+Provision the scoped role for an existing verified account with
+`seed:payment-links-admin`; it preserves the account password and refuses to
+replace another staff role.
 
 ## Depends on
 

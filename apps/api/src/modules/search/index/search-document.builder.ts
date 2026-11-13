@@ -13,7 +13,10 @@
  * verbatim in `displayNumbers` for display and audit (brief §4).
  */
 
-import { isCatalogHidden } from '@repo/catalog-contracts';
+import {
+  isBuyerVerifiedFitmentEvidence,
+  isCatalogHidden,
+} from '@repo/catalog-contracts';
 import { normalizePartNumber } from '../query/part-number.util';
 import { applySuperiorPriority } from '../buyer-visible-offers.util';
 import {
@@ -190,13 +193,15 @@ export function buildSearchDocument(part: any): BuiltSearchDocument | null {
   const hasImage = imageUrls.length > 0;
 
   const fitments = Array.isArray(part?.fitments) ? part.fitments : [];
-  // Only A/B evidence at ≥0.8 confidence may be presented as a confirmed fit.
-  // Title-inferred matches stay advisory and never enter guaranteed-fit search.
+  // Require exact part-to-vehicle provenance too. Legacy TITLE_MVL/EBAY_MVL
+  // rows may have strong scores but only establish vehicle identity.
   const verifiedFitments = fitments
-    .filter(
-      (fitment: any) =>
-        ['A', 'B'].includes(fitment?.evidenceLevel) &&
-        Number(fitment?.confidence) >= 0.8,
+    .filter((fitment: any) =>
+      isBuyerVerifiedFitmentEvidence(
+        fitment?.evidenceLevel,
+        Number(fitment?.confidence),
+        fitment?.source,
+      ),
     )
     .map((fitment: any) => fitment?.vehicleConfigId)
     .filter(Boolean);

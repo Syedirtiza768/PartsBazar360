@@ -1,6 +1,6 @@
 # SEO Architecture
 
-**Last reviewed:** 2026-09-20
+**Last reviewed:** 2026-10-09
 
 How PartsBazar360 generates SEO. The governing idea: **SEO is a property of the
 domain, not of the page templates.** Nothing about a listing's URL, metadata,
@@ -299,9 +299,12 @@ bounded keyset read. (Walking the keyset to chunk N would be 200 queries for
 the last chunk of a million-row catalog; `OFFSET` would re-scan the prefix.)
 
 `robots.txt` is a runtime route — a build-time evaluation previously baked
-`localhost:7070` into production. It disallows private paths and crawl traps
-but **explicitly allows `/_next/static/` and `/_next/image`**; blocking those
-stops Google rendering the page at all.
+`localhost:7070` into production. It emits identical rules for the wildcard,
+`Googlebot`, and `Googlebot-Image` groups so Merchant Center's product checks
+can crawl the storefront while private paths and crawl traps remain blocked.
+It **explicitly allows `/_next/static/` and `/_next/image`**; blocking those
+stops Google rendering the page at all. The same blanket disallow is emitted
+for all three groups when indexing is disabled.
 
 ---
 
@@ -380,6 +383,22 @@ rather than a reindex).
 The boost lives in the **outer** bool's `should`, not inside `buildQClause` —
 that inner bool has `minimum_should_match: 1`, so an image clause there would
 make every imaged listing match every query.
+
+## 11e. Redirects and canonicals (Search Console cleanup, 2026-09-29)
+
+- **No global canonical.** The root layout used to set `canonical: /`, which every
+  page without its own canonical inherited (contact, policies, blog, unknown
+  URLs) - Search Console reported them as duplicates of the homepage. The
+  homepage now sets its own; every static page and blog post sets a
+  self-canonical. New pages **must** set `alternates.canonical`.
+- **nginx host-level redirects are 301, one hop.** `/`, `/sitemap.xml` and bare
+  `/parts|/brands|/vehicles|...` paths 301 straight to the final `/buyer/.../`
+  URL including the trailing slash (previously 302 then 308). `/robots.txt`
+  is proxied and answers 200 at the root.
+- `/collections/*` (legacy storefront URLs) returns **410** and is deliberately
+  not in robots.txt - a blocked URL can never show Google its 410.
+- `/buyer/part/<uuid>/` 301 is intentional and permanent (see section 3); those
+  rows in "Page with redirect" are expected and will age out.
 
 ## 12. Admin overrides
 

@@ -95,6 +95,164 @@ export type OfferFilterConstraints = {
   maxPrice?: number;
 };
 
+const PUBLIC_SEARCH_FIELDS = [
+  'id',
+  'slug',
+  'title',
+  'description',
+  'manufacturer',
+  'manufacturerPartNumber',
+  'genuineOemPartNumber',
+  'oeNumbers',
+  'oemNumbers',
+  'interchangeNumbers',
+  'supersededNumbers',
+  'partType',
+  'partSource',
+  'qualityTier',
+  'brand',
+  'brandDisplay',
+  'category',
+  'categoryGroup',
+  'makes',
+  'models',
+  'years',
+  'side',
+  'positions',
+  'conditions',
+  'minPrice',
+  'maxPrice',
+  'currencies',
+  'offerCount',
+  'inStock',
+  'hasImage',
+  'freeShipping',
+  'fitments',
+  'fitmentStatus',
+  'fitmentConfidence',
+  'listingQuality',
+  'popularity',
+  'imageUrls',
+  'createdAt',
+  'matchedVia',
+  'matchedNumber',
+  'position',
+  'vehicleSystem',
+  'material',
+  'itemSpecifics',
+  'oemCrossReferences',
+  'compatibleVehicles',
+  'compatibilityTable',
+] as const;
+
+const PUBLIC_SPECIFIC_KEYS = new Set([
+  'partType',
+  'placementOnVehicle',
+  'position',
+  'material',
+  'color',
+  'features',
+  'countryOfOrigin',
+  'condition',
+  'brandType',
+  'surfaceFinish',
+  'isPerformancePart',
+  'isCustomBundle',
+  'isModifiedItem',
+  'isUniversalFitment',
+  'OE_numbers',
+  'supersedes',
+  'interchangeNumbers',
+  'vehicleSystem',
+  'categoryType',
+  'enrichedTitle',
+  'inferredProductType',
+  'inferredSystemCategory',
+  'fitmentHints',
+  'compatibilityNote',
+  'detailBullets',
+  'searchKeywords',
+  'productType',
+  'systemCategory',
+]);
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Remove contact details and known supplier identifiers from public copy. */
+export function sanitizeBuyerText(
+  value: unknown,
+  offers: IndexedOfferLike[] = [],
+  productBrand?: string | null,
+  redactPhone = true,
+): string | null {
+  if (typeof value !== 'string') return null;
+  let text = value
+    .replace(/https?:\/\/\S+|www\.\S+/gi, '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '');
+  if (redactPhone) {
+    text = text.replace(/(?<![A-Z0-9])\+?\d[\d\s().-]{7,}\d(?![A-Z0-9])/g, '');
+  }
+  const normalizedBrand = String(productBrand || '')
+    .trim()
+    .toLowerCase();
+  const supplierTerms = new Set<string>();
+  for (const offer of offers) {
+    const name = String(offer.sellerName || offer.seller?.name || '').trim();
+    if (name && name.toLowerCase() !== normalizedBrand) supplierTerms.add(name);
+    const sourceTag = String(offer.sourceTag || '').trim();
+    if (sourceTag) supplierTerms.add(sourceTag);
+  }
+  for (const term of [...supplierTerms].sort((a, b) => b.length - a.length)) {
+    text = text.replace(
+      new RegExp(
+        `(?<![\\p{L}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{N}])`,
+        'giu',
+      ),
+      'PartsBazar360',
+    );
+  }
+  return (
+    text
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+([,.;:])/g, '$1')
+      .trim() || null
+  );
+}
+
+export function sanitizeBuyerSpecifics(
+  value: unknown,
+  offers: IndexedOfferLike[] = [],
+  brand?: string | null,
+) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!PUBLIC_SPECIFIC_KEYS.has(key)) continue;
+    if (typeof entry === 'string') {
+      result[key] = sanitizeBuyerText(
+        entry,
+        offers,
+        brand,
+        !/number|oe_numbers|supersedes|interchange/i.test(key),
+      );
+    } else if (Array.isArray(entry)) {
+      result[key] = entry
+        .map((item) =>
+          typeof item === 'string'
+            ? sanitizeBuyerText(item, offers, brand, false)
+            : item,
+        )
+        .filter((item) => item != null);
+    } else if (typeof entry === 'boolean' || typeof entry === 'number') {
+      result[key] = entry;
+    }
+  }
+  return result;
+}
+
 export function isBuyerVisibleIndexedOffer(
   offer: IndexedOfferLike | null | undefined,
 ): boolean {
@@ -152,6 +310,19 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
     );
   if (offers.length === 0) return null;
   const minPrice = Math.min(...offers.map((o) => Number(o.price) || Infinity));
+  const publicOffers = offers.map((offer) => ({
+    id: offer.id,
+    price: offer.price,
+    currency: offer.currency,
+    condition: offer.condition,
+    partSource: offer.partSource,
+    partType: offer.partType,
+    qualityTier: offer.qualityTier,
+    moq: offer.moq,
+    leadTimeDays: offer.leadTimeDays,
+    inStock: offer.inStock !== false,
+    freeShipping: offer.freeShipping === true,
+  }));
   const rawImageUrls = (item.imageUrls as string[] | undefined) || [];
   const seenImg = new Set<string>();
   const imageUrls: string[] = [];
@@ -167,9 +338,81 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
       imageUrls.push(url);
     }
   }
+  const publicItem: Record<string, unknown> = {};
+  for (const field of PUBLIC_SEARCH_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(item, field)) {
+      publicItem[field] = item[field];
+    }
+  }
+  publicItem.title = sanitizeBuyerText(item.title, offers, item.brand, false);
+  publicItem.description = sanitizeBuyerText(
+    item.description,
+    offers,
+    item.brand,
+  );
+  publicItem.itemSpecifics = sanitizeBuyerSpecifics(
+    item.itemSpecifics,
+    offers,
+    item.brand,
+  );
+  publicItem.fitmentFlags = Array.isArray(item.fitmentFlags)
+    ? item.fitmentFlags.filter((flag) =>
+        String(flag).toUpperCase().includes('UNIVERSAL'),
+      )
+    : [];
+  if (Array.isArray(item.fitments)) {
+    publicItem.fitments = item.fitments.map((fitment: any) =>
+      typeof fitment === 'string'
+        ? fitment
+        : {
+            vehicleConfigId: fitment.vehicleConfigId,
+            evidenceLevel: fitment.evidenceLevel,
+            confidence: fitment.confidence,
+            verified: fitment.verified === true,
+          },
+    );
+  }
+  publicItem.fitmentStatus =
+    item.fitmentStatus === 'CONFIRMED' ? 'LIKELY' : item.fitmentStatus;
+  if (item.fitmentStatus === 'CONFIRMED') {
+    publicItem.fitmentConfidence = Math.min(
+      Number(item.fitmentConfidence) || 0,
+      0.65,
+    );
+  }
+  if (Array.isArray(item.compatibleVehicles)) {
+    publicItem.compatibleVehicles = item.compatibleVehicles.map(
+      (vehicle: any) => ({
+        label: sanitizeBuyerText(vehicle.label, offers, item.brand, false),
+        make: vehicle.make,
+        model: vehicle.model,
+        startYear: vehicle.startYear,
+        endYear: vehicle.endYear,
+        verified: false,
+      }),
+    );
+  }
+  if (Array.isArray(item.compatibilityTable)) {
+    publicItem.compatibilityTable = item.compatibilityTable.map((row: any) => ({
+      year: row.year,
+      make: row.make,
+      model: row.model,
+      trim: row.trim,
+      engine: row.engine,
+    }));
+  }
+  if (Array.isArray(item.oemCrossReferences)) {
+    publicItem.oemCrossReferences = item.oemCrossReferences.map((row: any) => ({
+      number: row.number,
+      normalizedNumber: row.normalizedNumber,
+      make: row.make,
+      verificationStatus: row.verificationStatus,
+    }));
+  }
   return {
-    ...item,
+    ...publicItem,
     brand: canonicalizeCatalogBrand(item.brand),
+    brandDisplay: canonicalizeCatalogBrand(item.brand),
     makes: [
       ...new Set(
         (item.makes || [])
@@ -177,10 +420,21 @@ export function sanitizeSearchItem<T extends SearchItemLike>(
           .filter((make): make is string => Boolean(make)),
       ),
     ],
-    offers,
+    offers: publicOffers,
+    sourceTags: [],
     minPrice: Number.isFinite(minPrice) ? minPrice : (item.minPrice ?? null),
+    maxPrice: Math.max(
+      ...publicOffers.map((offer) => Number(offer.price) || 0),
+    ),
+    offerCount: publicOffers.length,
+    conditions: [
+      ...new Set(publicOffers.map((offer) => offer.condition).filter(Boolean)),
+    ],
+    currencies: [
+      ...new Set(publicOffers.map((offer) => offer.currency).filter(Boolean)),
+    ],
     imageUrls,
-  };
+  } as unknown as T;
 }
 
 export function sanitizeSearchItems<T extends SearchItemLike>(

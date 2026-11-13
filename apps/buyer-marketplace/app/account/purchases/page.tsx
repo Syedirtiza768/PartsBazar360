@@ -92,7 +92,7 @@ export default function PurchasesPage() {
             variant="page"
             icon={<ReceiptIcon />}
             title="No purchases on this device"
-            description="Completed checkouts will appear here with seller shipment and support actions."
+            description="Completed checkouts will appear here with delivery tracking and support options."
           >
             <Link href="/search" className={buttonClasses()}>
               Shop parts
@@ -128,7 +128,7 @@ export default function PurchasesPage() {
                       0,
                     )}{" "}
                     item{order.items.length === 1 ? "" : "s"} across{" "}
-                    {order.sellerOrders.length} seller shipment
+                    {order.sellerOrders.length} shipment
                     {order.sellerOrders.length === 1 ? "" : "s"}
                   </p>
                   <ul className="mt-3 space-y-2">

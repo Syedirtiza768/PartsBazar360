@@ -34,7 +34,7 @@ export class SupportController {
       subject: string;
       message: string;
       shippingCountry?: string;
-      estimatedWeightKg?: number;
+      estimatedWeightKg?: number | string | null;
       cartSummary?: string;
     },
   ) {

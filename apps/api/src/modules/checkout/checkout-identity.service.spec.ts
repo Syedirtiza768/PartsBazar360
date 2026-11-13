@@ -236,4 +236,22 @@ describe('CheckoutIdentityService', () => {
     expect(getChallenge().attempts).toBe(1);
     expect(getChallenge().consumedAt).toBeNull();
   });
+
+  it('keeps only bounded, valid acknowledgment bindings in the checkout draft', () => {
+    const { service } = build();
+    const lineId = '550e8400-e29b-41d4-a716-446655440000';
+
+    const result = (service as any).cleanDraft({
+      name: 'Buyer',
+      checkoutValidationFingerprint: 'A'.repeat(64),
+      acknowledgedCartItemIds: [lineId, lineId, 'private-field'],
+      supplierName: 'Internal Seller',
+    });
+
+    expect(result).toEqual({
+      name: 'Buyer',
+      checkoutValidationFingerprint: 'a'.repeat(64),
+      acknowledgedCartItemIds: [lineId],
+    });
+  });
 });

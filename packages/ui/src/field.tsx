@@ -4,6 +4,7 @@ import {
   useId,
   type InputHTMLAttributes,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
@@ -154,7 +155,9 @@ export function Select({
 }
 
 export interface TextareaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id" | "className">, FieldChrome {}
+  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id" | "className">, FieldChrome {
+  ref?: Ref<HTMLTextAreaElement>;
+}
 
 export function Textarea({
   label,

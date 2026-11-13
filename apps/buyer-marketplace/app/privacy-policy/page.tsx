@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 import { ShieldCheckIcon } from "@repo/ui/icons";
 
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/privacy-policy/") },
   title: "Privacy Policy | PartsBazar360",
   description:
     "PartsBazar360 privacy policy — how Superior New & Used Auto Spare Parts LLC collects, uses, and protects your personal information.",

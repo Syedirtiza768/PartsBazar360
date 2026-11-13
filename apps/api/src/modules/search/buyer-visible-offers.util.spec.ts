@@ -47,8 +47,62 @@ describe('buyer-visible-offers', () => {
       ],
     });
     expect(item?.offers).toHaveLength(1);
-    expect(item?.offers?.[0].sellerName).toBe('Superior Auto Parts');
+    expect(item?.offers?.[0]).not.toHaveProperty('sellerName');
+    expect(item?.offers?.[0]).not.toHaveProperty('sellerId');
     expect(item?.minPrice).toBe(9);
+  });
+
+  it('uses an explicit public projection and strips supplier identity and contact data', () => {
+    const item = sanitizeSearchItem<SearchItemLike>({
+      id: 'p3',
+      title: 'Superior Auto Parts genuine brake disc',
+      description: 'Call +971 50 123 4567 or sales@example.test. Source YNTD.',
+      brand: 'Brembo',
+      sellerIds: ['supplier-1'],
+      sellerNames: ['Superior Auto Parts'],
+      listingUrl: 'https://seller.example/listing/1',
+      partNumbers: [{ numberType: 'SELLER_SKU', displayNumber: 'PRIVATE-1' }],
+      internalMemo: 'must not be projected',
+      fitmentStatus: 'CONFIRMED',
+      fitmentConfidence: 0.98,
+      itemSpecifics: {
+        sellerSku: 'PRIVATE-1',
+        _seo: { source: 'supplier feed' },
+        material: 'Aluminum',
+      },
+      offers: [
+        {
+          id: 'offer-1',
+          sellerId: 'seller-superior-auto-parts',
+          sellerName: 'Superior Auto Parts',
+          sourceTag: 'YNTD',
+          sellerSku: 'PRIVATE-1',
+          sellerBasePrice: 20,
+          price: 25,
+          currency: 'AED',
+          condition: 'USED',
+        },
+      ],
+    });
+
+    expect(item).not.toHaveProperty('sellerIds');
+    expect(item).not.toHaveProperty('sellerNames');
+    expect(item).not.toHaveProperty('listingUrl');
+    expect(item).not.toHaveProperty('partNumbers');
+    expect(item).not.toHaveProperty('internalMemo');
+    expect(item?.title).not.toContain('Superior Auto Parts');
+    expect(item?.description).not.toMatch(/\+971|example\.test|YNTD/i);
+    expect(item?.fitmentStatus).toBe('LIKELY');
+    expect(item?.fitmentConfidence).toBeLessThanOrEqual(0.65);
+    expect(item?.itemSpecifics).toEqual({ material: 'Aluminum' });
+    expect(item?.offers?.[0]).toEqual({
+      id: 'offer-1',
+      price: 25,
+      currency: 'AED',
+      condition: 'USED',
+      inStock: true,
+      freeShipping: false,
+    });
   });
 
   describe('Superior priority', () => {
@@ -91,10 +145,18 @@ describe('buyer-visible-offers', () => {
     });
 
     it('suppresses by seller name even when the id is unrecognised', () => {
-      const unknownBlk = { sellerId: 'some-new-id', sellerName: 'Blackline Auto Parts' };
-      const unknownSal = { sellerId: 'other-new-id', seller: { name: 'Salvage Auto Parts' } };
+      const unknownBlk = {
+        sellerId: 'some-new-id',
+        sellerName: 'Blackline Auto Parts',
+      };
+      const unknownSal = {
+        sellerId: 'other-new-id',
+        seller: { name: 'Salvage Auto Parts' },
+      };
       const sup = { sellerId: 'x', sellerName: 'Superior Auto Parts' };
-      expect(applySuperiorPriority([unknownBlk, unknownSal, sup])).toEqual([sup]);
+      expect(applySuperiorPriority([unknownBlk, unknownSal, sup])).toEqual([
+        sup,
+      ]);
     });
 
     it('wins even when Superior is the more expensive offer', () => {

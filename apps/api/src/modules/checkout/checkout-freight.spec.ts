@@ -24,6 +24,9 @@ describe('CheckoutService freight gate', () => {
       id: 'cart-1',
       items: [
         {
+          id: 'cart-item-1',
+          intendedVehicleConfigId: null,
+          purchaseIntent: 'UNSPECIFIED',
           sellerOfferId: 'offer-1',
           quantity: 1,
           sellerOffer: {
@@ -39,6 +42,7 @@ describe('CheckoutService freight gate', () => {
       ],
     };
 
+    let validationRow: any;
     const service = new CheckoutService(
       { getCart: jest.fn().mockResolvedValue(cart) } as any,
       { reserveStock, releaseStock } as any,
@@ -61,6 +65,14 @@ describe('CheckoutService freight gate', () => {
           update: jest.fn().mockResolvedValue({ id: 'customer-1' }),
         },
         order: { findFirst: jest.fn().mockResolvedValue(null) },
+        checkoutValidation: {
+          create: jest.fn().mockImplementation(({ data }) => {
+            validationRow = data;
+            return data;
+          }),
+          findFirst: jest.fn().mockImplementation(() => validationRow),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
       } as any,
       { notifyOrderUpdated: jest.fn().mockResolvedValue(undefined) } as any,
       { trackEvent: jest.fn() } as any,
@@ -80,15 +92,13 @@ describe('CheckoutService freight gate', () => {
       dimensions: null,
     });
 
-    await expect(
-      service.processCheckout('cart-1', buyer, address, 'AED', undefined, {
-        idempotencyKey: 'freight-test',
-      }),
-    ).rejects.toThrow(BadRequestException);
+    const review = await service.validateCheckout('cart-1', address, 'AED');
 
     await expect(
       service.processCheckout('cart-1', buyer, address, 'AED', undefined, {
         idempotencyKey: 'freight-test',
+        validationId: review.validationId,
+        acknowledgedCartItemIds: review.requiredAcknowledgmentCartItemIds,
       }),
     ).rejects.toThrow(/freight quote/i);
 
@@ -106,11 +116,15 @@ describe('CheckoutService freight gate', () => {
       dimensions: { lengthCm: 22, widthCm: 14, heightCm: 8 },
     });
 
-    // Fails later (order creation is stubbed), but must get past the gate and
-    // reserve stock — proving the freight check did not reject it.
+    const review = await service.validateCheckout('cart-1', address, 'AED');
+
+    // Fails later (order creation is stubbed), but must get past validation and
+    // reserve stock — proving the parcel was not rejected by the freight gate.
     await service
       .processCheckout('cart-1', buyer, address, 'AED', undefined, {
         idempotencyKey: 'parcel-test',
+        validationId: review.validationId,
+        acknowledgedCartItemIds: review.requiredAcknowledgmentCartItemIds,
       })
       .catch(() => undefined);
 

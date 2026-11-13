@@ -13,8 +13,6 @@ export type FitmentState =
   | "universal" // flagged as universal-fit
   | "unknown"; // no usable fitment data at all
 
-const VERIFIED_LEVELS = new Set(["A", "B"]);
-const VERIFIED_MIN_CONFIDENCE = 0.8;
 const LIKELY_MIN_CONFIDENCE = 0.5;
 
 export type FitmentVehicleHint = {
@@ -34,7 +32,9 @@ function normalizeToken(value: string | null | undefined): string {
 }
 
 function isUniversal(part: Pick<Part, "fitmentFlags">): boolean {
-  return (part.fitmentFlags || []).some((f) => f?.toUpperCase().includes("UNIVERSAL"));
+  return (part.fitmentFlags || []).some((f) =>
+    f?.toUpperCase().includes("UNIVERSAL"),
+  );
 }
 
 function yearOverlaps(
@@ -77,10 +77,9 @@ function fitmentFromCompatibilityTable(
   });
   if (matches.length === 0) return null;
 
-  const verified = matches.some(
-    (r) => r.mvlVerified === true || r.source === "mvl_catalog",
-  );
-  return verified ? "verified" : "likely";
+  // Vehicle catalog identity and broad compatibility rows do not prove the
+  // part-to-configuration relationship. Only /fitment/check can verify it.
+  return "check";
 }
 
 /**
@@ -107,18 +106,16 @@ export function fitmentForConfig(
   }
 
   if (fitments.length > 0 && configId) {
-    // Index shape: array of verified config-id strings.
+    // Index shape: matching ids lack provenance on legacy documents. Keep the
+    // match advisory until the API confirms exact part-to-vehicle evidence.
     if (typeof fitments[0] === "string") {
       const ids = fitments as string[];
-      if (ids.includes(configId)) return "verified";
+      if (ids.includes(configId)) return "likely";
     } else {
       const relations = fitments as PartFitment[];
       const match = relations.find((f) => f.vehicleConfigId === configId);
       if (match) {
-        if (
-          VERIFIED_LEVELS.has((match.evidenceLevel || "").toUpperCase()) &&
-          Number(match.confidence || 0) >= VERIFIED_MIN_CONFIDENCE
-        ) {
+        if (match.verified === true) {
           return "verified";
         }
         if (Number(match.confidence || 0) >= LIKELY_MIN_CONFIDENCE) {

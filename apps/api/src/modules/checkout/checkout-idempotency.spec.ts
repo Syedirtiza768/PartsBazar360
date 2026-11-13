@@ -13,16 +13,33 @@ describe('CheckoutService idempotent payment handling', () => {
   function buildService(existingOrder: Record<string, any>) {
     const cart = {
       id: 'cart-1',
+      updatedAt: new Date(),
       items: [
         {
+          id: 'cart-item-1',
+          intendedVehicleConfigId: null,
+          purchaseIntent: 'UNSPECIFIED',
           sellerOfferId: 'offer-1',
           quantity: 1,
           sellerOffer: {
+            id: 'offer-1',
+            canonicalPartId: 'part-1',
+            sellerId: 'seller-1',
+            status: 'ACTIVE',
+            updatedAt: new Date(),
             price: 100,
             currency: 'AED',
             inventory: [{ quantity: 4 }],
-            canonicalPart: { title: 'Brake Pad' },
-            seller: { name: 'Seller' },
+            canonicalPart: {
+              id: 'part-1',
+              title: 'Brake Pad',
+              updatedAt: new Date(),
+            },
+            seller: {
+              id: 'seller-1',
+              name: 'Seller',
+              onboardingStatus: 'ACTIVE',
+            },
           },
         },
       ],
@@ -67,8 +84,14 @@ describe('CheckoutService idempotent payment handling', () => {
         create: jest.fn().mockResolvedValue({ id: 'attempt-retry' }),
         update: jest.fn().mockResolvedValue({}),
       },
-      $transaction: jest.fn(async (operations: Array<Promise<unknown>>) =>
-        Promise.all(operations),
+      checkoutValidation: {
+        findFirst: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      $transaction: jest.fn(async (operations: any) =>
+        typeof operations === 'function'
+          ? operations(prisma)
+          : Promise.all(operations),
       ),
     };
 
@@ -76,7 +99,15 @@ describe('CheckoutService idempotent payment handling', () => {
       { getCart: jest.fn().mockResolvedValue(cart) } as any,
       { reserveStock, releaseStock } as any,
       { createMultiSellerOrder: createOrder } as any,
-      {} as any,
+      {
+        quoteSellerShipping: jest.fn().mockReturnValue({
+          available: true,
+          availabilityReason: null,
+          requiresFreightQuote: false,
+          amount: 0,
+          quotedWeightKg: 1,
+        }),
+      } as any,
       {
         isConfigured: () => true,
         createCheckoutSession: createStripeSession,
@@ -94,6 +125,7 @@ describe('CheckoutService idempotent payment handling', () => {
       createOrder,
       createStripeSession,
       authorizeCheckout,
+      prisma,
     };
   }
 
@@ -107,6 +139,7 @@ describe('CheckoutService idempotent payment handling', () => {
     shippingAddress: address,
     sellerOrders: [
       {
+        sellerId: 'seller-1',
         shippingTotal: 0,
         items: [
           {
@@ -153,7 +186,42 @@ describe('CheckoutService idempotent payment handling', () => {
   });
 
   it('reuses the existing hosted session for an in-flight replay', async () => {
-    const { service, reserveStock, createOrder } = buildService(baseOrder);
+    const { service, reserveStock, createOrder, prisma } = buildService({
+      ...baseOrder,
+      checkoutValidationSnapshot: { fingerprint: 'valid-fingerprint' },
+    });
+    const validationSnapshot = {
+      cartId: 'cart-1',
+      policyVersion: 'test-policy',
+      destinationCountry: 'UAE',
+      chargeCurrency: 'AED',
+      paymentProvider: 'stripe',
+      fingerprint: 'valid-fingerprint',
+      shippingAvailable: true,
+      shippingQuotes: [{ sellerId: 'seller-1', amountAed: 0 }],
+      lines: [
+        {
+          cartItemId: 'cart-item-1',
+          fitmentStatus: 'NO_VEHICLE',
+          blockingReason: null,
+        },
+      ],
+      requiredAcknowledgmentCartItemIds: ['cart-item-1'],
+      blockingLineIds: [],
+    };
+    prisma.checkoutValidation.findFirst.mockResolvedValue({
+      id: 'validation-1',
+      cartId: 'cart-1',
+      checkoutSessionId: null,
+      fingerprint: 'valid-fingerprint',
+      snapshot: validationSnapshot,
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    jest.spyOn(service as any, 'evaluateCheckoutCart').mockResolvedValue({
+      fingerprint: 'valid-fingerprint',
+      snapshot: validationSnapshot,
+    });
 
     const result = await service.processCheckout(
       'cart-1',
@@ -161,12 +229,17 @@ describe('CheckoutService idempotent payment handling', () => {
       address,
       'AED',
       'stripe',
-      { idempotencyKey: 'stable-key' },
+      {
+        idempotencyKey: 'stable-key',
+        validationId: 'validation-1',
+        acknowledgedCartItemIds: ['cart-item-1'],
+      },
     );
 
     expect(result.checkoutUrl).toBe('https://checkout.stripe.test/original');
     expect(reserveStock).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
+    expect(prisma.checkoutValidation.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('re-reserves inventory and creates a payment attempt on decline retry', async () => {
@@ -181,7 +254,37 @@ describe('CheckoutService idempotent payment handling', () => {
       createOrder,
       createStripeSession,
       authorizeCheckout,
+      prisma,
     } = buildService(failedOrder);
+    const validationSnapshot = {
+      cartId: 'cart-1',
+      policyVersion: 'test-policy',
+      destinationCountry: 'UAE',
+      shippingAvailable: true,
+      lines: [
+        {
+          cartItemId: 'cart-item-1',
+          fitmentStatus: 'NO_VEHICLE',
+          blockingReason: null,
+        },
+      ],
+      shippingQuotes: [],
+      requiredAcknowledgmentCartItemIds: ['cart-item-1'],
+      blockingLineIds: [],
+    };
+    prisma.checkoutValidation.findFirst.mockResolvedValue({
+      id: 'validation-1',
+      cartId: 'cart-1',
+      checkoutSessionId: 'checkout-session-1',
+      fingerprint: 'valid-fingerprint',
+      snapshot: validationSnapshot,
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    jest.spyOn(service as any, 'evaluateCheckoutCart').mockResolvedValue({
+      fingerprint: 'valid-fingerprint',
+      snapshot: validationSnapshot,
+    });
 
     const result = await service.processCheckout(
       'cart-1',
@@ -193,6 +296,8 @@ describe('CheckoutService idempotent payment handling', () => {
         checkoutSessionId: 'checkout-session-1',
         checkoutToken: 'checkout-token',
         idempotencyKey: 'stable-key',
+        validationId: 'validation-1',
+        acknowledgedCartItemIds: ['cart-item-1'],
       },
     );
 

@@ -32,7 +32,7 @@ import {
 import { useShippingQuote } from "@/lib/use-shipping-quote";
 
 function CartLine({ item }: { item: CartItem }) {
-  const { updateQuantity, removeItem, loading } = useCart();
+  const { cart, updateQuantity, removeItem, loading } = useCart();
   const { format } = useCurrency();
   const part = item.sellerOffer.canonicalPart;
   const image = part?.imageUrls?.[0];
@@ -65,7 +65,12 @@ function CartLine({ item }: { item: CartItem }) {
               })()}
             </p>
             <div className="mt-1.5">
-              <CartLineFitment partId={part?.id} />
+              <CartLineFitment
+                cartId={cart.id ?? undefined}
+                itemId={item.id}
+                partId={part?.id}
+                intendedVehicleConfigId={item.intendedVehicleConfigId}
+              />
             </div>
           </div>
           <p className="price shrink-0 text-base">
@@ -129,13 +134,12 @@ export default function CartPage() {
     authHeaders,
   });
 
-  // Group lines by seller — orders ship per seller, and the cart should
-  // set that expectation before checkout does.
+  // Seller identity stays private; show cart-scoped shipment groups instead.
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
     for (const item of items) {
-      const key = item.sellerOffer.seller?.id || item.sellerOffer.seller?.name || "marketplace";
-      const name = item.sellerOffer.seller?.name || "Marketplace seller";
+      const key = item.sellerOffer.shipmentLabel || "Shipment";
+      const name = key;
       const group = groups.get(key) ?? { name, items: [] };
       group.items.push(item);
       groups.set(key, group);
@@ -144,7 +148,8 @@ export default function CartPage() {
   }, [items]);
 
   const initialLoading = loading && items.length === 0;
-  const estimatedTotal = quote?.totalAmount ?? subtotal;
+  const hasQuotedTotal = Boolean(quote?.available && quote.totalAmount != null);
+  const estimatedTotal = hasQuotedTotal ? quote!.totalAmount! : subtotal;
   const estimatedCurrency = quote?.currency ?? currency;
   // Only worth showing when every shipment quotes the same window — mixing
   // "02 to 04" and "08 to 14" into one line would misrepresent the faster one.
@@ -157,8 +162,10 @@ export default function CartPage() {
     ? "Select destination to estimate"
     : shippingLoading
         ? "Calculating…"
-        : quote
+        : quote?.available && quote.shippingTotal != null
           ? format(quote.shippingTotal, quote.currency)
+          : quote
+            ? "Delivery unavailable"
           : shippingError
             ? "Unavailable"
             : "—";
@@ -270,7 +277,7 @@ export default function CartPage() {
                   </div>
                 )}
                 <div className="flex justify-between gap-3 border-t border-slate-100 pt-2.5 text-base">
-                  <dt className="font-semibold text-slate-900">Estimated total</dt>
+                  <dt className="font-semibold text-slate-900">{hasQuotedTotal ? "Estimated total" : "Items subtotal"}</dt>
                   <dd className="price">{format(estimatedTotal, estimatedCurrency)}</dd>
                 </div>
               </dl>
@@ -280,9 +287,13 @@ export default function CartPage() {
                 </p>
               )}
               <p className="mt-2 text-xs leading-relaxed text-graphite-600">
-                {quote
-                  ? `Estimate for ${quote.destinationCountry}, per seller shipment. Final amount confirmed at checkout.`
-                  : `Weight-based shipping is added per seller shipment. Checkout is charged in ${displayCurrency} (settlement ${settlementCurrency}).`}
+                {quote?.available
+                  ? `Estimate for ${quote.destinationCountry}, per shipment. Final amount confirmed at checkout.`
+                  : quote
+                    ? quote.sellerQuotes.some((shipment) => shipment.availabilityReason === "SPECIAL_HANDLING_REVIEW")
+                      ? "An item needs a specialist shipping review. Request a shipping quote before ordering."
+                      : `We can't confirm delivery to ${quote.destinationCountry} yet. Request a shipping quote before ordering.`
+                    : `Weight-based shipping is added per shipment. Checkout is charged in ${displayCurrency} (settlement ${settlementCurrency}).`}
               </p>
               <ReturnsPolicyNote className="mt-2" />
               <Button
@@ -334,7 +345,7 @@ export default function CartPage() {
             <div className="min-w-0">
               <p className="text-xs text-graphite-600">
                 {itemCount} item{itemCount === 1 ? "" : "s"}
-                {quote ? " · incl. shipping" : " · shipping estimated below"}
+                {hasQuotedTotal ? " · incl. shipping" : " · items subtotal"}
               </p>
               <p className="price text-lg leading-tight">
                 {format(estimatedTotal, estimatedCurrency)}

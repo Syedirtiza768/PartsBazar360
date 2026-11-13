@@ -23,6 +23,7 @@ import { SmsModule } from './modules/sms/sms.module';
 import { RealtrackBridgeModule } from './modules/realtrack-bridge/realtrack-bridge.module';
 import { ContentModule } from './modules/content/content.module';
 import { DiscountCouponModule } from './modules/discount-coupon/discount-coupon.module';
+import { PaymentLinkModule } from './modules/payment-links/payment-link.module';
 import { RealtrackPublishModule } from './modules/realtrack-publish/realtrack-publish.module';
 
 @Module({
@@ -54,6 +55,7 @@ import { RealtrackPublishModule } from './modules/realtrack-publish/realtrack-pu
     RealtrackBridgeModule,
     ContentModule,
     DiscountCouponModule,
+    PaymentLinkModule,
     RealtrackPublishModule,
   ],
   controllers: [AppController],

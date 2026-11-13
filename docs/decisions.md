@@ -1,5 +1,66 @@
 # Decision log
 
+**Last reviewed:** 2026-10-27
+
+## 2026-11-10 — Production reconciled into git; MVL identity matches are LIKELY, not CONFIRMED
+
+**Decision:**
+- The production server's uncommitted work (RealTrack push and report reconciliation, the private image proxy route, Omni Core nginx blocks, buyer/admin updates) and its two unpushed commits are now in `main`. Production is deployed from git through `update.sh`, not from a hand-patched working tree.
+- Checkout validates each cart line and stores decision snapshots on the cart, order, seller order, order item and payment attempt. Migration `20261009170000_add_per_line_checkout_validation` only adds nullable columns and a new table.
+- An MVL identity match with no exact fitment evidence is stored as `LIKELY` at 0.65 with `MVL_VEHICLE_IDENTITY_VERIFIED`. Production had `CONFIRMED` at 0.9 with `MVL_VERIFIED`.
+
+**Why:**
+- Production had drifted from git: 19 commits not on origin and 20 uncommitted files, with hand-applied image routing and Omni Core nginx blocks that a git-based deploy would have removed.
+- An MVL identity match confirms the vehicle identity, not the part's fitment, so `CONFIRMED` overstated fitment to buyers.
+
+**Revisit when:** the owner confirms whether an identity-only MVL match should show as confirmed fitment. If it should, restore `CONFIRMED` in `ingestion.processor.ts` and update `mvl-fitment.service.spec.ts`.
+
+## 2026-10-27 — Cross-references: read item specifics by role, look numbers up through one indexed function
+
+**Decision:**
+- **Item specifics are a first-class number source.** Number-bearing listing aspects (`ITEM_SPECIFIC_NUMBER_KEYS` in `number-graph.ts`: interchange, superseded, OE/OEM in en/de/fr/it/es, MPN) are read with their role. When the same number is also in `oeNumbers`, the role-tagged ref wins.
+- **One indexed lookup.** "Which parts carry number N" goes through one immutable SQL function, `pb_part_numbers(mpn, oeNumbers, itemSpecifics)`, with a GIN index (migration `20261027120000_part_numbers_lookup`). This replaces the separate whole-value MPN and `oeNumbers` matches.
+- **Structured fitment counts as compatibility data.** `Fitment` rows feed the make context and the documented-fitment summary next to the `compatibility` list.
+
+**Why:**
+- **Lost roles:** importers copied item specifics into `oeNumbers` (roughly 18k of 19k parts with superseded numbers), which turned superseded and interchange numbers into plain OE numbers. The "superseded" group was therefore always empty although the data existed.
+- **Unreachable numbers:** comma-joined `oeNumbers` entries were matched only as whole strings, so numbers inside them could not be found. Neither could ~5k numbers that exist only in item specifics. 21,312 part-number pairs on 9,268 parts became reachable.
+- **Speed:** a full scan to reach them costs ~5.5 s per search.
+- **Missing makes:** ~190k parts have `Fitment` rows, and some have no `compatibility` list, so their make was unknown to the make context.
+
+**Revisit when:** importers write role-typed `CatalogPartNumber` rows (then the function can shrink to MPN + catalogue), or the OpenSearch document builder indexes the same split numbers.
+
+## 2026-10-27 — Staff options search: verdicts by evidence kind, expansion by number role
+
+**Decision:**
+- **Fitment verdicts** are decided by the evidence *type*. `TITLE_MVL` / `MVL_MATCH` / generic `TITLE_PARSE` can at most make a part "likely"; only catalogue or compatibility-table evidence can make it "fits", and only when the engine matches or every engine of the model year is documented.
+- **Number expansion** classifies by the role the number plays on each part (own number / superseded / OE list of an OEM part / aftermarket declaration). It follows one hop through unverified numbers into a collapsed "possible" group, and goes further only through verified references.
+- **Candidates** are collected from Postgres as well as the index.
+
+**Why:** Production data (2026-10-27) grades 1.55M fitments "B / VERIFIED". But the largest source is title parsing expanded to every engine of the parsed years, so the grade would overstate precision. All 65k `CatalogPartNumber` rows are unverified (confidence 0.55) and there are no superseded rows, so treating every cross-reference as an equivalent would mislead; treating none would lose sales. `oeNumbers` (on 250k parts) is the main cross-reference graph and mixes formats, so values are split and normalized. The index is known to miss parts with live offers.
+
+**Revisit when:** verified or superseded `CatalogPartNumber` rows arrive (they automatically allow deeper expansion and the superseded group), evidence gains engine-level detail, or a GIN index on *normalized* OE numbers is added (would replace the raw-format `oeNumbers &&` lookup).
+
+## 2026-10-26 — Internal search for Omni Core reuses v1 ranking and reloads offers from Postgres
+
+**Decision:** Omni Core's Parts Search portal gets a separate, key-guarded endpoint
+(`/integrations/realtrack/search`, `RealtrackSearchGuard`, `REALTRACK_SEARCH_API_KEY`)
+instead of extra flags on the public `/v1/search`. It calls `SearchV1Service.search`
+unchanged, then replaces each result's offers with every `SellerOffer` row for that part
+(any status, with seller, store, source, SKU, base price and warehouse stock), labelled
+`buyerVisible` / `outrankedBySuperior` using the same helpers buyer search uses.
+
+**Why:** The public endpoint is anonymous and shared-cacheable; staff data must never be
+one query-flag away from it. Reusing the v1 query keeps internal and public results in
+lock-step (same matching, same interpretation), while Postgres is authoritative for offers:
+the index only holds buyer-visible offers and drifts (outbox lag, deleted offers). A
+separate key from the publish key lets read access be revoked without stopping publishing.
+
+**Revisit when:** buyer search sanitisation (`sanitizeSearchItems`, blanked seller/source
+facets) lands on `main` — keep it out of the internal path, or the portal loses its
+seller/source facets; or when the portal needs offers that are not attached to an indexed
+part (then search Postgres, not only the index).
+**Last reviewed:** 2026-09-29
 **Last reviewed:** 2026-10-25
 
 ## 2026-10-25 — Show the logo through a shared AppShell prop and per-app public assets
@@ -18,6 +79,154 @@ package. Copying assets per app keeps each deploy self-contained behind nginx.
 **Revisit when:** a fifth app or a second shell tone appears, or when the assets
 move to a CDN. Then move the lockup into one shared static origin and drop the
 per-app copies.
+
+## 2026-10-25 — Build the brand identity from one scripted geometry source
+
+**Decision:** The PartsBazar360 identity (draft v1.0, the Hex P) is generated by
+scripts in `assets/brand/partsbazar360/source/` rather than drawn by hand in a
+design tool. One Python module holds the geometry and writes SVG (RGB), PDF and
+EPS (CMYK). Raster, favicon and app-icon exports render from those SVGs with the
+repo's `sharp`. The brand book inlines the same geometry as `<symbol>` defs.
+Wordmarks are outlined from the fonts the buyer app already ships, and the
+palette reuses the Tailwind preset tokens.
+
+**Why:** No Illustrator was available, and a scripted source keeps every file
+format and size in step. A change to R, the stroke or the wordmark weight
+rebuilds all 200 files consistently. Reusing the product's fonts and tokens
+keeps the logo and the UI one system.
+
+**Revisit when:** A designer takes the mark into a native vector tool (add an
+`.ai` master and treat the scripts as legacy), or the identity is approved and
+trademark-cleared and the apps adopt it.
+
+## 2026-10-23 — Renew the storefront TLS certificate from its Docker store
+
+**Decision:** Use a dedicated systemd timer to run the PartsBazar360 Compose
+Certbot service for `partsbazar360.com`, then reload the Docker Nginx container.
+Keep this job scoped to the storefront certificate so stale unrelated hostnames
+cannot block its renewal. The host Certbot timer remains separate because its
+default certificate directory is not the directory mounted by this deployment.
+
+**Why:** The storefront certificate expired while the host Certbot timer kept
+checking an empty certificate directory. The active certificates and ACME
+webroot live under the repository's `certbot/` directory, so renewal must use
+the Compose service and reload the Nginx container after issuance.
+
+**Revisit when:** TLS termination moves to a managed certificate service or the
+Compose certificate and webroot mounts change; verify both scheduled renewal
+and the Nginx reload path after any such migration.
+
+## 2026-10-12 — Serve private inventory images through a scoped internal proxy
+
+**Decision:** Keep the source S3 bucket private. The buyer's existing image
+proxy routes only the approved inventory-image bucket and prefix to a small
+internal service using the server-side AWS profile; the service validates the
+host and key and Nginx caches successful images. Other image hosts keep their
+existing path.
+
+**Why:** The listing pages already contain image URLs, but anonymous S3 access
+returns 403 while an AWS-signed read succeeds. Making the backup bucket public
+would expose a larger storage namespace than this storefront needs.
+
+**Revisit when:** The inventory images move behind a dedicated CDN origin or a
+separate public-safe asset bucket with an equivalent least-privilege policy.
+
+## 2026-10-09 — Send order confirmation only after payment succeeds
+
+**Decision:** Do not send buyer or operations order-created notifications when
+checkout creates a pending order. Order confirmation notifications are sent
+after the payment provider's successful status transition marks the order paid.
+Payment-failure, refund, cancellation, and fulfillment updates remain tied to
+their own lifecycle events.
+
+**Why:** A created order only indicates that checkout started; the buyer may
+still abandon or fail payment. Sending the confirmation after the authoritative
+paid transition avoids presenting an unpaid order as completed.
+
+**Revisit when:** A separate, explicitly worded pending-payment reminder is
+introduced with retry, suppression, and delivery policies.
+
+## 2026-10-09 — Keep buyer fitment and shipping claims inside verified boundaries
+
+**Decision:** Buyer-confirmed fitment requires A/B evidence at the existing
+confidence threshold and an explicit exact-application source allowlist.
+MVL/title matching can identify a vehicle but cannot establish that a part fits
+it. OE catalog expansion remains advisory until relationship evidence exists.
+Unsupported destinations return no automatic charge or delivery window, while
+freight above the highest priced rate band and explicitly restricted handling
+require a separate quote/review. International rates stop at the EMX sheet's
+highest band; UAE flat tiers stop at 25 kg, with no capped floor charge shown.
+Buyer search/PDP/cart/order/support responses use safe field projections and
+anonymous shipment labels; operational seller data stays server-side.
+
+**Why:** The prior paths could promote vehicle-catalog identity into fitment,
+price unsupported shipping with an average, and serialize internal seller or
+feed fields through buyer responses. A boundary-level policy prevents those
+claims from being reintroduced by browser heuristics or new entity fields.
+
+**Revisit when:** The catalog/fulfillment owners approve versioned exact-fitment
+and carrier/restriction profiles. Then replace the current first-wave shipping
+guards with reviewed service, origin, dangerous-goods, packaging, quote-expiry
+and freight-approval profiles. Existing OpenSearch documents also need a
+reviewed reindex before normalized manufacturer/OE matching is effective
+across the whole index.
+
+## 2026-10-09 — Bind PDP add intent to each cart line
+
+**Decision:** PDP add and buy-now actions store the selected garage vehicle's
+canonical configuration ID on the cart line. An explicit no-vehicle action
+stores no configuration. The same offer intended for two vehicles remains on
+two lines, while inventory checks aggregate its quantity across all lines.
+Desktop and sticky mobile actions share one display policy fed by the current
+server fitment result and shipping state; checkout independently revalidates
+each line on the server.
+
+**Why:** A single offer line cannot safely represent two different vehicle
+decisions. The active garage selection is buyer context, while checkout
+validation and order snapshots remain the transaction authority.
+
+**Revisit when:** Search cards add purchase controls or cart review adopts a
+shared client display contract; those entry points must preserve the same
+intent while continuing to honor server validation.
+
+## 2026-10-09 — Bind checkout approval to each cart line and payment attempt
+
+**Decision:** Every checkout review is a short-lived, one-use server record
+bound to the cart/session, current item and fitment evidence, destination,
+payment choices, shipping decision and checkout policy version. The buyer
+acknowledges only lines the server marks unverified or without an intended
+vehicle. The order and its lines keep the accepted decision, intended vehicle,
+acknowledgment timestamp, item facts and seller shipment quote; retries and
+unpaid-session resumes require a fresh matching review before a payment URL is
+returned.
+
+**Why:** A browser checkbox cannot establish fitment or shipping eligibility,
+and a stale approval must not authorize a changed cart or payment retry. The
+server recomputes decisions before reservations/provider calls, while the
+fingerprint lets a saved buyer acknowledgment survive a refresh only when the
+new review has identical inputs. Checkout drafts remain untrusted; only the
+current server validation can authorize payment.
+
+**Revisit when:** Checkout policy gains reviewed risk tiers or versioned
+carrier quote freshness rules, or an audited override is approved. Any such
+policy must be included in the validation fingerprint and snapshots.
+
+## 2026-10-01 — Keep admin-generated Stripe Payment Links standalone
+
+**Decision:** The admin console creates fixed-amount Stripe Payment Links for
+one completed payment, with an optional reconciliation reference in Stripe
+metadata and the audit log. These links do not mutate marketplace orders.
+
+**Why:** The existing order checkout depends on an internal `PaymentIntent`,
+idempotent order creation, and webhook metadata to transition an `Order` to
+`PAID`. A manually generated link creates a Stripe Checkout Session but has no
+internal order or `PaymentIntent` identity to authorize that transition.
+Keeping it standalone avoids treating an unrelated Stripe payment as order
+fulfillment; staff reconcile it in Stripe.
+
+**Revisit when:** A requirement needs links tied to marketplace orders; then
+create them from the order's existing payment attempt and preserve its webhook,
+authorization, and idempotency checks.
 
 ## 2026-09-29 — Accept RealTrack pushes by queueing them into the existing ingestion pipeline
 
@@ -739,3 +948,20 @@ used by strict account-authentication flows.
 **Run order matters:** (1) `node scripts/dedupe-vehicle-configs.mjs` then `APPLY=1` (dry-run default; merges each duplicate group into the config with the most fitments, re-points `UserVehicle`, re-points or evidence-merges `Fitment` rows, writes AuditEvents and SearchOutbox reindex rows), (2) `prisma migrate deploy` for the unique index — it fails while duplicates remain, (3) deploy the API/worker with the resolver. The resolver degrades gracefully pre-migration, so code-first is safe but index-last is not.
 
 **Revisit when:** MVL ingestion starts writing trim/engine consistently — the dedupe report's `droppedEpids` entries show which provenance links were sacrificed and could be re-attached as aliases.
+
+## 2026-10-01 — Keep admin-generated Stripe Payment Links standalone
+
+**Decision:** The admin console creates fixed-amount Stripe Payment Links for
+one completed payment, with an optional reconciliation reference in Stripe
+metadata and the audit log. These links do not mutate marketplace orders.
+
+**Why:** The existing order checkout depends on an internal `PaymentIntent`,
+idempotent order creation, and webhook metadata to transition an `Order` to
+`PAID`. A manually generated link creates a Stripe Checkout Session but has no
+internal order or `PaymentIntent` identity to authorize that transition.
+Keeping it standalone avoids treating an unrelated Stripe payment as order
+fulfillment; staff reconcile it in Stripe.
+
+**Revisit when:** A requirement needs links tied to marketplace orders; then
+create them from the order's existing payment attempt and preserve its webhook,
+authorization, and idempotency checks.

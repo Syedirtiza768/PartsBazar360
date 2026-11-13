@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 import { getShippingPolicy } from "@/lib/content";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/shipping-policy/") },
   title: "Shipping Policy | PartsBazar360",
   description:
     "Shipping policy with the 2:00 PM GST cutoff, database-backed handling time, carriers, and international delivery terms.",

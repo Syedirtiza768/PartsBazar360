@@ -7,12 +7,19 @@ export type ShippingQuote = {
   currency: string;
   settlementCurrency?: string;
   destinationCountry: string;
-  shippingTotal: number;
-  totalAmount: number;
+  available: boolean;
+  shippingTotal: number | null;
+  totalAmount: number | null;
   sellerQuotes: Array<{
-    sellerId: string;
-    sellerName: string;
+    shipmentNumber: number;
+    shipmentLabel: string;
     amount: number;
+    available: boolean;
+    availabilityReason?:
+      | "DESTINATION_UNSUPPORTED"
+      | "FREIGHT_QUOTE_REQUIRED"
+      | "SPECIAL_HANDLING_REVIEW"
+      | null;
     matchedCountry: boolean;
     serviceType?: string;
     /** Customer-facing estimated delivery window, e.g. "04 to 06 Business Days". */
@@ -82,13 +89,16 @@ export function useShippingQuote(options: {
       })
         .then(async (res) => {
           const data = await res.json();
-          if (!res.ok) throw new Error(data.message || "Unable to quote shipping.");
+          if (!res.ok)
+            throw new Error(data.message || "Unable to quote shipping.");
           if (!cancelled) setQuote(data as ShippingQuote);
         })
         .catch((err: unknown) => {
           if (!cancelled) {
             setQuote(null);
-            setError(err instanceof Error ? err.message : "Unable to quote shipping.");
+            setError(
+              err instanceof Error ? err.message : "Unable to quote shipping.",
+            );
           }
         })
         .finally(() => {

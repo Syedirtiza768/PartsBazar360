@@ -31,6 +31,30 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function buyerSafePartTitle(
+  title: string | null | undefined,
+  sellerName: string | null | undefined,
+  productBrand: string | null | undefined,
+): string {
+  let result = title?.trim() || 'Auto part';
+  const supplier = sellerName?.trim();
+  result = result
+    .replace(/https?:\/\/\S+|www\.\S+/gi, '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '');
+  if (
+    !supplier ||
+    supplier.toLowerCase() === productBrand?.trim().toLowerCase()
+  ) {
+    return result.trim() || 'Auto part';
+  }
+  const escaped = supplier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  result = result.replace(
+    new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'giu'),
+    'PartsBazar360',
+  );
+  return result;
+}
+
 @Injectable()
 export class OrderNotificationService {
   private readonly logger = new Logger(OrderNotificationService.name);
@@ -50,6 +74,11 @@ export class OrderNotificationService {
     orderId: string,
     event: OrderUpdateEvent,
   ): Promise<void> {
+    // Order creation only means checkout has started; the payment can still be
+    // abandoned or declined. Keep this guard for legacy callers so no channel
+    // sends an unpaid-order notification if one is reintroduced.
+    if (event.type === 'ORDER_CREATED') return;
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -60,7 +89,9 @@ export class OrderNotificationService {
             items: {
               include: {
                 sellerOffer: {
-                  include: { canonicalPart: { select: { title: true } } },
+                  include: {
+                    canonicalPart: { select: { title: true, brand: true } },
+                  },
                 },
               },
             },
@@ -107,7 +138,13 @@ export class OrderNotificationService {
     const sellerName = event.sellerOrderId
       ? sellerOrder?.seller?.name || 'Marketplace seller'
       : undefined;
-    const description = this.describe(orderNumber, event, sellerName);
+    const buyerDescription = this.describe(orderNumber, event);
+    const adminDescription = this.describe(
+      orderNumber,
+      event,
+      sellerName,
+      true,
+    );
     const tasks: Promise<void>[] = [];
 
     for (const email of emails) {
@@ -119,10 +156,11 @@ export class OrderNotificationService {
             currency: order.currency,
             items: order.sellerOrders.flatMap((sellerOrder) =>
               sellerOrder.items.map((item) => ({
-                name:
-                  item.sellerOffer.canonicalPart?.title ||
-                  item.sellerOffer.sellerTitle ||
-                  'Auto part',
+                name: buyerSafePartTitle(
+                  item.sellerOffer.canonicalPart?.title,
+                  sellerOrder.seller?.name,
+                  item.sellerOffer.canonicalPart?.brand,
+                ),
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
               })),
@@ -145,10 +183,9 @@ export class OrderNotificationService {
           this.emailService.sendOrderUpdateNotification(email, {
             orderId: order.id,
             orderNumber,
-            heading: description.heading,
-            message: description.message,
+            heading: buyerDescription.heading,
+            message: buyerDescription.message,
             status: event.status,
-            sellerName,
             trackingNumber,
             trackingUrl,
             carrier,
@@ -170,7 +207,7 @@ export class OrderNotificationService {
         tasks.push(
           this.smsGlobalService.sendOrderUpdateSms(phone, {
             orderNumber,
-            message: description.message,
+            message: buyerDescription.message,
             trackingUrl,
           }),
         );
@@ -180,8 +217,8 @@ export class OrderNotificationService {
     tasks.push(
       this.emailService.sendAdminOrderUpdateNotification({
         orderNumber,
-        heading: description.heading,
-        message: description.message,
+        heading: adminDescription.heading,
+        message: adminDescription.message,
         status: event.status,
         previousStatus: event.previousStatus,
         buyerEmail: emails[0],
@@ -207,18 +244,13 @@ export class OrderNotificationService {
     orderNumber: string,
     event: OrderUpdateEvent,
     sellerName?: string,
+    includeInternalDetails = false,
   ): { heading: string; message: string } {
     const previous = event.previousStatus
       ? ` from ${label(event.previousStatus)}`
       : '';
     const current = label(event.status);
 
-    if (event.type === 'ORDER_CREATED') {
-      return {
-        heading: 'Order received',
-        message: `Order ${orderNumber} has been created and is currently ${current}.`,
-      };
-    }
     if (event.type === 'PAYMENT_STATUS_CHANGED') {
       return {
         heading:
@@ -229,7 +261,7 @@ export class OrderNotificationService {
     if (event.type === 'ORDER_STATUS_CHANGED') {
       return {
         heading: `Order ${current}`,
-        message: `Order ${orderNumber} status changed${previous} to ${current}${event.reason ? `: ${event.reason}` : '.'}`,
+        message: `Order ${orderNumber} status changed${previous} to ${current}${includeInternalDetails && event.reason ? `: ${event.reason}` : '.'}`,
       };
     }
 
@@ -237,7 +269,7 @@ export class OrderNotificationService {
       heading: event.trackingUrl
         ? 'Shipment tracking updated'
         : 'Delivery update',
-      message: `${sellerName || 'A seller'} shipment for order ${orderNumber} is now ${current}${previous}.`,
+      message: `${sellerName ? `${sellerName} shipment` : 'A shipment'} for order ${orderNumber} is now ${current}${previous}.`,
     };
   }
 }

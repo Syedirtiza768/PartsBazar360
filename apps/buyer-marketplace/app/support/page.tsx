@@ -68,6 +68,9 @@ function SupportForm() {
           ...form,
           orderId: form.orderId || undefined,
           canonicalPartId: form.canonicalPartId || undefined,
+          estimatedWeightKg: form.estimatedWeightKg.trim()
+            ? Number(form.estimatedWeightKg)
+            : undefined,
         }),
       });
       const data = await res.json();

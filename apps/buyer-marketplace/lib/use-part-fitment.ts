@@ -1,18 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  fitmentForConfig,
-  type FitmentState,
-  type FitmentVehicleHint,
-} from "./fitment";
-import { fetchLivePart } from "./live-part";
+import { type FitmentState, type FitmentVehicleHint } from "./fitment";
+import { API_BASE_URL } from "./api";
 
 /**
- * Lazily evaluates a part's fitment against a vehicle configuration by
- * fetching the part detail (which carries full fitment relations + MVL
- * OE-catalog compatibility table). Results are cached per part id for the
- * session — cart lines and review steps reuse the same lookup without refetching.
+ * Reads the API's authoritative fitment decision for this part/configuration.
+ * The browser must not promote compatibility-table YMM matches to confirmed.
  */
 
 export function usePartFitment(
@@ -28,10 +22,30 @@ export function usePartFitment(
       setState(null);
       return;
     }
-    fetchLivePart(partId).then((part) => {
-      if (cancelled) return;
-      setState(part ? fitmentForConfig(part, configId, vehicle) : null);
-    });
+    // A vehicle change must never retain the previous vehicle's green result
+    // while the new server-side decision is in flight.
+    setState(null);
+    const query = new URLSearchParams({ partId, vehicleConfigId: configId });
+    fetch(`${API_BASE_URL}/fitment/check?${query.toString()}`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Fitment check failed");
+        const result = (await response.json()) as { status?: string };
+        const states: Record<string, FitmentState> = {
+          CONFIRMED: "verified",
+          LIKELY: "likely",
+          OEM_NUMBER_MATCH: "check",
+          DETAILS_REQUIRED: "check",
+          NOT_VERIFIED: "check",
+          DOES_NOT_FIT: "incompatible",
+          UNIVERSAL: "universal",
+        };
+        if (!cancelled) setState(states[result.status || ""] || "unknown");
+      })
+      .catch(() => {
+        if (!cancelled) setState("unknown");
+      });
     return () => {
       cancelled = true;
     };

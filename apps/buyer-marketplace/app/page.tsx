@@ -1,5 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { brandPath, categoryGroupPath } from "@repo/catalog-contracts";
+import { absoluteUrl, brandPath, categoryGroupPath } from "@repo/catalog-contracts";
 import { buttonClasses } from "@repo/ui/button";
 import { Container } from "@repo/ui/container";
 import {
@@ -27,6 +28,10 @@ import type { BrowseResponse, FacetsResponse } from "@/lib/types";
 // Keep the route dynamic so Docker/CI builds do not require a live API, while
 // still caching featured listings and facets in the Next.js Data Cache.
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/") },
+};
 
 async function getFeaturedParts(): Promise<BrowseResponse | null> {
   try {

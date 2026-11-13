@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/return-policy/") },
   title: "Return Policy | PartsBazar360",
   description:
     "PartsBazar360 returns policy, including the 14-day return window and refund process.",

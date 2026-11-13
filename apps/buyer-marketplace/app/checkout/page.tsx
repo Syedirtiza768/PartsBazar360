@@ -16,11 +16,10 @@ import {
   TruckIcon,
   ArrowLeftIcon,
   ShieldCheckIcon,
-  CarIcon,
 } from "@repo/ui/icons";
 import { cn } from "@repo/ui/cn";
 import { useCart, type CartItem } from "@/lib/cart-context";
-import { useGarage, vehicleFullLabel } from "@/lib/garage-context";
+import { useGarage } from "@/lib/garage-context";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
 import { humanize } from "@/lib/format";
@@ -42,7 +41,9 @@ import {
   saveCheckoutState,
   saveCheckoutToken,
   trackCheckoutEvent,
+  validateCheckout,
   verifyCheckoutOtp,
+  type CheckoutValidationResult,
   type CheckoutDraft,
 } from "@/lib/checkout-session";
 import {
@@ -157,12 +158,20 @@ function toCheckoutDraft(
   form: FormState,
   paymentProvider: "stripe" | "tamara",
   couponCode?: string,
+  checkoutValidationFingerprint?: string,
+  acknowledgedCartItemIds?: string[],
 ): CheckoutDraft {
   return {
     ...form,
     paymentProvider,
     ...(couponCode?.trim()
       ? { couponCode: couponCode.trim().toUpperCase() }
+      : {}),
+    ...(checkoutValidationFingerprint
+      ? {
+          checkoutValidationFingerprint,
+          acknowledgedCartItemIds: [...(acknowledgedCartItemIds ?? [])].sort(),
+        }
       : {}),
   };
 }
@@ -293,10 +302,12 @@ function SummaryCard({
             {shippingLoading
               ? "Calculating…"
               : shippingQuote
-                ? format(
-                    shippingQuote.shippingTotal,
-                    shippingQuote.currency || SETTLEMENT_CURRENCY,
-                  )
+                ? shippingQuote.available && shippingQuote.shippingTotal != null
+                  ? format(
+                      shippingQuote.shippingTotal,
+                      shippingQuote.currency || SETTLEMENT_CURRENCY,
+                    )
+                  : "Delivery unavailable"
                 : "Enter country to estimate"}
           </dd>
         </div>
@@ -306,7 +317,7 @@ function SummaryCard({
             <dd className="text-right text-graphite-600">{leadTime}</dd>
           </div>
         )}
-        {shippingQuote && (
+        {shippingQuote?.available && shippingQuote.totalAmount != null && (
           <div className="flex justify-between gap-3 border-t border-slate-100 pt-2">
             <dt className="font-semibold text-slate-900">Estimated total</dt>
             <dd className="price text-sm">
@@ -345,7 +356,7 @@ export default function CheckoutPage() {
 
 function CheckoutContent() {
   const { cart, subtotal } = useCart();
-  const { activeVehicle, ready: garageReady } = useGarage();
+  const { vehicles } = useGarage();
   const { user, authHeaders } = useAuth();
   const {
     format,
@@ -359,11 +370,15 @@ function CheckoutContent() {
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormState, string>>
   >({});
-  const [confirmedFit, setConfirmedFit] = useState(false);
+  const [checkoutValidation, setCheckoutValidation] =
+    useState<CheckoutValidationResult | null>(null);
+  const [acknowledgedLineIds, setAcknowledgedLineIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [validationLoading, setValidationLoading] = useState(false);
   const [paymentProvider, setPaymentProvider] = useState<"stripe" | "tamara">(
     "stripe",
   );
-  const [confirmError, setConfirmError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
@@ -420,12 +435,13 @@ function CheckoutContent() {
     authHeaders,
   });
 
-  const payableTotal = shippingQuote
-    ? Math.max(
-        0,
-        shippingQuote.totalAmount - (couponQuote?.discountAmount ?? 0),
-      )
-    : (couponQuote?.discountedSubtotal ?? subtotal);
+  const payableTotal =
+    shippingQuote?.available && shippingQuote.totalAmount != null
+      ? Math.max(
+          0,
+          shippingQuote.totalAmount - (couponQuote?.discountAmount ?? 0),
+        )
+      : (couponQuote?.discountedSubtotal ?? subtotal);
   const payableCurrency =
     shippingQuote?.currency || couponQuote?.currency || currency;
   // Shipments over the courier ceiling are rejected by processCheckout, so the
@@ -433,6 +449,21 @@ function CheckoutContent() {
   const freightSellers = (shippingQuote?.sellerQuotes ?? []).filter(
     (quote) => quote.requiresFreightQuote,
   );
+  const unsupportedShipments = (shippingQuote?.sellerQuotes ?? []).filter(
+    (quote) => !quote.available && !quote.requiresFreightQuote,
+  );
+  const shippingBlocked =
+    shippingLoading || !shippingQuote?.available || freightSellers.length > 0;
+  const missingAcknowledgmentIds =
+    checkoutValidation?.requiredAcknowledgmentCartItemIds.filter(
+      (itemId) => !acknowledgedLineIds.has(itemId),
+    ) ?? [];
+  const checkoutBlocked =
+    shippingBlocked ||
+    validationLoading ||
+    !checkoutValidation ||
+    checkoutValidation.blockingLineIds.length > 0 ||
+    missingAcknowledgmentIds.length > 0;
 
   useEffect(() => {
     if (
@@ -564,7 +595,13 @@ function CheckoutContent() {
       otpRequired,
       maskedPhone: maskedPhone ?? undefined,
       accountExists,
-      draft: toCheckoutDraft(form, paymentProvider, couponCode),
+      draft: toCheckoutDraft(
+        form,
+        paymentProvider,
+        couponCode,
+        checkoutValidation?.fingerprint,
+        [...acknowledgedLineIds],
+      ),
     };
     saveCheckoutState(cart.id, state);
     const timer = window.setTimeout(() => {
@@ -575,7 +612,9 @@ function CheckoutContent() {
     return () => window.clearTimeout(timer);
   }, [
     accountExists,
+    acknowledgedLineIds,
     cart.id,
+    checkoutValidation?.fingerprint,
     checkoutSessionId,
     form,
     idempotencyKey,
@@ -592,11 +631,8 @@ function CheckoutContent() {
   const sellerGroups = useMemo(() => {
     const groups = new Map<string, { name: string; items: CartItem[] }>();
     for (const item of items) {
-      const key =
-        item.sellerOffer.seller?.id ||
-        item.sellerOffer.seller?.name ||
-        "marketplace";
-      const name = item.sellerOffer.seller?.name || "Marketplace seller";
+      const key = item.sellerOffer.shipmentLabel || "Shipment";
+      const name = key;
       const group = groups.get(key) ?? { name, items: [] };
       group.items.push(item);
       groups.set(key, group);
@@ -610,6 +646,8 @@ function CheckoutContent() {
       const value = e.target.value;
       if (field === "country") setShippingCountry(value);
       setForm((prev) => ({ ...prev, [field]: value }));
+      setCheckoutValidation(null);
+      setAcknowledgedLineIds(new Set());
       if (field === "phone" && phoneVerified && otpRequired) {
         setPhoneVerified(false);
         setMaskedPhone(null);
@@ -627,6 +665,8 @@ function CheckoutContent() {
       return;
     }
     setCouponCode(normalizedCode);
+    setCheckoutValidation(null);
+    setAcknowledgedLineIds(new Set());
     setCouponLoading(true);
     setCouponError(null);
     try {
@@ -672,7 +712,7 @@ function CheckoutContent() {
     // Re-quote only when the selected charge currency changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutCurrency]);
-  const goToReview = (e: FormEvent) => {
+  const goToReview = async (e: FormEvent) => {
     e.preventDefault();
     const nextErrors = validate(form, phoneCountryCode);
     if (otpRequired && !phoneVerified)
@@ -682,14 +722,7 @@ function CheckoutContent() {
         "Tamara is available for UAE and Saudi Arabia deliveries.";
     }
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length === 0) {
-      setStep(2);
-      void trackCheckoutEvent(
-        "delivery_completed",
-        checkoutSessionId ?? undefined,
-      );
-      window.scrollTo({ top: 0 });
-    } else {
+    if (Object.keys(nextErrors).length > 0) {
       window.requestAnimationFrame(() => {
         const firstInvalid = document.querySelector<HTMLElement>(
           '[aria-invalid="true"]',
@@ -697,6 +730,74 @@ function CheckoutContent() {
         firstInvalid?.focus();
         firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
+      return;
+    }
+
+    if (!cart.id || !checkoutSessionId) {
+      setServerError("Checkout session is unavailable. Refresh and try again.");
+      return;
+    }
+
+    const savedReview = loadCheckoutState(cart.id)?.draft;
+    setValidationLoading(true);
+    setServerError(null);
+    setCheckoutValidation(null);
+    setAcknowledgedLineIds(new Set());
+    try {
+      if (!otpRequired && !loadCheckoutToken(checkoutSessionId)) {
+        const bypassResult = await requestCheckoutOtp(
+          checkoutSessionId,
+          phoneCandidate(form.phone, phoneCountryCode),
+        );
+        if (!bypassResult.checkoutToken) {
+          throw new Error("Checkout identity could not be created.");
+        }
+        saveCheckoutToken(checkoutSessionId, bypassResult.checkoutToken);
+      }
+
+      const validation = await validateCheckout(
+        cart.id,
+        checkoutSessionId,
+        authHeaders(),
+        {
+          shippingAddress: {
+            line1: form.line1,
+            line2: form.line2 || undefined,
+            city: form.city,
+            region: form.region || undefined,
+            country: form.country,
+            postalCode: form.postalCode || undefined,
+          },
+          chargeCurrency: checkoutCurrency,
+          paymentProvider,
+          couponCode: couponQuote?.code,
+        },
+      );
+      setCheckoutValidation(validation);
+      const savedAcknowledgments =
+        savedReview?.checkoutValidationFingerprint === validation.fingerprint
+          ? new Set(savedReview.acknowledgedCartItemIds ?? [])
+          : new Set<string>();
+      setAcknowledgedLineIds(
+        new Set(
+          validation.requiredAcknowledgmentCartItemIds.filter((itemId) =>
+            savedAcknowledgments.has(itemId),
+          ),
+        ),
+      );
+      setStep(2);
+      void trackCheckoutEvent("delivery_completed", checkoutSessionId);
+      window.scrollTo({ top: 0 });
+    } catch (error) {
+      setCheckoutValidation(null);
+      setAcknowledgedLineIds(new Set());
+      setServerError(
+        error instanceof Error
+          ? error.message
+          : "Could not validate this order. Review the details and try again.",
+      );
+    } finally {
+      setValidationLoading(false);
     }
   };
 
@@ -714,8 +815,17 @@ function CheckoutContent() {
       );
       return;
     }
-    if (!confirmedFit) {
-      setConfirmError(true);
+    if (!checkoutValidation) {
+      setServerError("Review this order again before placing it.");
+      return;
+    }
+    if (
+      checkoutValidation.blockingLineIds.length > 0 ||
+      missingAcknowledgmentIds.length > 0
+    ) {
+      setServerError(
+        "Resolve the item checks below before continuing to payment.",
+      );
       return;
     }
     setSubmitting(true);
@@ -743,7 +853,13 @@ function CheckoutContent() {
             phoneVerified,
             maskedPhone: maskedPhone ?? undefined,
             accountExists,
-            draft: toCheckoutDraft(form, paymentProvider, couponCode),
+            draft: toCheckoutDraft(
+              form,
+              paymentProvider,
+              couponCode,
+              checkoutValidation.fingerprint,
+              [...acknowledgedLineIds],
+            ),
           }),
         },
         body: JSON.stringify({
@@ -753,6 +869,8 @@ function CheckoutContent() {
           paymentProvider,
           chargeCurrency: checkoutCurrency,
           couponCode: couponQuote?.code || undefined,
+          validationId: checkoutValidation.validationId,
+          acknowledgedCartItemIds: [...acknowledgedLineIds].sort(),
           shippingAddress: {
             line1: form.line1,
             line2: form.line2 || undefined,
@@ -786,7 +904,19 @@ function CheckoutContent() {
           country: form.country,
           postalCode: form.postalCode || undefined,
         },
-        vehicle: activeVehicle,
+        vehicle:
+          new Set(
+            items
+              .map((item) => item.intendedVehicleConfigId)
+              .filter((configId): configId is string => Boolean(configId)),
+          ).size === 1
+            ? (vehicles.find(
+                (vehicle) =>
+                  vehicle.configId ===
+                  items.find((item) => item.intendedVehicleConfigId)
+                    ?.intendedVehicleConfigId,
+              ) ?? null)
+            : null,
       });
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
@@ -796,6 +926,8 @@ function CheckoutContent() {
         `${paymentProvider === "tamara" ? "Tamara" : "Stripe"} Checkout URL is missing.`,
       );
     } catch (err: unknown) {
+      setCheckoutValidation(null);
+      setAcknowledgedLineIds(new Set());
       setServerError(
         err instanceof Error
           ? err.message
@@ -865,10 +997,6 @@ function CheckoutContent() {
   };
 
   const handlePlaceOrderClick = () => {
-    if (!confirmedFit) {
-      setConfirmError(true);
-      return;
-    }
     void placeOrder();
   };
 
@@ -966,11 +1094,13 @@ function CheckoutContent() {
                   disabled={phoneVerified && otpRequired}
                   onChange={(event) => setPhoneCountryCode(event.target.value)}
                 >
-                  {PHONE_COUNTRY_OPTIONS.map(({ code, dialCode, flag, name }) => (
-                    <option key={code} value={dialCode}>
-                      {flag} {name} ({dialCode})
-                    </option>
-                  ))}
+                  {PHONE_COUNTRY_OPTIONS.map(
+                    ({ code, dialCode, flag, name }) => (
+                      <option key={code} value={dialCode}>
+                        {flag} {name} ({dialCode})
+                      </option>
+                    ),
+                  )}
                 </Select>
                 <Input
                   label="Mobile number"
@@ -1185,7 +1315,11 @@ function CheckoutContent() {
                           name="paymentProvider"
                           value={value}
                           checked={paymentProvider === value}
-                          onChange={() => setPaymentProvider(value)}
+                          onChange={() => {
+                            setPaymentProvider(value);
+                            setCheckoutValidation(null);
+                            setAcknowledgedLineIds(new Set());
+                          }}
                           className="mt-1"
                         />
                         <span>
@@ -1280,51 +1414,108 @@ function CheckoutContent() {
                   </p>
                 </header>
                 <ul className="divide-y divide-slate-100">
-                  {group.items.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-start justify-between gap-3 px-4 py-3.5 sm:gap-4 sm:px-5"
-                    >
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-sm font-medium text-slate-800">
-                          {item.quantity}×{" "}
-                          {item.sellerOffer.canonicalPart?.title || "Part"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-graphite-600">
-                          {(() => {
-                            const c = humanize(
-                              item.sellerOffer.condition || "",
-                            );
-                            const pt = partTypeFromLegacy(
-                              item.sellerOffer.partSource ||
-                                item.sellerOffer.canonicalPart?.partSource,
-                              item.sellerOffer.partType ||
-                                item.sellerOffer.canonicalPart?.partType,
-                            );
-                            return (
-                              [
-                                partTypeLabel(pt),
-                                pt !== "GENUINE_OEM" ? c : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ") || null
-                            );
-                          })()}
-                        </p>
-                        <div className="mt-1.5">
+                  {group.items.map((item) => {
+                    const decision = checkoutValidation?.lines.find(
+                      (line) => line.cartItemId === item.id,
+                    );
+                    const acknowledged = acknowledgedLineIds.has(item.id);
+                    return (
+                      <li
+                        key={item.id}
+                        className="flex items-start justify-between gap-3 px-4 py-3.5 sm:gap-4 sm:px-5"
+                      >
+                        <div className="min-w-0 space-y-2">
+                          <div>
+                            <p className="line-clamp-2 text-sm font-medium text-slate-800">
+                              {item.quantity}×{" "}
+                              {item.sellerOffer.canonicalPart?.title || "Part"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-graphite-600">
+                              {(() => {
+                                const c = humanize(
+                                  item.sellerOffer.condition || "",
+                                );
+                                const pt = partTypeFromLegacy(
+                                  item.sellerOffer.partSource ||
+                                    item.sellerOffer.canonicalPart?.partSource,
+                                  item.sellerOffer.partType ||
+                                    item.sellerOffer.canonicalPart?.partType,
+                                );
+                                return (
+                                  [
+                                    partTypeLabel(pt),
+                                    pt !== "GENUINE_OEM" ? c : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ") || null
+                                );
+                              })()}
+                            </p>
+                          </div>
                           <CartLineFitment
+                            cartId={cart.id ?? undefined}
+                            itemId={item.id}
                             partId={item.sellerOffer.canonicalPart?.id}
+                            intendedVehicleConfigId={
+                              item.intendedVehicleConfigId
+                            }
+                            fitmentStatus={decision?.fitmentStatus}
+                            onChanged={() => {
+                              setCheckoutValidation(null);
+                              setAcknowledgedLineIds(new Set());
+                            }}
                           />
+                          {decision?.requiresAcknowledgment && (
+                            <Checkbox
+                              checked={acknowledged}
+                              onChange={(event) =>
+                                setAcknowledgedLineIds((current) => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) next.add(item.id);
+                                  else next.delete(item.id);
+                                  return next;
+                                })
+                              }
+                              label={
+                                decision.fitmentStatus === "NO_VEHICLE"
+                                  ? "I checked the part number or intended use and want to continue without a vehicle match."
+                                  : "I understand fitment is not confirmed for this vehicle and still want this item."
+                              }
+                              description="This acknowledgment applies only to this cart item."
+                            />
+                          )}
+                          {decision?.blockingReason && (
+                            <p
+                              className="text-xs font-medium text-red-700"
+                              role="alert"
+                            >
+                              {decision.blockingReason === "FITMENT_CONFLICT"
+                                ? "This item conflicts with its selected vehicle. Change the vehicle or remove the item."
+                                : decision.blockingReason ===
+                                    "INSUFFICIENT_STOCK"
+                                  ? "There is not enough stock for this quantity. Update or remove this item."
+                                  : decision.blockingReason ===
+                                      "ITEM_UNAVAILABLE"
+                                    ? "This offer is no longer available. Remove it to continue."
+                                    : decision.shippingStatus ===
+                                        "REQUIRES_QUOTE"
+                                      ? "This shipment needs a freight quote before payment."
+                                      : decision.shippingStatus ===
+                                          "NEEDS_REVIEW"
+                                        ? "This item needs a shipping specialist review before payment."
+                                        : "Delivery is not available for this item and destination."}
+                            </p>
+                          )}
                         </div>
-                      </div>
-                      <span className="price shrink-0 text-sm">
-                        {format(
-                          item.sellerOffer.price * item.quantity,
-                          item.sellerOffer.currency,
-                        )}
-                      </span>
-                    </li>
-                  ))}
+                        <span className="price shrink-0 text-sm">
+                          {format(
+                            item.sellerOffer.price * item.quantity,
+                            item.sellerOffer.currency,
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             ))}
@@ -1344,6 +1535,8 @@ function CheckoutContent() {
                     setCouponCode(event.target.value);
                     setCouponQuote(null);
                     setCouponError(null);
+                    setCheckoutValidation(null);
+                    setAcknowledgedLineIds(new Set());
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -1375,52 +1568,42 @@ function CheckoutContent() {
               )}
             </section>
 
-            <section
-              className={cn(
-                "rounded-xl border p-5 shadow-card",
-                confirmError && !confirmedFit
-                  ? "border-red-300 bg-red-50"
-                  : "border-amber-200 bg-amber-50",
-              )}
-            >
-              <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <CarIcon className="h-4 w-4 text-amber-700" />
-                Compatibility check
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Fitment review
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                Vehicle selection is stored per item, so a mixed cart keeps each
+                part&apos;s own intended vehicle. The active garage vehicle is
+                never applied to every line automatically.
               </p>
-              {garageReady && activeVehicle ? (
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                  Your active vehicle is{" "}
-                  <span className="font-semibold text-slate-900">
-                    {vehicleFullLabel(activeVehicle)}
-                  </span>
-                  . Each line above shows its fitment status for this vehicle.
+              {checkoutValidation?.blockingLineIds.length ? (
+                <p
+                  className="mt-2 text-sm font-medium text-red-700"
+                  role="alert"
+                >
+                  Resolve the item and delivery blocks shown above before
+                  paying.
+                </p>
+              ) : missingAcknowledgmentIds.length > 0 ? (
+                <p className="mt-2 text-sm text-amber-800" role="status">
+                  Acknowledge the {missingAcknowledgmentIds.length} item
+                  {missingAcknowledgmentIds.length === 1 ? "" : "s"} whose
+                  fitment is not confirmed to continue.
+                </p>
+              ) : checkoutValidation ? (
+                <p
+                  className="mt-2 text-sm font-medium text-emerald-700"
+                  role="status"
+                >
+                  Every item has a confirmed fitment or an item-specific
+                  acknowledgment.
                 </p>
               ) : (
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                  No vehicle selected — we can&apos;t cross-check these parts
-                  for you. Match each part&apos;s OE number against your vehicle
-                  before confirming.
+                <p className="mt-2 text-sm text-amber-800" role="status">
+                  Review this order again to refresh its server-side decisions.
                 </p>
               )}
-              <div className="mt-3">
-                <Checkbox
-                  checked={confirmedFit}
-                  onChange={(e) => {
-                    setConfirmedFit(e.target.checked);
-                    if (e.target.checked) setConfirmError(false);
-                  }}
-                  label="I've confirmed these parts match my vehicle or intended use."
-                  description="Used parts are specific to exact configurations — this check prevents most returns."
-                />
-                {confirmError && !confirmedFit && (
-                  <p
-                    className="mt-2 text-xs font-medium text-red-600"
-                    role="alert"
-                  >
-                    Please confirm compatibility before placing the order.
-                  </p>
-                )}
-              </div>
             </section>
 
             {serverError && (
@@ -1453,16 +1636,11 @@ function CheckoutContent() {
                 <ul className="mt-4 space-y-2 text-sm">
                   {shippingQuote.sellerQuotes.map((quote) => (
                     <li
-                      key={quote.sellerId}
+                      key={quote.shipmentNumber}
                       className="flex items-start justify-between gap-3"
                     >
                       <span className="min-w-0 text-graphite-700">
-                        <span className="block">
-                          {quote.sellerName}
-                          {!quote.matchedCountry
-                            ? " (average fallback rate)"
-                            : ""}
-                        </span>
+                        <span className="block">{quote.shipmentLabel}</span>
                         {quote.leadTime && !quote.requiresFreightQuote && (
                           <span className="mt-0.5 flex items-center gap-1 text-xs text-graphite-500">
                             <TruckIcon className="h-3 w-3 shrink-0" />
@@ -1472,8 +1650,10 @@ function CheckoutContent() {
                       </span>
                       <span className="price shrink-0">
                         {quote.requiresFreightQuote
-                          ? "Freight quote"
-                          : format(quote.amount, shippingQuote.currency)}
+                          ? "Freight quote required"
+                          : quote.available
+                            ? format(quote.amount, shippingQuote.currency)
+                            : "Unavailable"}
                       </span>
                     </li>
                   ))}
@@ -1490,7 +1670,7 @@ function CheckoutContent() {
                     </p>
                     <p className="mt-1">
                       {freightSellers.length === 1
-                        ? `${freightSellers[0]!.sellerName}'s shipment exceeds courier limits`
+                        ? `${freightSellers[0]!.shipmentLabel} exceeds courier limits`
                         : `${freightSellers.length} shipments exceed courier limits`}
                       , so we price them manually instead of charging an
                       automatic rate.{" "}
@@ -1502,6 +1682,29 @@ function CheckoutContent() {
                       </Link>{" "}
                       and we&apos;ll come back with a price.
                     </p>
+                  </div>
+                )}
+                {unsupportedShipments.length > 0 && (
+                  <div
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                    role="status"
+                  >
+                    <p className="font-semibold">Delivery needs confirmation</p>
+                    <p className="mt-1">
+                      {unsupportedShipments.some(
+                        (shipment) =>
+                          shipment.availabilityReason ===
+                          "SPECIAL_HANDLING_REVIEW",
+                      )
+                        ? "One or more items need a specialist shipping review. Request a shipping quote before ordering."
+                        : "We don't have a priced delivery service for this destination. Request a shipping quote before ordering."}
+                    </p>
+                    <Link
+                      href={`/support?subject=${encodeURIComponent("Shipping quote request")}`}
+                      className="mt-2 inline-flex font-semibold underline underline-offset-2"
+                    >
+                      Request a shipping quote
+                    </Link>
                   </div>
                 )}
               </section>
@@ -1520,20 +1723,32 @@ function CheckoutContent() {
                 <Button
                   size="lg"
                   onClick={handlePlaceOrderClick}
-                  loading={submitting}
-                  disabled={freightSellers.length > 0}
+                  loading={submitting || validationLoading}
+                  disabled={checkoutBlocked}
                   fullWidth
                   className="sm:w-auto"
                 >
                   {/* The full label runs to three lines in a 288px button, so
                         phones get the amount and desktops get the full sentence. */}
                   <span className="sm:hidden">
-                    Pay {format(payableTotal, payableCurrency)}
+                    {shippingBlocked
+                      ? "Delivery quote required"
+                      : !checkoutValidation ||
+                          checkoutValidation.blockingLineIds.length > 0
+                        ? "Resolve item checks"
+                        : missingAcknowledgmentIds.length > 0
+                          ? "Acknowledge fitment"
+                          : `Pay ${format(payableTotal, payableCurrency)}`}
                   </span>
                   <span className="hidden sm:inline">
-                    Pay with{" "}
-                    {paymentProvider === "tamara" ? "Tamara" : "Stripe"} —{" "}
-                    {format(payableTotal, payableCurrency)}
+                    {shippingBlocked
+                      ? "Confirm delivery before paying"
+                      : !checkoutValidation ||
+                          checkoutValidation.blockingLineIds.length > 0
+                        ? "Resolve item checks before paying"
+                        : missingAcknowledgmentIds.length > 0
+                          ? "Acknowledge each fitment warning to continue"
+                          : `Pay with ${paymentProvider === "tamara" ? "Tamara" : "Stripe"} — ${format(payableTotal, payableCurrency)}`}
                   </span>
                 </Button>
               </div>

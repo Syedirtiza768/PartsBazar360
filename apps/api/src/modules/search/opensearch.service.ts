@@ -10,6 +10,7 @@ import {
   sanitizeIdentifierList,
 } from './identifier-sanitize.util';
 import {
+  isBuyerVerifiedFitmentEvidence,
   isCatalogHidden,
   PAYMENT_TEST_PART_ID,
 } from '@repo/catalog-contracts';
@@ -362,11 +363,16 @@ export class OpenSearchService implements OnModuleInit {
           // interchangePartNumbers below). This keeps a "primary" number match
           // distinct from an "interchange" match so the toggle can exclude the
           // latter and results can be labelled by how they matched.
-          normalizedPartNumbers: (part.partNumbers || [])
-            .filter(
-              (number: any) => number.numberType !== 'OEM_CROSS_REFERENCE',
-            )
-            .map((number: any) => number.normalizedNumber)
+          normalizedPartNumbers: [
+            part.manufacturerPartNumber,
+            ...(part.oeNumbers || []),
+            ...(part.partNumbers || [])
+              .filter(
+                (number: any) => number.numberType !== 'OEM_CROSS_REFERENCE',
+              )
+              .map((number: any) => number.normalizedNumber),
+          ]
+            .map((number) => normalizePartNumber(number))
             .filter(Boolean),
           category: part.category,
           categoryGroup: part.categoryGroup ?? null,
@@ -413,10 +419,12 @@ export class OpenSearchService implements OnModuleInit {
           // result. Title-inferred D-level matches remain available on the PDP
           // as advisory compatibility and never enter guaranteed-fit search.
           fitments: (part.fitments || [])
-            .filter(
-              (f: any) =>
-                ['A', 'B'].includes(f.evidenceLevel) &&
-                Number(f.confidence) >= 0.8,
+            .filter((f: any) =>
+              isBuyerVerifiedFitmentEvidence(
+                f.evidenceLevel,
+                Number(f.confidence),
+                f.source,
+              ),
             )
             .map((f: any) => f.vehicleConfigId),
           offers: offers.map((o: any) => ({

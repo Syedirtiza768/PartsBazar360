@@ -277,6 +277,9 @@ model CanonicalPart {
   auditEvents    AuditEvent[]
   slugHistory    CanonicalPartSlug[]
 
+  // Not expressible here: GIN index "CanonicalPart_part_numbers_gin" on
+  // pb_part_numbers("manufacturerPartNumber", "oeNumbers", "itemSpecifics")
+  // (migration 20261027120000_part_numbers_lookup) — staff number lookup.
   @@index([enrichmentStatus])
   @@index([partClassKey])
   // Sitemap and taxonomy queries page through parts ordered by change time;
@@ -516,6 +519,7 @@ model VehicleConfiguration {
 
   fitments     Fitment[]
   userVehicles UserVehicle[]
+  cartItems    CartItem[]
   generation   VehicleGeneration @relation(fields: [generationId], references: [id])
 
   @@index([generationId])
@@ -685,7 +689,8 @@ model User {
   phoneVerified       Boolean            @default(false)
   name                String?
   /**
-   * BUYER | SELLER | ADMIN
+   * BUYER | SELLER | ADMIN | SUPPORT_AGENT | FULFILLMENT_OPERATOR |
+   * SEO_EDITOR | PAYMENT_LINKS_ADMIN
    */
   role                String             @default("BUYER")
   passwordHash        String?
@@ -768,6 +773,7 @@ model Cart {
 
   items            CartItem[]
   checkoutSessions CheckoutSession[]
+  validations      CheckoutValidation[]
 
   @@index([userId, status])
 }
@@ -789,11 +795,12 @@ model CheckoutSession {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  cart       Cart                         @relation(fields: [cartId], references: [id])
-  customer   Customer?                    @relation(fields: [customerId], references: [id])
-  challenges PhoneVerificationChallenge[]
-  order      Order?
-  events     CheckoutEvent[]
+  cart        Cart                         @relation(fields: [cartId], references: [id])
+  customer    Customer?                    @relation(fields: [customerId], references: [id])
+  challenges  PhoneVerificationChallenge[]
+  order       Order?
+  events      CheckoutEvent[]
+  validations CheckoutValidation[]
 
   @@index([cartId, status])
   @@index([phoneNormalized, createdAt])
@@ -836,6 +843,27 @@ model CheckoutEvent {
   @@index([checkoutSessionId, createdAt])
 }
 
+/**
+ * Short-lived server-owned checkout decision, bound to one cart revision.
+ */
+model CheckoutValidation {
+  id                String    @id @default(uuid())
+  cartId            String
+  checkoutSessionId String?
+  fingerprint       String
+  snapshot          Json
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  cart            Cart             @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  checkoutSession CheckoutSession? @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
+
+  @@index([cartId, createdAt])
+  @@index([checkoutSessionId, expiresAt])
+  @@index([expiresAt, consumedAt])
+}
+
 model DiscountCoupon {
   id              String    @id @default(uuid())
   code            String    @unique
@@ -852,17 +880,21 @@ model DiscountCoupon {
 }
 
 model CartItem {
-  id            String   @id @default(uuid())
-  cartId        String
-  sellerOfferId String
-  quantity      Int
-  addedAt       DateTime @default(now())
+  id                      String   @id @default(uuid())
+  cartId                  String
+  sellerOfferId           String
+  quantity                Int
+  intendedVehicleConfigId String?
+  purchaseIntent          String   @default("UNSPECIFIED")
+  addedAt                 DateTime @default(now())
 
-  cart        Cart        @relation(fields: [cartId], references: [id])
-  sellerOffer SellerOffer @relation(fields: [sellerOfferId], references: [id])
+  cart                  Cart                  @relation(fields: [cartId], references: [id])
+  sellerOffer           SellerOffer           @relation(fields: [sellerOfferId], references: [id])
+  intendedVehicleConfig VehicleConfiguration? @relation(fields: [intendedVehicleConfigId], references: [id], onDelete: SetNull)
 
   @@index([cartId])
   @@index([sellerOfferId])
+  @@index([intendedVehicleConfigId])
 }
 
 /**
@@ -895,22 +927,23 @@ enum PaymentStatus {
 }
 
 model Order {
-  id                String      @id @default(uuid())
-  orderNumber       String?     @unique
-  buyerId           String?
-  customerId        String?
-  checkoutSessionId String?     @unique
-  verifiedPhone     String?
-  idempotencyKey    String?     @unique
-  totalAmount       Float
-  couponId          String?
-  couponCode        String?
-  discountAmount    Float       @default(0)
-  currency          String      @default("AED")
-  status            OrderStatus @default(PENDING_PAYMENT)
-  shippingAddress   Json?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                         String      @id @default(uuid())
+  orderNumber                String?     @unique
+  buyerId                    String?
+  customerId                 String?
+  checkoutSessionId          String?     @unique
+  verifiedPhone              String?
+  idempotencyKey             String?     @unique
+  totalAmount                Float
+  couponId                   String?
+  couponCode                 String?
+  discountAmount             Float       @default(0)
+  currency                   String      @default("AED")
+  status                     OrderStatus @default(PENDING_PAYMENT)
+  shippingAddress            Json?
+  checkoutValidationSnapshot Json?
+  createdAt                  DateTime    @default(now())
+  updatedAt                  DateTime    @updatedAt
 
   sellerOrders    SellerOrder[]
   paymentIntent   PaymentIntent?
@@ -931,20 +964,21 @@ model OrderNumberSequence {
 }
 
 model SellerOrder {
-  id                  String            @id @default(uuid())
-  parentOrderId       String
-  sellerId            String
-  subTotal            Float
-  discountTotal       Float             @default(0)
-  shippingTotal       Float
-  marketplaceFeeTotal Float             @default(0)
-  sellerProceedsTotal Float             @default(0)
-  status              SellerOrderStatus @default(AWAITING_PAYMENT)
-  trackingNumber      String?
-  carrier             String?
-  trackingUrl         String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                    String            @id @default(uuid())
+  parentOrderId         String
+  sellerId              String
+  subTotal              Float
+  discountTotal         Float             @default(0)
+  shippingTotal         Float
+  marketplaceFeeTotal   Float             @default(0)
+  sellerProceedsTotal   Float             @default(0)
+  status                SellerOrderStatus @default(AWAITING_PAYMENT)
+  trackingNumber        String?
+  carrier               String?
+  trackingUrl           String?
+  shippingQuoteSnapshot Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   parentOrder    Order           @relation(fields: [parentOrderId], references: [id])
   seller         Seller          @relation(fields: [sellerId], references: [id])
@@ -968,6 +1002,8 @@ model OrderItem {
   pricingPolicyId      String?
   pricingPolicyVersion Int?
   weight               Float?
+  lineSnapshot         Json?
+  decisionSnapshot     Json?
 
   sellerOrder SellerOrder @relation(fields: [sellerOrderId], references: [id])
   sellerOffer SellerOffer @relation(fields: [sellerOfferId], references: [id])
@@ -989,15 +1025,16 @@ model PaymentIntent {
 }
 
 model PaymentAttempt {
-  id              String        @id @default(uuid())
-  paymentIntentId String
-  provider        String
-  externalId      String?       @unique
-  checkoutUrl     String?
-  status          PaymentStatus @default(PENDING)
-  failureCode     String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  paymentIntentId    String
+  provider           String
+  externalId         String?       @unique
+  checkoutUrl        String?
+  status             PaymentStatus @default(PENDING)
+  failureCode        String?
+  validationSnapshot Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   paymentIntent PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
 

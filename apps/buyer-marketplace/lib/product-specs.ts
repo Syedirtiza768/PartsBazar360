@@ -16,6 +16,7 @@ import {
   isMeaningfulBrand,
   meaningfulBrand,
   partTypeFromLegacy,
+  partTypeLabel,
   titleCase,
 } from "@repo/catalog-contracts";
 import { humanize } from "@/lib/format";
@@ -42,7 +43,9 @@ function text(value: unknown): string {
 }
 
 function normalizeIdentifier(value: unknown): string {
-  return text(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return text(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 /**
@@ -61,87 +64,87 @@ export function productSpecifications(part: Part): ProductSpecification[] {
     part.partSource || part.offers?.[0]?.partSource,
     part.partType || part.offers?.[0]?.partType,
   );
-  const qualityTier = part.qualityTier || part.offers?.[0]?.qualityTier;
-  const partSource = part.partSource || part.offers?.[0]?.partSource;
+  const qualityTier =
+    part.offers?.[0]?.condition ||
+    part.qualityTier ||
+    part.offers?.[0]?.qualityTier;
 
-  const rows: Array<Omit<ProductSpecification, "value"> & { value: unknown }> = [
-    {
-      label: "Category",
-      value: part.category,
-      ...(part.category ? { href: categoryPath(part.category) } : {}),
-    },
-    {
-      label: "Product type",
-      value: specifics.inferredProductType || specifics.productType,
-    },
-    {
-      // A part-source label sitting in the brand column ("Genuine OEM",
-      // "ORIGINAL") is shown as Part source elsewhere, and must never link to
-      // a brand landing page that does not legitimately exist.
-      label: "Brand",
-      value: meaningfulBrand(part.brand),
-      ...(isMeaningfulBrand(part.brand) ? { href: brandPath(part.brand) } : {}),
-    },
-    {
-      label: "Manufacturer",
-      value:
-        part.manufacturer && part.manufacturer !== part.brand
-          ? part.manufacturer
-          : null,
-    },
-    { label: "Manufacturer part number", value: mpn, monospace: true },
-    {
-      // Genuine OEM parts carry their condition in the badge and the OEM
-      // clause; repeating a "Quality tier: USED" row next to a Genuine OEM
-      // badge reads as a contradiction, so it is suppressed there.
-      label: "Condition",
-      value:
-        resolvedPartType === "GENUINE_OEM"
-          ? null
-          : qualityTier
-            ? humanize(qualityTier)
+  const rows: Array<Omit<ProductSpecification, "value"> & { value: unknown }> =
+    [
+      {
+        label: "Category",
+        value: part.category,
+        ...(part.category ? { href: categoryPath(part.category) } : {}),
+      },
+      {
+        label: "Product type",
+        value: specifics.inferredProductType || specifics.productType,
+      },
+      {
+        // A part-source label sitting in the brand column ("Genuine OEM",
+        // "ORIGINAL") is shown as Part source elsewhere, and must never link to
+        // a brand landing page that does not legitimately exist.
+        label: "Brand",
+        value: meaningfulBrand(part.brand),
+        ...(isMeaningfulBrand(part.brand)
+          ? { href: brandPath(part.brand) }
+          : {}),
+      },
+      {
+        label: "Manufacturer",
+        value:
+          part.manufacturer && part.manufacturer !== part.brand
+            ? part.manufacturer
             : null,
-    },
-    {
-      label: "Part source",
-      value: partSource
-        ? partSource === "OEM"
-          ? "OEM"
-          : humanize(partSource)
-        : null,
-    },
-    { label: "Position", value: part.position || specifics.position },
-    {
-      label: "Vehicle system",
-      value: part.vehicleSystem || specifics.vehicleSystem,
-    },
-    { label: "Material", value: part.material || specifics.material },
-    { label: "Part type", value: specifics.partType },
-    { label: "Placement", value: specifics.placementOnVehicle },
-    { label: "Color", value: specifics.color },
-    { label: "Brand type", value: specifics.brandType },
-    { label: "Surface finish", value: specifics.surfaceFinish },
-    { label: "Country of origin", value: specifics.countryOfOrigin },
-    { label: "Warranty", value: specifics.warranty },
-    { label: "Category type", value: specifics.categoryType },
-    {
-      label: "Features",
-      value: Array.isArray(specifics.features)
-        ? specifics.features.join(", ")
-        : specifics.features,
-    },
-  ];
+      },
+      { label: "Manufacturer part number", value: mpn, monospace: true },
+      {
+        label: "Condition",
+        value: qualityTier ? humanize(qualityTier) : null,
+      },
+      {
+        label: "Product classification",
+        value: partTypeLabel(resolvedPartType),
+      },
+      { label: "Position", value: part.position || specifics.position },
+      {
+        label: "Vehicle system",
+        value: part.vehicleSystem || specifics.vehicleSystem,
+      },
+      { label: "Material", value: part.material || specifics.material },
+      { label: "Part details", value: specifics.partType },
+      { label: "Placement", value: specifics.placementOnVehicle },
+      { label: "Color", value: specifics.color },
+      { label: "Brand type", value: specifics.brandType },
+      { label: "Surface finish", value: specifics.surfaceFinish },
+      { label: "Country of origin", value: specifics.countryOfOrigin },
+      { label: "Warranty", value: specifics.warranty },
+      { label: "Category type", value: specifics.categoryType },
+      {
+        label: "Features",
+        value: Array.isArray(specifics.features)
+          ? specifics.features.join(", ")
+          : specifics.features,
+      },
+    ];
 
   const built: ProductSpecification[] = rows
     .map((row) => {
       const evidence =
-        part.provenance?.[row.label] || part.provenance?.[row.label.toLowerCase()];
+        part.provenance?.[row.label] ||
+        part.provenance?.[row.label.toLowerCase()];
       return {
         ...row,
         value: text(row.value),
-        ...(evidence?.source ? { source: evidence.source } : { source: "catalog" }),
-        ...(evidence?.confidence != null ? { confidence: evidence.confidence } : {}),
-        ...(evidence?.verified !== undefined ? { verified: evidence.verified } : {}),
+        ...(evidence?.source
+          ? { source: evidence.source }
+          : { source: "catalog" }),
+        ...(evidence?.confidence != null
+          ? { confidence: evidence.confidence }
+          : {}),
+        ...(evidence?.verified !== undefined
+          ? { verified: evidence.verified }
+          : {}),
       } as ProductSpecification;
     })
     .filter((row) => Boolean(row.value));
@@ -171,8 +174,12 @@ export function productSpecifications(part: Part): ProductSpecification[] {
       value: oeNumbers.join(", "),
       monospace: true,
       source: evidence?.source ?? "catalog",
-      ...(evidence?.confidence != null ? { confidence: evidence.confidence } : {}),
-      ...(evidence?.verified !== undefined ? { verified: evidence.verified } : {}),
+      ...(evidence?.confidence != null
+        ? { confidence: evidence.confidence }
+        : {}),
+      ...(evidence?.verified !== undefined
+        ? { verified: evidence.verified }
+        : {}),
     });
   }
 
@@ -180,8 +187,9 @@ export function productSpecifications(part: Part): ProductSpecification[] {
     ...row,
     monospace:
       row.monospace || row.label.toLowerCase().includes("number") || undefined,
-    value: row.label === "Category" || row.label === "Brand"
-      ? titleCase(row.value)
-      : row.value,
+    value:
+      row.label === "Category" || row.label === "Brand"
+        ? titleCase(row.value)
+        : row.value,
   }));
 }

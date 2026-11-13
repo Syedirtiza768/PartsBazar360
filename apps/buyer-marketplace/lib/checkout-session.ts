@@ -16,6 +16,8 @@ export type CheckoutDraft = {
   postalCode: string;
   paymentProvider: "stripe" | "tamara";
   couponCode?: string;
+  checkoutValidationFingerprint?: string;
+  acknowledgedCartItemIds?: string[];
 };
 
 export type SavedCheckoutState = {
@@ -28,6 +30,30 @@ export type SavedCheckoutState = {
   draft: CheckoutDraft;
 };
 
+export type CheckoutValidationLine = {
+  cartItemId: string;
+  quantity: number;
+  intendedVehicleConfigId: string | null;
+  fitmentStatus: "CONFIRMED" | "UNVERIFIED" | "NO_VEHICLE" | "CONFLICT";
+  requiresAcknowledgment: boolean;
+  shippingStatus: "AVAILABLE" | "BLOCKED" | "REQUIRES_QUOTE" | "NEEDS_REVIEW";
+  shippingReason: string | null;
+  blockingReason: string | null;
+};
+
+export type CheckoutValidationResult = {
+  validationId: string;
+  fingerprint: string;
+  policyVersion: string;
+  expiresAt: string;
+  canPay: boolean;
+  destinationCountry: string;
+  shippingAvailable: boolean;
+  lines: CheckoutValidationLine[];
+  requiredAcknowledgmentCartItemIds: string[];
+  blockingLineIds: string[];
+};
+
 async function responseError(response: Response) {
   try {
     const body = await response.json();
@@ -37,6 +63,32 @@ async function responseError(response: Response) {
     // Keep the safe fallback below.
   }
   return "Something went wrong. Your checkout details are still saved.";
+}
+
+export async function validateCheckout(
+  cartId: string,
+  checkoutSessionId: string,
+  authorizationHeaders: HeadersInit,
+  input: {
+    shippingAddress: Record<string, string | undefined>;
+    chargeCurrency: string;
+    paymentProvider: "stripe" | "tamara";
+    couponCode?: string;
+  },
+) {
+  const headers = new Headers(authorizationHeaders);
+  headers.set("Content-Type", "application/json");
+  headers.set("X-Checkout-Session", checkoutSessionId);
+  const token = loadCheckoutToken(checkoutSessionId);
+  if (token) headers.set("X-Checkout-Token", token);
+
+  const response = await fetch(`${API_BASE_URL}/checkout/${cartId}/validate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await responseError(response));
+  return (await response.json()) as CheckoutValidationResult;
 }
 
 export function loadCheckoutState(cartId: string): SavedCheckoutState | null {

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { absoluteUrl } from "@repo/catalog-contracts";
 import { MailIcon, MapPinIcon, MessageIcon, ShieldCheckIcon } from "@repo/ui/icons";
 
 export const metadata: Metadata = {
+  alternates: { canonical: absoluteUrl("/contact/") },
   title: "Contact Us | PartsBazar360",
   description:
     "Contact PartsBazar360 — corporate information, registered office, and support channels for Superior New & Used Auto Spare Parts LLC.",

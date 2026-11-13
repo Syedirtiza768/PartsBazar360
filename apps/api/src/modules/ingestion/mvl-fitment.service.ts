@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isBuyerVerifiedFitmentEvidence } from '@repo/catalog-contracts';
 import { PrismaService } from '../../prisma.service';
 import {
   expandYears,
@@ -258,52 +259,78 @@ export class MvlFitmentService {
       confidence: number;
     }[] = [];
     for (const c of input.configs) {
-      const fitment = await this.prisma.fitment.upsert({
-        where: {
-          canonicalPartId_vehicleConfigId: {
-            canonicalPartId: input.canonicalPartId,
-            vehicleConfigId: c.vehicleConfigId,
-          },
-        },
-        update: {
-          evidenceLevel: 'B',
-          confidence: 0.9,
-          reviewer: input.reviewer,
-          source: input.source,
-          verificationStatus: 'VERIFIED',
-          reason: 'Matched US MVL Year/Make/Model',
-        },
-        create: {
+      const where = {
+        canonicalPartId_vehicleConfigId: {
           canonicalPartId: input.canonicalPartId,
           vehicleConfigId: c.vehicleConfigId,
-          evidenceLevel: 'B',
-          confidence: 0.9,
-          reviewer: input.reviewer,
-          source: input.source,
-          verificationStatus: 'VERIFIED',
-          reason: 'Matched US MVL Year/Make/Model',
         },
+      };
+      const existing = await this.prisma.fitment.findUnique({
+        where,
+        include: { evidence: true },
       });
+      const hasIndependentExactEvidence =
+        Boolean(existing) &&
+        (isBuyerVerifiedFitmentEvidence(
+          existing!.evidenceLevel,
+          existing!.confidence,
+          existing!.source,
+        ) ||
+          existing!.evidence.some((evidence) =>
+            isBuyerVerifiedFitmentEvidence(
+              evidence.evidenceLevel,
+              evidence.confidence,
+              evidence.evidenceType || evidence.source,
+            ),
+          ));
+      const fitment = hasIndependentExactEvidence
+        ? existing!
+        : await this.prisma.fitment.upsert({
+            where,
+            update: {
+              evidenceLevel: 'C',
+              confidence: 0.65,
+              reviewer: input.reviewer,
+              source: input.source,
+              verificationStatus: 'LIKELY',
+              reason:
+                'Vehicle identity matched US MVL; part fitment still needs exact catalog evidence',
+            },
+            create: {
+              canonicalPartId: input.canonicalPartId,
+              vehicleConfigId: c.vehicleConfigId,
+              evidenceLevel: 'C',
+              confidence: 0.65,
+              reviewer: input.reviewer,
+              source: input.source,
+              verificationStatus: 'LIKELY',
+              reason:
+                'Vehicle identity matched US MVL; part fitment still needs exact catalog evidence',
+            },
+          });
 
-      await this.prisma.fitmentEvidence
-        .create({
-          data: {
-            fitmentId: fitment.id,
-            evidenceType: input.source,
-            evidenceLevel: 'B',
-            confidence: 0.9,
-            source: input.source,
-            verifiedBy: input.reviewer,
-            verifiedAt: new Date(),
-            reason: 'US MVL year/make/model match',
-          },
-        })
-        .catch(() => undefined);
+      if (!hasIndependentExactEvidence) {
+        await this.prisma.fitmentEvidence
+          .create({
+            data: {
+              fitmentId: fitment.id,
+              evidenceType: input.source,
+              evidenceLevel: 'C',
+              confidence: 0.65,
+              source: input.source,
+              verifiedBy: input.reviewer,
+              verifiedAt: new Date(),
+              reason:
+                'US MVL confirmed the vehicle identity; it did not independently confirm this part fitment',
+            },
+          })
+          .catch(() => undefined);
+      }
 
       fitments.push({
         vehicleConfigId: fitment.vehicleConfigId,
-        evidenceLevel: 'B',
-        confidence: 0.9,
+        evidenceLevel: fitment.evidenceLevel,
+        confidence: fitment.confidence,
       });
     }
     return fitments;

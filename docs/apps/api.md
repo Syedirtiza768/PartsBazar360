@@ -1,5 +1,6 @@
 # api
 
+**Last reviewed:** 2026-10-27
 **Last reviewed:** 2026-09-29
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
@@ -78,6 +79,69 @@ shipping totals. Tax is derived from the charged total after item subtotal,
 coupon discount, and shipping because tax is not currently stored as a
 separate order column.
 
+## 2026-10-09 buyer safety projections
+
+Buyer-facing search responses are allowlisted in
+`modules/search/buyer-visible-offers.util.ts`. PDP, enrichment, cart, order and
+public support receipt routes project only fields needed by the buyer; private
+seller relations remain available inside checkout, settlement and staff
+operations. Public fitment responses use a controlled evidence category and
+never return raw source/reason strings. Only A/B evidence at the confidence
+threshold from an approved exact-application source may be described as
+confirmed; title/MVL identity matches stay advisory.
+
+`POST /cart/:cartId/items` accepts an optional canonical
+`vehicleConfigId`. PDP adds pass the selected garage configuration; an explicit
+null records no-vehicle intent. The same offer stays on separate cart lines
+when intended for different vehicles, and stock availability is checked
+against the combined quantity across those lines. Existing lines can change
+intent through `PATCH /cart/:cartId/items/:itemId/vehicle`; checkout still
+computes and enforces the authoritative per-line decision.
+
+Shipping quotes return an unavailable reason with no payable amount or ETA for
+unsupported destinations. Explicit special-handling flags require review, and
+checkout re-evaluates both shipping and freight eligibility before reservation
+and on payment retry. International quotes stop at the EMX rate sheet's highest
+weight band; the UAE flat tiers stop at their explicit 25 kg limit. Over-band
+parcels receive no estimated charge or delivery promise and require manual
+freight review. Rate, dangerous-goods, origin, packaging, quote expiry and
+unknown-restriction profiles still require operations-owned policy and data.
+The legacy search writer now indexes manufacturer/OE identifiers in its
+normalized exact-number field; existing documents require a controlled
+reindex before that change affects search.
+
+## 2026-10-09 per-line checkout review
+
+`POST /checkout/:cartId/validate` creates a ten-minute, one-use server review
+bound to the cart, checkout session, item revisions, intended vehicle, exact
+fitment evidence, stock, delivery quote, address, currency, provider, coupon,
+and policy version. Buyer responses expose only the decision and an opaque
+fingerprint. `POST /checkout/:cartId` ignores client fitment claims, compares
+the review fingerprint with a fresh server evaluation, requires an exact set of
+acknowledgments for unresolved lines, and rejects explicit conflicts or
+unavailable shipping before stock reservation or provider-session creation.
+
+Each cart line stores its intended `VehicleConfiguration` and purchase intent;
+changing the active garage vehicle does not rewrite other lines. Order, seller
+shipment, order-line, and payment-attempt records retain the internal decision
+and quote snapshots. Decline retries and resumes of unpaid hosted sessions
+re-check cart identity, address, current fitment, shipping, item prices and the
+stored payable total before exposing a payment URL. Checkout drafts retain only
+bounded UUID acknowledgment IDs and a SHA-256 fingerprint; these values are
+never authorization and must match a newly validated review.
+
+The additive migration is `20261009170000_add_per_line_checkout_validation`.
+It has been schema-validated locally but not applied to any database. High-
+value used-assembly risk thresholds, quote/rate expiry and operational shipping
+profiles still require approval from the responsible data and fulfillment
+owners.
+
+Order creation starts checkout but does not send an order notification. The
+notification service suppresses legacy `ORDER_CREATED` events, while the
+existing `PAYMENT_STATUS_CHANGED` event with `PAID` sends the buyer confirmation
+and operations update after the payment transition succeeds. Payment-failure
+and later fulfillment notifications remain separate lifecycle events.
+
 ## Modules (`src/modules/*`)
 
 - `auth` — authentication (see [[../decisions]] re: email vs SMS OTP)
@@ -97,6 +161,7 @@ separate order column.
 - `order`
 - `pricing`
 - `realtrack-publish` — inbound `/integrations/realtrack/listings` endpoint RealTrack publishes into (queues to the ingestion worker); see "RealTrack publish endpoint" above
+- `private-image-proxy` — buyer listing photos under the approved private S3 inventory prefix are served by the internal image-proxy service; see [[private-image-proxy]]
 - `realtrack-bridge` — admin-only selection, pricing preview, and transfer of PartsBazar offers into the existing RealTrack listing API
 - `search` — see [[../SEARCH_OVERHAUL_AUDIT_AND_PLAN]], [[../SEARCH_PHASE1_AUDIT]], [[../SEARCH_PHASE2_RESULTS]]
 - `seed` — marketplace seeding, see [[../SEEDING_AND_IMPORTS]]
@@ -117,6 +182,28 @@ Codes are normalized to uppercase, percentage discounts are constrained to
 are recorded as `COUPON_CREATED` or `COUPON_UPDATED` audit events. Coupons are
 deactivated rather than deleted so order history remains intact.
 
+## Admin Stripe Payment Links
+
+`POST /admin/payment-links` accepts `ADMIN` and `PAYMENT_LINKS_ADMIN` and creates a fixed-price
+Stripe Payment Link from the submitted description, amount, and AED/USD
+currency (Stripe's published minimums are 2.00 AED and 0.50 USD; settlement
+conversion can require more). The API creates the Stripe Product and Price,
+then caps the link at one completed checkout session. An optional reference is
+copied into Stripe metadata. The generated link, amount, currency, reference,
+and acting admin are recorded in `AuditEvent` as
+`STRIPE_PAYMENT_LINK_CREATED`.
+
+`PAYMENT_LINKS_ADMIN` is a scoped staff role that can use only the Payment Links
+page and endpoint. `npm run seed:payment-links-admin` grants it to an existing
+account only after its email is verified and a password is set. The command
+does not reset credentials, refuses to replace another scoped staff role, and
+records the grant in `AuditEvent`.
+
+These are standalone payments: the Stripe webhook checkout flow only updates a
+marketplace order when its internal payment-intent metadata is present, so a
+manual link payment does not create, fulfill, or mark an `Order` paid. Reconcile
+these payments in Stripe unless a separate order-linked payment flow is added.
+
 ## Orders, fulfillment, and confirmations
 
 The parent `Order.status` is the payment lifecycle (`PENDING_PAYMENT`,
@@ -135,6 +222,18 @@ guest-first `Customer` identity as well as the legacy linked `User`, so a
 guest checkout is not skipped. Notification delivery is best-effort and does
 not roll back a paid order; payment-claim idempotency prevents webhook races
 from sending duplicate confirmations.
+
+`OrderNotificationService` fans out payment and later order lifecycle events:
+payment success/failure/retry, cancellation, refund, seller shipment/delivery
+status, and tracking-detail changes. It ignores legacy `ORDER_CREATED` events,
+so creating an unpaid order sends no buyer or operations notification. The
+existing `PAYMENT_STATUS_CHANGED` event with `PAID` sends the confirmation
+after payment succeeds. Later events are sent by SMSGlobal and SendGrid when a
+channel is available and are copied to `info@partsbazar360.com`.
+`SellerOrder.trackingUrl` is validated as an HTTP(S) URL and included in
+customer/admin messages. Database writes complete before notification delivery;
+provider failures are logged independently and do not roll back the order
+mutation.
 
 `OrderNotificationService` also fans out the full order lifecycle: creation,
 payment success/failure/retry, cancellation, refund, seller shipment/delivery
@@ -290,6 +389,92 @@ part numbers where evidence exists, writes `REPAIR_MPN_DEDUP` audit events, and
 queues source and target parts for search indexing. Review the generated report
 before applying it in production.
 All four frontend apps ([[buyer-marketplace]], [[seller-portal]], [[admin-portal]], [[workshop-portal]]) call this API.
+
+## Internal search for Omni Core (2026-10-26)
+
+`src/modules/search/internal/` serves Omni Core's Parts Search portal (`/parts-search` in
+Omni Core). Machine-to-machine only:
+
+| Route (nginx adds `/api`) | Returns |
+|---|---|
+| `GET /integrations/realtrack/search` | Same params and envelope as `GET /v1/search` (`SearchQueryDto`, `SearchV1Service`), plus per result `internalOffers` (≤ 25) and `internalOfferCount`, and `meta.audience = "internal"` |
+| `GET /integrations/realtrack/search/parts/:id` | Part fields, every offer (`internalOffers`) and up to 100 `SourceRecord`s (no `rawPayload`), plus `publicUrl`; since 2026-10-27 also `crossReferences`, structured `fitments` / `fitmentCount`, `itemSpecifics`, `genuineOem` (see "Cross-reference sources") |
+| `GET /integrations/realtrack/search/health` | `{ ok: true }` when the key is accepted |
+
+- Guard: `RealtrackSearchGuard` — `REALTRACK_SEARCH_API_KEY` as `Authorization: Bearer` or `x-api-key`, constant-time compare. Unset key ⇒ 503 (off, never open). Deliberately separate from `REALTRACK_PUSH_API_KEY`. Responses are `Cache-Control: private, no-store`.
+- Ranking, interpretation and facets come from the unchanged v1 path, so internal and public results always agree on *which* parts match. Offers are then reloaded from Postgres (`SellerOffer` + `Seller` + `Inventory`/`Warehouse`), any status, each flagged `buyerVisible` (same checks as `isBuyerVisibleIndexedOffer`) and `outrankedBySuperior` (same rule as `applySuperiorPriority`), sorted live-first then by price. Fields: seller name/store id/status, offer status, price, `sellerBasePrice`, currency, condition, source tag and key, seller SKU/title, external offer id, lead time, summed and per-warehouse stock, `updatedAt`.
+- Part detail reads Postgres directly, so a part whose offers all ended still resolves (public `/search/parts/:id` 404s with "has no active offers").
+- Tests: `internal/internal-search.spec.ts`.
+- Observed on production 2026-10-26 while building this: the public `/search/parts/:id` response includes `sellerBasePrice`, `marketplaceFee`, `sellerProceeds`, `sourceKey` and `sellerSku` on offers, and the public v1 search still returns `seller`/`sourceTag` facets. If those should be staff-only, the internal endpoint is now the place for them and the public responses can be trimmed.
+
+### Options search — every sellable option (2026-10-27)
+
+`GET /integrations/realtrack/search/options` (same guard) answers "what can we sell for this request" for staff. Code: `src/modules/search/internal/options/`.
+
+- **Params:** `q`; vehicle as `vehicleConfigId`, or `makeId`/`modelId`/`year`, or `make`/`model`/`year`, plus optional `engineLitres` (VIN decode or picker). A year/make/model typed in `q` is used when no vehicle is passed. `drop=number,make,model,year,side,position` ignores parts of the interpretation. `includeUnavailable`, and `page`/`pageSize` for text queries.
+- **Number queries** (`86401-12020`, `86401 12020`, `A 221 820 02 64`, partial `86401`). Candidates come from the index (`searchNumbers`) *and* Postgres, because the index drifts: `CatalogPartNumber.normalizedNumber` and the `pb_part_numbers()` GIN index (see "Cross-reference sources" below; until that migration exists the service falls back to whole-value MPN / `oeNumbers` matching). Each part is classified by how it carries the number (`number-graph.ts`):
+  - **exact:** MPN / BRAND_MPN / OEM;
+  - **superseded;**
+  - **oem_equivalent:** an OEM part listing it among its OE numbers;
+  - **aftermarket_equivalent:** an aftermarket part declaring it replaces it;
+  - **possible:** one hop further through an unverified number, or the same digits on another make.
+
+  Further hops go only through verified references; *verified* superseded chains are followed to depth 10. Seller-declared superseded numbers (listing item specifics) count as "superseded" only one hop from an exact match; reached any other way they are "possible", and they are never chained (2026-10-27: chaining them made `BP4K-56-453B` return 99 "superseded" parts in 49 s). VIN-shaped numbers (17 characters, seen stored as an MPN) are never expanded through. Numbers under 5 characters, numbers without digits and seller SKUs are never expanded through. A part whose makes conflict with the context is excluded from the equivalents (`summary.excludedOtherMake`). The context is the query or vehicle make, or else the clear majority of the exact matches, compared by manufacturer family (`makeFamilies`: GM, VAG, Toyota/Lexus, Hyundai/Kia, …), because `VehicleMake.manufacturerGroup` is empty. Equivalents whose part carries no make data stay, but are flagged "vehicle make not documented — verify". Every item carries a `match.trail` of ready-to-render steps.
+- **Text queries** use the unchanged v1 ranking (`SearchV1Service`) for candidates, keep its facets and pagination, and are grouped by fitment verdict when a vehicle is known. Titles that do not name the part asked for (the parser's part terms and synonyms, e.g. headlight / headlamp / head light) go to a collapsed `related` group, so a fender never outranks a headlight for "left headlight 2018 Audi Q5".
+- **Availability** is decided from `SellerOffer` + `Inventory` rows at query time (`availability.ts`): `in_stock` (active, priced offer from an active seller with quantity), `can_source` (active offer, no stock, lead time) or `not_available`. Not-available items are counted but hidden unless `includeUnavailable`.
+- **Fitment verdicts** (`fitment-verdict.ts`) depend on the *kind* of evidence, not the letter grade:
+  - **Strong evidence:** Febest catalogue, eBay compatibility table (`EBAY_MVL`), catalogue imports (e.g. `LEMFORDER_FCPEURO_MVL`), manual/VIN/OEM.
+  - **Medium evidence:** title-derived `TITLE_MVL`, back-filled `MVL_MATCH`, other `TITLE_PARSE`, and grade C/D.
+  - **The rules:** `fits` needs strong evidence and either the selected engine or every engine of that model year (engines compared in litres parsed from free-text configuration strings). `likely` covers medium evidence or an unknown engine. A missing row is `unverified`, never `does_not_fit`; the latter is used for explicit conflicts such as the wrong side.
+- **Sorting** within a group (deterministic): verdict, availability, (text: relevance), best condition, lowest price, id.
+- **Response:** `summary.sentence` (e.g. "12 options: 4 in stock that fit your 2018 Audi Q5, …"), `didYouMean` (fuzzy on `searchNumbers`) when a number matches nothing, and per item `numbers` (normalized) so Omni Core can merge its own warehouse stock.
+- **Tests:** `options-rules.spec.ts` (rules) and `portal-options.service.spec.ts` (expansion against a mocked catalogue: separator forms, other-make exclusion, unverified hop, ended offers).
+
+### Cross-reference sources (2026-10-27, second pass)
+
+Every place a part's numbers and fitment live is now read, by role:
+
+| Source | Roles | Notes |
+|---|---|---|
+| `manufacturerPartNumber` | MPN (identity) | |
+| `CatalogPartNumber` | BRAND_MPN, OEM, OEM_CROSS_REFERENCE, INTERCHANGE, SUPERSEDED | Today: 60.7k BRAND_MPN (seller spreadsheets), 4.8k OEM_CROSS_REFERENCE (Febest). |
+| `itemSpecifics` (listing aspects) | BRAND_MPN, OE, INTERCHANGE, SUPERSEDED | Keys in `ITEM_SPECIFIC_NUMBER_KEYS`, incl. de/fr/it/es variants (`oE/OEMTeilenummer`, `numeropartesostituito`, …). ~20k parts carry interchange numbers and ~19k superseded numbers. `partOutID`, `referenceNumber` (a quantity) and `vINNumber` are deliberately ignored. "Genuine OEM: Yes" / "OEM: Ja" marks the part genuine. |
+| `oeNumbers` | OE | Comma/semicolon/newline lists are split. Importers copied most item specifics here, which lost the role, so role-tagged refs are read first and win (`strongestRef`). |
+| `compatibility` (JSON list) + `Fitment` rows | vehicles | Both feed the make context and the "Fits: …" summary (`mergeCompatRows`); only list rows count as "appears in the compatibility list". 1.6M `Fitment` rows cover ~190k parts, many with no list. |
+
+- **Lookup:** migration `20261027120000_part_numbers_lookup` adds `pb_part_numbers(mpn, oeNumbers, itemSpecifics)` (immutable SQL: split + normalize, ≥ 3 chars with a digit) and a GIN index on it. Measured on production: it makes 21,312 part-number pairs on 9,268 parts reachable that whole-value matching missed (numbers inside comma-joined `oeNumbers` entries, and numbers only in item specifics); a full scan instead takes ~5.5 s. **Keep the SQL key list in sync with `ITEM_SPECIFIC_NUMBER_KEYS`** — `options-rules.spec.ts` fails if they differ.
+- **Part detail** (`GET /integrations/realtrack/search/parts/:id`) now also returns `crossReferences` (`[{number, normalized, role, source, verified}]`, one per number, strongest role), `fitments` (structured rows: make, model, generation, years, trim, engine, evidence level, verification, source; strongest evidence first, ≤ 1000) with `fitmentCount`, `itemSpecifics` and `genuineOem`.
+- **Building the index on a live database:** create it `CONCURRENTLY` by hand first (the function body is in the migration), then let `migrate deploy` run. Its `IF NOT EXISTS` makes it a no-op. Building it inside the migration transaction blocks writes to `CanonicalPart` for ~30 s.
+
+### Production rollout (2026-10-27)
+
+**How it was deployed:** the server checkout (`/home/ubuntu/PartsBazar360`, branch `agent/realtrack-bridge-deploy-2026-08-17` plus uncommitted local changes, including the untracked `realtrack-publish` module) is what the live image is built from. So the options search was **not** deployed with `update.sh` (`git pull` + rebuild everything). Instead:
+- `git diff 93a6290..cea9dbc -- apps/api/src/modules/search` was applied to that working tree (patches in `/home/ubuntu/pb-search-options-20261027*.patch`).
+- `REALTRACK_SEARCH_API_KEY` was added to `docker-compose.yml` (api service) and `.env`.
+- Only `api` was rebuilt and recreated, then nginx was reloaded.
+
+**Images:** `partsbazar360-api:latest` = `11a96fd28c4c`. Rollback tags: `partsbazar360-api:search-options-20261027-r1` (first options build), `partsbazar360-api:rollback-pre-search-options-20261027` (before any of this). Backups: `/home/ubuntu/docker-compose.yml.pre-search-options-20261027`, `/home/ubuntu/.env.pb360.pre-search-options-20261027`.
+
+**Cross-reference pass (2026-10-27, main 894393a + 0aaaa5b):**
+- **Index:** `pb_part_numbers()` and `"CanonicalPart_part_numbers_gin"` were created by hand with `CREATE INDEX CONCURRENTLY` (45 s, 14 MB, lookup 0.17 ms). Script: `/home/ubuntu/pb-xref-index-20261027.sql`.
+- **Migration record:** production runs `SCHEMA_MODE=skip`, so `20261027120000_part_numbers_lookup` was recorded with `prisma migrate resolve --applied`.
+- **Patches:** `/home/ubuntu/pb-xref-20261027.patch` and `…-r2.patch` (search module + migration only) were applied to the server tree, and only `api` was rebuilt and recreated, then nginx was reloaded.
+- **Images:** `partsbazar360-api:latest` = `728b5f918f12`. Rollback: `partsbazar360-api:rollback-pre-xref-20261027` (`65b3987018fc`, the image running before). The first build (`xref-20261027-r1`, `70d77bbaa02a`) chained seller-declared superseded numbers (`BP4K-56-453B`: 99 "superseded" parts, 49 s) and was replaced within minutes by the r2 fix (212 ms, 2 real superseded parts).
+- **Checks on production:**
+  - `5N1419502B` is superseded by `5N1419502M` (11 options).
+  - `13501711` gives 20 exact plus the Febest equivalent.
+  - `3815A195` gives 5 in stock.
+  - The part detail returns `crossReferences`, `fitments` and `itemSpecifics`.
+- **The index is independent of the image.** Rolling back the image leaves the index harmless; the old code doesn't use it.
+
+**Acceptance on production data:**
+- The three separator forms of `86401-12020` return identical results.
+- `13501711` returns 20 exact parts plus a Febest aftermarket equivalent.
+- `3815A195` for a 2010 Mitsubishi Montero gives "2 in stock that fit".
+- "front left headlight 2018 Audi Q5": right-side parts go to `does_not_fit`, non-headlights to `related`.
+- The four `86401-12020` offers that the index still shows are `INACTIVE` in Postgres, and are reported as not available.
+- `8640112029` gives `didYouMean` 8640112020.
+- **Timings (warm):** number queries 50–310 ms; text + vehicle 430–630 ms.
 
 ## Report-driven RealTrack reconciliation
 
