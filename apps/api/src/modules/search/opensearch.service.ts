@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client } from '@opensearch-project/opensearch';
 import { normalizePartNumber } from '../catalog-import/part-normalization.util';
+import { partNumberVariants } from './query/part-number.util';
 import {
   applySuperiorPriority,
   sanitizeSearchItem,
@@ -649,6 +650,18 @@ export class OpenSearchService implements OnModuleInit {
           },
         },
       ];
+      // Alternate forms of the same number ("A2115410001" → "2115410001",
+      // seller prefixes, leading zeros), scored below the exact form.
+      const altNumbers = partNumberVariants(qq).slice(1);
+      if (altNumbers.length) {
+        should.push({
+          terms: {
+            'normalizedPartNumbers.keyword': altNumbers,
+            boost: 40,
+            _name: 'primary',
+          },
+        });
+      }
       if (includeInterchange) {
         should.push({
           term: {

@@ -82,6 +82,31 @@ describe('browseParts query construction', () => {
     expect(exactTerms).toEqual(['3W0121064F', '3W0121064F']);
   });
 
+  it('also looks up a Mercedes A-prefixed number without the A', async () => {
+    const { service, calls } = stubService([1]);
+    await service.browseParts({ q: 'A2115410001' });
+
+    const should = calls[0].body.query.bool.must[0].bool.should;
+    const exact = should.find(
+      (c: any) => c.term?.['normalizedPartNumbers.keyword'],
+    );
+    const alt = should.find(
+      (c: any) => c.terms?.['normalizedPartNumbers.keyword'],
+    );
+    expect(exact.term['normalizedPartNumbers.keyword'].value).toBe(
+      'A2115410001',
+    );
+    expect(alt.terms['normalizedPartNumbers.keyword']).toEqual(['2115410001']);
+  });
+
+  it('adds no alternate clause for a number with no other forms', async () => {
+    const { service, calls } = stubService([1]);
+    await service.browseParts({ q: '8R0807453C' });
+
+    const should = calls[0].body.query.bool.must[0].bool.should;
+    expect(should.find((c: any) => c.terms)).toBeUndefined();
+  });
+
   it('does not retry when strict matching finds enough', async () => {
     const { service, calls } = stubService([500]);
     const result = await service.browseParts({ q: 'Audi bumper' });
