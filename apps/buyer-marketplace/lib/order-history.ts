@@ -11,11 +11,16 @@ export interface StoredOrder {
   paymentStatus: string;
   totalAmount: number;
   currency: string;
+  /** Lets the same browser tab fetch live shipment tracking as a guest. */
+  checkoutSessionId?: string | null;
   sellerOrders: Array<{
     id: string;
     subTotal: number;
     shippingTotal: number;
     status?: string;
+    trackingNumber?: string | null;
+    carrier?: string | null;
+    trackingUrl?: string | null;
   }>;
   items: CartItem[];
   shippingAddress: {

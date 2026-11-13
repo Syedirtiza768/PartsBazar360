@@ -2,6 +2,24 @@
 
 **Last reviewed:** 2026-11-13
 
+## 2026-11-13 — Admin listing tools: fixed shipping override and local photo storage
+
+**Decision:** Per-listing shipping is an optional fixed AED amount per unit on
+`SellerOffer.shippingCost`, layered on top of the weight-based quote rather
+than replacing the rate engine. Admin-uploaded listing photos are stored on
+the API's `enrichment_media` volume and served by the API, not uploaded to S3.
+
+**Why:** The client asked to edit shipping cost per listing. Most of the
+catalog still needs the weight/destination quote, so an override that
+defaults to `null` changes nothing until staff set it. Fixed-charge lines
+still respect destination support and special-handling review. The S3 bucket
+is private and the server's AWS profile is deliberately read-only (see
+[[apps/private-image-proxy]]). Giving the API write credentials to add an
+upload feature would have widened that boundary.
+
+**Revisit when:** listing photos need a CDN or multi-host serving, or
+shipping needs per-destination fixed rates rather than one flat amount.
+
 ## 2026-11-06 — Use the current RealTrack US feed origin and store IDs
 
 **Status 2026-11-13:** Merged to `main` but not deployed. The existing read-only feed account returns 401 on the new origin, and the server `.env` has no `REALTRACK_API_EMAIL` / `REALTRACK_API_PASSWORD` yet. Compose no longer carries the credential that was previously committed in plain text, so the next deploy needs those two values in `.env` first, and the old value should be rotated.

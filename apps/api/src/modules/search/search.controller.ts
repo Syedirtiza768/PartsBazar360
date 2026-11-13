@@ -1188,6 +1188,13 @@ export class SearchController implements OnModuleDestroy {
         dimensions: true,
         enrichmentStatus: true,
         itemSpecifics: true,
+        // The buy-box offer's staff-set shipping charge, when one exists.
+        offers: {
+          where: { status: 'ACTIVE' },
+          orderBy: { price: 'asc' },
+          take: 1,
+          select: { shippingCost: true },
+        },
       },
     });
     if (!part) {
@@ -1206,6 +1213,7 @@ export class SearchController implements OnModuleDestroy {
           requiresSpecialHandling: partRequiresSpecialHandling(
             part.itemSpecifics,
           ),
+          fixedShippingAed: part.offers[0]?.shippingCost ?? null,
         },
       ],
       destination,

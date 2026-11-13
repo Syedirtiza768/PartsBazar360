@@ -187,6 +187,59 @@ describe('ShippingService', () => {
     });
   });
 
+  describe('listing fixed shipping', () => {
+    it('charges the fixed per-unit amount instead of the weight quote', () => {
+      const quote = service.quoteSellerShipping(
+        [{ ...dense(30), quantity: 2, fixedShippingAed: 15 }],
+        'United Arab Emirates',
+      );
+      expect(quote).toMatchObject({
+        available: true,
+        amount: 30,
+        serviceType: 'LISTING SHIPPING',
+        requiresFreightQuote: false,
+      });
+    });
+
+    it('treats a zero amount as free shipping', () => {
+      const quote = service.quoteSellerShipping(
+        [{ ...dense(1), fixedShippingAed: 0 }],
+        'United Arab Emirates',
+      );
+      expect(quote.available).toBe(true);
+      expect(quote.amount).toBe(0);
+    });
+
+    it('adds fixed charges to the weight quote of other lines', () => {
+      const quote = service.quoteSellerShipping(
+        [dense(1), { ...dense(1), fixedShippingAed: 12.5 }],
+        'United Arab Emirates',
+      );
+      expect(quote.amount).toBe(32.5);
+      expect(quote.serviceType).toBe('UAE FLAT (small) + LISTING SHIPPING');
+    });
+
+    it('still refuses destinations we do not ship to', () => {
+      const quote = service.quoteSellerShipping(
+        [{ ...dense(1), fixedShippingAed: 10 }],
+        'Atlantis',
+      );
+      expect(quote).toMatchObject({
+        available: false,
+        availabilityReason: 'DESTINATION_UNSUPPORTED',
+        amount: 0,
+      });
+    });
+
+    it('still routes restricted items to specialist review', () => {
+      const quote = service.quoteSellerShipping(
+        [{ ...dense(1), fixedShippingAed: 10, requiresSpecialHandling: true }],
+        'United Arab Emirates',
+      );
+      expect(quote.availabilityReason).toBe('SPECIAL_HANDLING_REVIEW');
+    });
+  });
+
   describe('volumetric weight', () => {
     it('bills a bumper on volume rather than its actual mass', () => {
       const profile = getPartClassProfile('BUMPER_COVER');

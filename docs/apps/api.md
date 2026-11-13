@@ -143,6 +143,7 @@ and later fulfillment notifications remain separate lifecycle events.
 
 ## Modules (`src/modules/*`)
 
+- `admin-listings` — admin-only listing search/edit/create and listing photo upload; see "Admin listing management" below
 - `auth` — authentication (see [[../decisions]] re: email vs SMS OTP)
 - `cart`
 - `catalog-import` — bulk catalog import pipeline
@@ -180,6 +181,40 @@ Codes are normalized to uppercase, percentage discounts are constrained to
 0.01–100, and optional start/end dates must form a valid window. Admin writes
 are recorded as `COUPON_CREATED` or `COUPON_UPDATED` audit events. Coupons are
 deactivated rather than deleted so order history remains intact.
+
+## Admin listing management
+
+`admin-listings` backs the admin console's Listings page. All routes are
+`ADMIN`-only except the public photo read:
+
+- `GET /admin/listings` — paged offer search (title, MPN, SKU, offer or part
+  ID; seller and status filters).
+- `PATCH /admin/listings/:offerId` — buyer price, `shippingCost` override and
+  status. A price edit keeps seller cost/proceeds and recomputes
+  `marketplaceFee`; a later seller-wide reprice (`PricingService.repriceSeller`)
+  recomputes price from `sellerBasePrice` and will overwrite it.
+- `POST /admin/listings` — creates a `CanonicalPart` (with a `BRAND_MPN` part
+  number, slug and `READY` classification), a `SellerOffer`
+  (`sourceKey` `ADMIN_MANUAL:<uuid>`) and one `Inventory` row on the seller's
+  first warehouse.
+- `POST /admin/listings/images` — multipart `files` (≤8 × 8 MB, JPEG/PNG/WebP
+  checked by magic bytes). Files are written to
+  `$ENRICHMENT_MEDIA_DIR/listing-uploads/<uuid>.<ext>` on the persistent
+  `enrichment_media` volume and returned as `/api/listing-images/<file>`,
+  which `GET /listing-images/:file` serves with immutable caching.
+
+Every write records `LISTING_CREATED` / `LISTING_UPDATED` audit events and
+re-syncs search (outbox + live index) and the buyer cache.
+
+### Per-listing shipping override
+
+`SellerOffer.shippingCost` (AED, per unit) is optional. `null` keeps the
+weight/destination quote; `0` is free shipping. `ShippingService` quotes the
+remaining lines of a seller shipment normally and adds the fixed charges, so
+mixed shipments work. The destination must still be supported (UAE or an EMX
+rate-sheet country) and restricted items still go to specialist review. The
+PDP estimate (`GET /search/parts/:id/shipping-quote`) uses the lowest-priced
+active offer's override.
 
 ## Admin Stripe Payment Links
 

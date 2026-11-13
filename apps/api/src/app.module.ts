@@ -25,6 +25,7 @@ import { ContentModule } from './modules/content/content.module';
 import { DiscountCouponModule } from './modules/discount-coupon/discount-coupon.module';
 import { PaymentLinkModule } from './modules/payment-links/payment-link.module';
 import { RealtrackPublishModule } from './modules/realtrack-publish/realtrack-publish.module';
+import { AdminListingsModule } from './modules/admin-listings/admin-listings.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { RealtrackPublishModule } from './modules/realtrack-publish/realtrack-pu
     DiscountCouponModule,
     PaymentLinkModule,
     RealtrackPublishModule,
+    AdminListingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

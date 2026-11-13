@@ -36,6 +36,21 @@ The lifecycle is `PROCESSING` → `SHIPPED` → `DELIVERED`; cancellation is
 available before shipment. The API remains authoritative for transition
 validation and audit logging, so the UI cannot bypass the workflow.
 
+## Listings
+
+`/listings` is an admin-only workspace for any seller's offers. Search by
+title, part number, SKU or listing ID and filter by seller and status. Each
+row edits the buyer price (in the listing's currency), a fixed shipping charge
+per item in AED (blank = calculated at checkout from weight and destination,
+0 = free) and the status, then saves through `PATCH /admin/listings/:offerId`.
+
+**New listing** creates a custom listing for a chosen seller: title, brand,
+part number, OE numbers, category, part type, condition, price and currency,
+optional shipping, stock quantity, weight, description and up to 12 photos.
+Photos upload immediately to the API, and the first photo is the main image.
+A listing saved as Active with stock appears on the storefront straight away.
+See [[api]] "Admin listing management".
+
 ## Coupon management
 
 `/coupons` is an admin-only promotion workspace. It lists existing percentage

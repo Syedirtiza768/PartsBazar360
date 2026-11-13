@@ -247,3 +247,14 @@ facets when the catalog has no classified groups. Fallback links use `/parts/cat
 legacy or uncategorized inventory does not lead to empty system pages; the synthetic `Other` group is
 not shown in the navigation rail. Compatibility tables omit source/verification labels and the
 fitment badges are suppressed for check and unknown states so the UI does not show a warning pill.
+
+## Order tracking on purchase details
+
+`/account/purchases/[id]` starts from the device-local order snapshot, then
+fetches `GET /checkout/orders/:id` for live status. Signed-in buyers use their
+bearer token. A guest can use the checkout session and token, but only in the
+same browser tab: the order snapshot now stores `checkoutSessionId`, and the
+token is in `sessionStorage`. The **Shipments & tracking** panel shows each
+shipment's status, carrier, tracking ID and an http(s) **Track shipment**
+link. Guests who can't fetch it see a prompt to sign in; tracking also goes
+out by SMS and email when staff save it.

@@ -16,6 +16,7 @@ import {
   FileTextIcon,
   TagIcon,
   CreditCardIcon,
+  PackageIcon,
 } from "@repo/ui/icons";
 import { getStaffHomePath, useAdminAuth } from "@/lib/auth-context";
 
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: GridIcon,
     matchPrefix: true,
   },
+  { label: "Listings", href: "/listings", icon: PackageIcon, matchPrefix: true },
   { label: "Sellers", href: "/sellers", icon: StoreIcon, matchPrefix: true },
   { label: "Coupons", href: "/coupons", icon: TagIcon, matchPrefix: true },
   {
@@ -88,7 +90,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
       : isPlatformAdmin
         ? NAV_ITEMS
         : NAV_ITEMS.filter(
-            (item) => item.href !== "/coupons" && item.href !== "/payment-links",
+            (item) =>
+              item.href !== "/coupons" &&
+              item.href !== "/payment-links" &&
+              item.href !== "/listings",
           );
 
   useEffect(() => {

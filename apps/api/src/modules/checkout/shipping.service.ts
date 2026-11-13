@@ -67,6 +67,19 @@ export interface ShippingQuoteItem {
   weightSource?: WeightSource | string | null;
   partClassKey?: string | null;
   requiresSpecialHandling?: boolean;
+  /**
+   * Staff-set fixed shipping charge per unit, in AED (SellerOffer.shippingCost).
+   * null/undefined keeps the weight-based quote; 0 means free shipping.
+   */
+  fixedShippingAed?: number | null;
+}
+
+function hasFixedShipping(item: ShippingQuoteItem): boolean {
+  return (
+    typeof item.fixedShippingAed === 'number' &&
+    Number.isFinite(item.fixedShippingAed) &&
+    item.fixedShippingAed >= 0
+  );
 }
 
 /** Only explicit catalog restriction flags trigger this block; title keywords do not. */
@@ -155,6 +168,51 @@ export class ShippingService {
     const chargeableItems = items.filter(
       (item) => item.canonicalPartId !== PAYMENT_TEST_PART_ID,
     );
+
+    // Listings with a staff-set shipping charge skip the weight calculation:
+    // quote the remaining lines normally, then add the fixed charges. The
+    // destination must still be one we ship to, and restricted items still
+    // need a specialist review.
+    const fixedItems = chargeableItems.filter(hasFixedShipping);
+    if (
+      fixedItems.length > 0 &&
+      !chargeableItems.some((item) => item.requiresSpecialHandling)
+    ) {
+      const base = this.quoteSellerShipping(
+        chargeableItems.filter((item) => !hasFixedShipping(item)),
+        destinationCountry,
+      );
+      const supported =
+        this.isUae(countryKey) || this.rowsByCountry.has(countryKey);
+      if (!supported) {
+        return {
+          ...base,
+          serviceType: 'UNAVAILABLE',
+          leadTime: null,
+          matchedCountry: false,
+          available: false,
+          availabilityReason: 'DESTINATION_UNSUPPORTED',
+          amount: 0,
+        };
+      }
+      if (!base.available) return base;
+      const fixedAmount = fixedItems.reduce(
+        (sum, item) =>
+          sum +
+          (item.fixedShippingAed as number) *
+            Math.max(1, Number.isFinite(item.quantity) ? item.quantity : 1),
+        0,
+      );
+      return {
+        ...base,
+        serviceType:
+          base.serviceType === 'FREE'
+            ? 'LISTING SHIPPING'
+            : `${base.serviceType} + LISTING SHIPPING`,
+        amount: this.round(base.amount + fixedAmount),
+      };
+    }
+
     const resolved = this.resolveWeights(chargeableItems);
 
     const row = this.rowsByCountry.get(countryKey);

@@ -374,6 +374,8 @@ model SellerOffer {
   moq                  Int       @default(1)
   leadTimeDays         Int?
   deliveryMethod       String?
+  /// Fixed per-unit shipping charge in AED set by staff; null = weight/destination quote, 0 = free shipping.
+  shippingCost         Float?
   warranty             String?
   returnPolicy         String?
   sellerNotes          String?

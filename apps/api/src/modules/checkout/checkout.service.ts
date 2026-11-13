@@ -2402,6 +2402,7 @@ export class CheckoutService {
   private toShippingItem(item: {
     quantity: number;
     sellerOffer: {
+      shippingCost?: number | null;
       canonicalPart?: {
         id?: string | null;
         weight?: number | null;
@@ -2428,6 +2429,7 @@ export class CheckoutService {
           category: part?.category ?? null,
         }),
       requiresSpecialHandling: partRequiresSpecialHandling(part?.itemSpecifics),
+      fixedShippingAed: item.sellerOffer.shippingCost ?? null,
     };
   }
 
