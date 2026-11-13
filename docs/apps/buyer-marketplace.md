@@ -1,7 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-10-02
-**Last reviewed:** 2026-10-25
+**Last reviewed:** 2026-11-13
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -72,8 +71,11 @@ delivery to most countries.
 The public blog is published-only: /blog and /blog/<slug> consume GET
 /blog/posts and GET /blog/posts/<slug>. The admin portal's /blog CMS uses
 authenticated admin CRUD endpoints to create drafts, edit slugs/content/SEO
-fields, preview, publish, and delete posts. Blog bodies are stored as text with
-limited heading/list rendering; arbitrary HTML is never injected.
+fields, preview, publish, and delete posts. Blog bodies are stored as text.
+The storefront renders simple headings, lists, and inline `[label](/path/)`
+links as HTML elements. The shared blog-link parser accepts root-relative
+paths and PartsBazar360 URLs, preserves queries and fragments, and displays
+unsupported markup as text.
 
 ## 2026-10-09 buyer evidence and delivery states
 

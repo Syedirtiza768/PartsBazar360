@@ -1,6 +1,6 @@
 # admin-portal
 
-**Last reviewed:** 2026-10-27
+**Last reviewed:** 2026-11-13
 
 Internal admin console. Lives at `apps/admin-portal`, Next.js, dev port 3000 (same caveat as [[seller-portal]] re: port conflicts when running multiple apps locally).
 
@@ -23,6 +23,11 @@ admin navigation or pages. Provision them with the API image's
 `seed:seo-editor` command using explicit `SEO_EDITOR_EMAIL` and
 `SEO_EDITOR_PASSWORD` environment variables; the normal marketplace seed does
 not create or reset the account unless `SEED_SEO_EDITOR_PASSWORD` is supplied.
+
+In Content, select text and choose **Add or edit internal link**. Enter a
+PartsBazar360 URL or a site-relative path such as `/buyer/search/`. Place the
+cursor inside an existing link and open the same control to update or remove
+it. Save the draft or publish the post to apply the edit.
 
 The Orders detail page shows each seller shipment independently. Admins and
 fulfillment operators can select only the next valid delivery state, update a
