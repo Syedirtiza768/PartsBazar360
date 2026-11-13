@@ -7,7 +7,7 @@
  * - Superior Auto Parts  ← spreadsheet uploads only (no RealTrack store)
  */
 
-export const SALVAGE_STORE_ID = '3b84b063-3811-481f-a61d-f7846a03558f';
+export const SALVAGE_STORE_ID = '1ee76e27-7da8-4429-9cc7-0ee8be42c880';
 export const BLACKLINE_STORE_ID = 'd16199c4-55b5-429e-ad27-892bed94e00d';
 export const SUPERIOR_REALTRACK_STORE_ID =
   'c6e35671-50d4-4920-a5f7-8dc870a157c7';

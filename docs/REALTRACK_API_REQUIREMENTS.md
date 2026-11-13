@@ -1,19 +1,28 @@
 # RealTrack API — Requirements for PartsBazar360 Marketplace Populate
 
-**Date:** 2026-07-23  
+**Original baseline date:** 2026-07-23
 **Audience:** RealTrack platform / Published Listings Sync owners  
 **Consumer:** PartsBazar360 (`api-published-listings@realtrack.local`)  
-**Base URL:** `https://mhn.realtrackapp.com/api`  
+**Base URL:** `https://app.omnicoreholding.com/api`
 **Priority stores for marketplace:**
 
 | Seller on PartsBazar | RealTrack storeId | storeSlug (if any) |
 |----------------------|-------------------|--------------------|
 | Blackline Auto Parts | `d16199c4-55b5-429e-ad27-892bed94e00d` | `blacklineusedautoparts` |
-| Salvage Auto Parts | `3b84b063-3811-481f-a61d-f7846a03558f` (US SalvageA) | — |
+| Salvage Auto Parts | `1ee76e27-7da8-4429-9cc7-0ee8be42c880` | — |
 | (legacy reference) K. Salvage Auto Parts | `eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0` | — |
 
 ---
 
+## Current production reconciliation — 2026-11-06
+
+The current RealTrack API origin is `https://app.omnicoreholding.com/api`. The current US store map is Blackline `d16199c4-55b5-429e-ad27-892bed94e00d` and Salvage `1ee76e27-7da8-4429-9cc7-0ee8be42c880`. The July 2026 reference to SalvageA store `3b84b063-3811-481f-a61d-f7846a03558f` is historical and superseded.
+
+The attached US Seller Hub data left 113 eBay item IDs without RealTrack listing mirrors. On 2026-11-06, those exact IDs were checked against eBay's US Motors Browse API and added as listing mirrors: 111 Blackline and 2 Salvage. All 113 returned `IN_STOCK`; current price and available quantity matched the supplied snapshot. The insert changed no physical stock or order rows.
+
+The P360 connection and store-map repair is prepared in an isolated release; runtime credential provisioning and per-store API verification remain pending. Do not run a full P360 store sync until one read-only page has been verified for each current seller; full sync can change offer visibility for missing feed rows.
+
+---
 ## 1. Diagnosis — why Blackline / Salvage look “empty”
 
 Probed live on **2026-07-22** with the Published Listings Reader account (`published_listings.view` only). Auth and org membership are healthy.
@@ -81,7 +90,7 @@ Please treat these as P0 before PartsBazar re-seeds:
 
 1. **Restore / re-run `PublishedListingsSyncService` for:**
    - `d16199c4-55b5-429e-ad27-892bed94e00d` (BLACKLINEAUTOPARTS)
-   - `3b84b063-3811-481f-a61d-f7846a03558f` (US SalvageA) — active listings
+   - `1ee76e27-7da8-4429-9cc7-0ee8be42c880` (Salvage Auto Parts) — active US listings
    - Optionally `eed3dbd6-9967-43ac-ad4e-6d5081cfb9b0` (K. Salvage) if still a source of truth
 2. Confirm each store’s **eBay account token** is valid and Inventory/Trading sync is succeeding (not only writing `ended` rows).
 3. Confirm expected active counts (contract: K. Salvage alone was ~71k; Blackline historically tens of thousands).
@@ -94,7 +103,7 @@ Please treat these as P0 before PartsBazar re-seeds:
 GET /published-listings?storeId=d16199c4-55b5-429e-ad27-892bed94e00d&page=1&limit=1
 → total > 0, listingStatus=active for the majority of inventory
 
-GET /published-listings?storeId=3b84b063-3811-481f-a61d-f7846a03558f&page=1&limit=1
+GET /published-listings?storeId=1ee76e27-7da8-4429-9cc7-0ee8be42c880&page=1&limit=1
 → total > 0 active (not only status=ended)
 ```
 
@@ -259,8 +268,8 @@ Document `storeAccessAll` and keep SalvageA (`3b84b063-…`) in the connected-st
 GET /published-listings?storeId=d16199c4-55b5-429e-ad27-892bed94e00d&limit=1
 expect: total > 0
 
-# 2) SalvageA active inventory restored
-GET /published-listings?storeId=3b84b063-3811-481f-a61d-f7846a03558f&limit=1
+# 2) Salvage Auto Parts active US inventory
+GET /published-listings?storeId=1ee76e27-7da8-4429-9cc7-0ee8be42c880&limit=1
 expect: total > 0  (status default/active)
 
 # 3) Global total sane

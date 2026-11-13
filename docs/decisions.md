@@ -1,6 +1,17 @@
 # Decision log
 
-**Last reviewed:** 2026-10-27
+**Last reviewed:** 2026-11-13
+
+## 2026-11-06 — Use the current RealTrack US feed origin and store IDs
+
+**Status 2026-11-13:** Merged to `main` but not deployed. The existing read-only feed account returns 401 on the new origin, and the server `.env` has no `REALTRACK_API_EMAIL` / `REALTRACK_API_PASSWORD` yet. Compose no longer carries the credential that was previously committed in plain text, so the next deploy needs those two values in `.env` first, and the old value should be rotated.
+
+**Decision:** The prepared release routes the marketplace reader and worker to https://app.omnicoreholding.com/api and uses the current Salvage US mapping 1ee76e27-7da8-4429-9cc7-0ee8be42c880; Blackline remains d16199c4-55b5-429e-ad27-892bed94e00d. Apply the read-only feed credentials through protected runtime config, then verify one page for each store before running any full sync.
+
+**Why:** The former `mhn.realtrackapp.com` host no longer resolves, and the former SalvageA mapping points at a stale store. A successful read-only feed check for each seller is a prerequisite to any full sync because the sync can change which offers remain visible.
+
+**Revisit when:** RealTrack publishes a versioned, stable marketplace-store discovery API or the current US store ownership changes.
+
 
 ## 2026-11-10 — Production reconciled into git; MVL identity matches are LIKELY, not CONFIRMED
 

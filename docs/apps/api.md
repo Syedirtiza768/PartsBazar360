@@ -1,7 +1,6 @@
 # api
 
-**Last reviewed:** 2026-10-27
-**Last reviewed:** 2026-09-29
+**Last reviewed:** 2026-11-13
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -487,7 +486,7 @@ unrelated same-SKU variants. The configured report scopes are:
 | Scope | Seller | RealTrack store | Report environment variable | Offer source tag |
 | --- | --- | --- | --- | --- |
 | `BLK` | Blackline Auto Parts | `d16199c4-55b5-429e-ad27-892bed94e00d` | `BLACKLINE_FILE` | `BLK` |
-| `SAL` | Salvage Auto Parts | `3b84b063-3811-481f-a61d-f7846a03558f` | `SALVAGE_FILE` | `SAL` |
+| `SAL` | Salvage Auto Parts | `1ee76e27-7da8-4429-9cc7-0ee8be42c880` (was SalvageA `3b84b063-…` before 2026-11-13) | `SALVAGE_FILE` | `SAL` |
 | `STX` | Superior Auto Parts | `c6e35671-50d4-4920-a5f7-8dc870a157c7` | `SUPERIOR_FILE` | `STX` |
 
 The job is dry-run by default. `CONFIRM=1` is required to import missing or
@@ -522,6 +521,16 @@ upload image binaries, so RealTrack and PartsBazar can continue referencing the
 same shared S3 objects without redundant copies. Long runs belong in the
 dedicated worker/background container and should be started through the
 repository deployment workflow.
+
+**Current US listing-sync configuration (reviewed 2026-11-06, status 2026-11-13):**
+
+- 2026-11-13 status: `mhn.realtrackapp.com` no longer resolves, so production listing sync was failing with `Authentication error: fetch failed`. On `app.omnicoreholding.com` the existing read-only feed account gets **401** at `/auth/login`. Provision working feed credentials as `REALTRACK_API_EMAIL` / `REALTRACK_API_PASSWORD` in the server `.env` **before** deploying this configuration; Compose no longer carries a credential fallback.
+
+- The isolated repair release targets https://app.omnicoreholding.com/api through REALTRACK_API_URL and REALTRACK_BRIDGE_API_URL. Production runtime provisioning and per-store verification are still pending.
+- Supply REALTRACK_API_EMAIL and REALTRACK_API_PASSWORD through the protected server .env for the read-only listing feed; keep credential values out of Compose and source control.
+- The marketplace sync map is limited to Blackline US (`d16199c4-55b5-429e-ad27-892bed94e00d`) and Salvage US (`1ee76e27-7da8-4429-9cc7-0ee8be42c880`). The former SalvageA ID from the July baseline is superseded.
+- The bridge falls back to the read-only feed account when no `REALTRACK_BRIDGE_EMAIL` / `REALTRACK_BRIDGE_PASSWORD` override is configured. Bridge writes and optional eBay publishing still require a separately authorized account with `listings.create` and `ebay.publish`.
+- Verify one read-only feed page for each current store before any full marketplace sync. The full sync can change offer visibility for listings missing from the feed.
 
 ## RealTrack listing bridge
 

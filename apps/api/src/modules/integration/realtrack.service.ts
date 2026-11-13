@@ -21,7 +21,7 @@ export interface FetchListingsResult {
 export class RealTrackService {
   private readonly logger = new Logger(RealTrackService.name);
   private readonly baseUrl = (
-    process.env.REALTRACK_API_URL || 'https://mhn.realtrackapp.com/api'
+    process.env.REALTRACK_API_URL || 'https://app.omnicoreholding.com/api'
   ).replace(/\/$/, '');
   private readonly email = process.env.REALTRACK_API_EMAIL;
   private readonly password = process.env.REALTRACK_API_PASSWORD;
