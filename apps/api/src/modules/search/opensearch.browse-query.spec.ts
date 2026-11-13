@@ -56,7 +56,7 @@ describe('browseParts query construction', () => {
 
     const should = calls[0].body.query.bool.must[0].bool.should;
     const numberClause = should.find(
-      (c: any) => c.term?.['normalizedPartNumbers.keyword'],
+      (c: any) => c.term?.['normalizedPartNumbers'],
     );
     // A pasted part number must still resolve on its own, so the outer bool
     // stays at minimum_should_match: 1.
@@ -72,11 +72,11 @@ describe('browseParts query construction', () => {
       const result = await service.browseParts({ q });
       const should = calls[0].body.query.bool.must[0].bool.should;
       const exact = should.find(
-        (clause: any) => clause.term?.['normalizedPartNumbers.keyword'],
+        (clause: any) => clause.term?.['normalizedPartNumbers'],
       );
 
       expect(result.total).toBe(1);
-      exactTerms.push(exact.term['normalizedPartNumbers.keyword'].value);
+      exactTerms.push(exact.term['normalizedPartNumbers'].value);
     }
 
     expect(exactTerms).toEqual(['3W0121064F', '3W0121064F']);
@@ -88,15 +88,15 @@ describe('browseParts query construction', () => {
 
     const should = calls[0].body.query.bool.must[0].bool.should;
     const exact = should.find(
-      (c: any) => c.term?.['normalizedPartNumbers.keyword'],
+      (c: any) => c.term?.['normalizedPartNumbers'],
     );
     const alt = should.find(
-      (c: any) => c.terms?.['normalizedPartNumbers.keyword'],
+      (c: any) => c.terms?.['normalizedPartNumbers'],
     );
-    expect(exact.term['normalizedPartNumbers.keyword'].value).toBe(
+    expect(exact.term['normalizedPartNumbers'].value).toBe(
       'A2115410001',
     );
-    expect(alt.terms['normalizedPartNumbers.keyword']).toEqual(['2115410001']);
+    expect(alt.terms['normalizedPartNumbers']).toEqual(['2115410001']);
   });
 
   it('adds no alternate clause for a number with no other forms', async () => {

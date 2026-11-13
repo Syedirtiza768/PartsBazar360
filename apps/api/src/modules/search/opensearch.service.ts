@@ -486,7 +486,7 @@ export class OpenSearchService implements OnModuleInit {
               },
               {
                 term: {
-                  'normalizedPartNumbers.keyword': normalizePartNumber(query),
+                  'normalizedPartNumbers': normalizePartNumber(query),
                 },
               },
             ],
@@ -642,7 +642,7 @@ export class OpenSearchService implements OnModuleInit {
         // of 1 lets either signal satisfy the query on its own.
         {
           term: {
-            'normalizedPartNumbers.keyword': {
+            'normalizedPartNumbers': {
               value: normalizePartNumber(qq),
               boost: 60,
               _name: 'primary',
@@ -656,7 +656,7 @@ export class OpenSearchService implements OnModuleInit {
       if (altNumbers.length) {
         should.push({
           terms: {
-            'normalizedPartNumbers.keyword': altNumbers,
+            'normalizedPartNumbers': altNumbers,
             boost: 40,
             _name: 'primary',
           },
@@ -665,7 +665,7 @@ export class OpenSearchService implements OnModuleInit {
       if (includeInterchange) {
         should.push({
           term: {
-            'interchangePartNumbers.keyword': {
+            'interchangePartNumbers': {
               value: normalizePartNumber(qq),
               boost: 25,
               _name: 'interchange',
@@ -1203,7 +1203,7 @@ export class OpenSearchService implements OnModuleInit {
                       ...textClauses,
                       {
                         term: {
-                          'normalizedPartNumbers.keyword': {
+                          'normalizedPartNumbers': {
                             value: normalized,
                             boost: 80,
                           },
@@ -1211,7 +1211,7 @@ export class OpenSearchService implements OnModuleInit {
                       },
                       {
                         term: {
-                          'interchangePartNumbers.keyword': {
+                          'interchangePartNumbers': {
                             value: normalized,
                             boost: 45,
                           },
