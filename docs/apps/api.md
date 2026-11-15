@@ -786,10 +786,18 @@ Production activation uses API and worker environment settings in
 - `ADVERTISING_META_TEST_CODE` and `ADVERTISING_TIKTOK_TEST_CODE` are for the
   isolated test rollout. Clear them before ordinary live delivery.
 
-Apply the additive Prisma migration through the normal `update.sh` release,
-with the API and worker on the same revision. Before enabling, verify both
-destinations and automatic tracking settings, the current catalog mapping,
-and account permissions. Compare provider Test Events before and after
+Deploy through `update.sh` with the API and worker on the same revision.
+Production used `SCHEMA_MODE=skip` on 2026-11-15, so the API entrypoint skipped
+schema migrations. In that mode, check the pending list with
+`prisma migrate status`. Apply the release migrations from the running API service using
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.private-images.yml exec -T api ./node_modules/.bin/prisma migrate deploy
+```
+
+Verify that the advertising migration is recorded before enabling delivery.
+Verify both destinations and automatic tracking settings, the current catalog
+mapping, and account permissions. Compare provider Test Events before and after
 repeated actions. Check the worker's non-identifying delivery results independently
 from dashboard deduplication.
 
