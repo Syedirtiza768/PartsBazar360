@@ -1,7 +1,9 @@
 "use client";
 
+import { trackAdvertising } from "@/lib/advertising";
+
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   getCountries,
   getCountryCallingCode,
@@ -422,6 +424,10 @@ function CheckoutContent() {
     paymentProvider === "tamara" && selectedTamaraMarket
       ? selectedTamaraMarket.currency
       : displayCurrency;
+  const checkoutCurrencyRef = useRef(checkoutCurrency);
+  useEffect(() => {
+    checkoutCurrencyRef.current = checkoutCurrency;
+  }, [checkoutCurrency]);
 
   const {
     quote: shippingQuote,
@@ -552,8 +558,13 @@ function CheckoutContent() {
       country: getShippingCountry(),
     };
     setForm(initial);
-    void createCheckoutSession(cart.id, toCheckoutDraft(initial, "stripe", ""))
-      .then(({ checkoutSessionId: sessionId, otpRequired: requiresOtp }) => {
+    void createCheckoutSession(
+      cart.id,
+      toCheckoutDraft(initial, "stripe", ""),
+      checkoutCurrencyRef.current,
+    )
+      .then(({ checkoutSessionId: sessionId, otpRequired: requiresOtp, advertising }) => {
+        if (advertising) trackAdvertising(advertising, { once: true });
         if (cancelled) return;
         const key = crypto.randomUUID();
         const nextOtpRequired = requiresOtp ?? !CHECKOUT_OTP_BYPASS;
@@ -1676,7 +1687,7 @@ function CheckoutContent() {
                       , so we price them manually instead of charging an
                       automatic rate.{" "}
                       <Link
-                        href={`/support?subject=${encodeURIComponent("Freight quote request")}`}
+                        href={`/support?category=FREIGHT_QUOTE&subject=${encodeURIComponent("Freight quote request")}`}
                         className="font-semibold underline underline-offset-2"
                       >
                         Request a freight quote
@@ -1701,7 +1712,7 @@ function CheckoutContent() {
                         : "We don't have a priced delivery service for this destination. Request a shipping quote before ordering."}
                     </p>
                     <Link
-                      href={`/support?subject=${encodeURIComponent("Shipping quote request")}`}
+                      href={`/support?category=FREIGHT_QUOTE&subject=${encodeURIComponent("Shipping quote request")}`}
                       className="mt-2 inline-flex font-semibold underline underline-offset-2"
                     >
                       Request a shipping quote

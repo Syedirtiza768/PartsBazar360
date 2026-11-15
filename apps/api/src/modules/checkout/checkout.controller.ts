@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  Optional,
   Patch,
   Post,
   Query,
@@ -38,6 +39,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CHARGE_CURRENCIES } from './currency.util';
 import type { TamaraWebhookPayload } from './tamara.service';
 import { CheckoutIdentityService } from './checkout-identity.service';
+import { AdvertisingService } from '../advertising/advertising.service';
 
 class CheckoutDto {
   @IsOptional()
@@ -149,6 +151,10 @@ class CheckoutValidationDto {
 
 class CheckoutSessionDto {
   @IsOptional()
+  @IsIn([...CHARGE_CURRENCIES])
+  chargeCurrency?: string;
+
+  @IsOptional()
   @IsObject()
   draft?: Record<string, unknown>;
 }
@@ -198,14 +204,22 @@ export class CheckoutController {
     private readonly checkoutService: CheckoutService,
     private readonly identity: CheckoutIdentityService,
     private readonly auth: AuthService,
+    @Optional() private readonly advertising?: AdvertisingService,
   ) {}
 
   @Post(':cartId/session')
-  createCheckoutSession(
+  async createCheckoutSession(
     @Param('cartId') cartId: string,
     @Body() body: CheckoutSessionDto,
+    @Req() req: Request,
   ) {
-    return this.identity.createSession(cartId, body.draft);
+    const context = await this.advertising?.context(req);
+    return this.identity.createSession(
+      cartId,
+      body.draft,
+      context,
+      body.chargeCurrency,
+    );
   }
 
   @Patch('sessions/:sessionId/draft')
@@ -272,16 +286,21 @@ export class CheckoutController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-checkout-session') checkoutSessionId: string | undefined,
     @Headers('x-checkout-token') checkoutToken: string | undefined,
+    @Req() req: Request,
   ) {
     const accountToken = authorization?.replace(/^Bearer\s+/i, '').trim();
     const userId = accountToken
       ? this.auth.verifyToken(accountToken).sub
       : undefined;
-    return this.checkoutService.getCustomerOrder(orderId, {
-      userId,
-      checkoutSessionId,
-      checkoutToken,
-    });
+    return this.checkoutService.getCustomerOrder(
+      orderId,
+      {
+        userId,
+        checkoutSessionId,
+        checkoutToken,
+      },
+      req,
+    );
   }
 
   /** Stripe-hosted Checkout webhook — card data never touches our servers. */

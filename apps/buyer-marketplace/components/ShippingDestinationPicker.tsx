@@ -28,7 +28,7 @@ export function ShippingDestinationPicker({
           <span className="font-semibold text-slate-800">Oversized item</span> —
           this ships as freight rather than courier.{" "}
           <Link
-            href={`/support?partId=${part.id}&subject=${encodeURIComponent(
+            href={`/support?partId=${part.id}&category=FREIGHT_QUOTE&subject=${encodeURIComponent(
               `Freight quote request: ${part.title}`,
             )}`}
             className="font-semibold text-brand-600 hover:text-brand-700"

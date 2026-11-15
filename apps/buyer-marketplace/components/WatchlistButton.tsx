@@ -5,6 +5,8 @@ import { cn } from "@repo/ui/cn";
 import { useWatchlist } from "@/lib/watchlist-context";
 import { useToast } from "@/lib/toast-context";
 import type { Part } from "@/lib/types";
+import { buyerVisibleOffers } from "@/lib/format";
+import { trackAdvertising } from "@/lib/advertising";
 
 export function WatchlistButton({
   part,
@@ -28,6 +30,17 @@ export function WatchlistButton({
         event.preventDefault();
         event.stopPropagation();
         const added = toggle(part);
+        if (added) {
+          const offer = buyerVisibleOffers(part.offers)[0];
+          if (offer?.currency) {
+            const price = Number(offer.price);
+            trackAdvertising({
+              name: "AddToWishlist", id: crypto.randomUUID(),
+              currency: offer.currency.toUpperCase(), value: price,
+              items: [{ partId: part.id, offerId: offer.id, name: part.title, price, quantity: 1 }],
+            });
+          }
+        }
         push({
           title: added ? "Added to watchlist" : "Removed from watchlist",
           description: added ? "We will keep this listing easy to find." : undefined,

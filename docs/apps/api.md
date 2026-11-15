@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-11-13
+**Last reviewed:** 2026-11-15
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -744,3 +744,56 @@ The active-catalog rebuild deletes and recreates `canonical_parts` with text fie
 `makes`, `conditions`, and `sourceTags`). It reads only canonical parts with an ACTIVE offer from
 an ACTIVE seller, indexes bounded batches with `WORKERS`/`REINDEX_WORKERS` (capped at 16), refreshes
 once, and compares the final OpenSearch count to the Postgres eligible count.
+
+## Advertising delivery
+
+A consent record is referenced by an HTTP-only cookie and expires in 90 days.
+GET /advertising/consent exposes only readiness and consent state.
+POST /advertising/consent requires the storefront origin. Withdrawal closes
+pending deliveries and removes saved checkout attribution for the grant.
+
+The cart, checkout and freight ticket write paths add provider-specific rows to
+AdvertisingDelivery under a savepoint. A conversion can continue without
+tracking if advertising capture fails. The paid-order producer is inside the
+common Stripe/Tamara payment transition after it claims the first successful
+payment. AdvertisingCheckout keeps the consent reference and allowed
+attribution for up to seven days. The worker rechecks consent before send,
+claims a short lease, retries bounded transient failures, and checks provider
+response bodies. IDs are unique per provider and event. The paid confirmation
+uses the same recorded event only with the matching active grant, within the
+delivery age limit and after account or checkout-token authorization. Terminal
+records lose attribution immediately and are pruned after two days.
+
+Production activation uses API and worker environment settings in
+`docker-compose.yml`:
+
+- `ADVERTISING_ENABLED=1` after the consent and policy review.
+- `ADVERTISING_META_TOKEN` and `ADVERTISING_TIKTOK_TOKEN` from the approved
+  production secret channel into the worker only. Use a fresh TikTok token.
+- Set ADVERTISING_META_CONFIGURED=1 or ADVERTISING_TIKTOK_CONFIGURED=1 on the
+  deployment after validating the corresponding worker token and catalog.
+- `ADVERTISING_META_VERSION` with a supported Graph API version verified in the
+  destination's Test Events.
+- `ADVERTISING_META_CATALOG_KEY` and `ADVERTISING_TIKTOK_CATALOG_KEY` set to
+  `partId` or `offerId` only after verifying actual feed records. A different
+  catalog ID shape needs an explicit mapping before launch.
+- `ADVERTISING_META_CURRENCIES` and `ADVERTISING_TIKTOK_CURRENCIES` with verified
+  uppercase, comma-separated codes. A destination skips unmapped item events or
+  unsupported totals.
+- `ADVERTISING_TRUST_NGINX=1` only after confirming the API is reached through
+  Nginx and its overwritten `X-Real-IP` is the visitor address. The default
+  omits IP. The worker never uses its own IP as visitor metadata.
+- `ADVERTISING_META_TEST_CODE` and `ADVERTISING_TIKTOK_TEST_CODE` are for the
+  isolated test rollout. Clear them before ordinary live delivery.
+
+Apply the additive Prisma migration through the normal `update.sh` release,
+with the API and worker on the same revision. Before enabling, verify both
+destinations and automatic tracking settings, the current catalog mapping,
+and account permissions. Compare provider Test Events before and after
+repeated actions. Check the worker's non-identifying delivery results independently
+from dashboard deduplication.
+
+Rollback delivery by setting `ADVERTISING_ENABLED=0` and applying the supported
+deployment workflow to reload API and worker configuration. For an application
+regression, revert the release commit and deploy that reviewed reversal through
+`update.sh`. The additive advertising tables can remain in place.

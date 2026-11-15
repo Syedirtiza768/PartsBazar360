@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-11-13
+**Last reviewed:** 2026-11-15
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -258,3 +258,48 @@ token is in `sessionStorage`. The **Shipments & tracking** panel shows each
 shipment's status, carrier, tracking ID and an http(s) **Track shipment**
 link. Guests who can't fetch it see a prompt to sign in; tracking also goes
 out by SMS and email when staff save it.
+
+## Meta and TikTok advertising measurement
+
+The storefront used a direct Meta PageView for pixel 873024462353915. The new
+integration removes that tag and adds consent-gated Meta 1629408292294202 and
+TikTok DBS6C7RC77U657ENO7K0. The GA4 ecommerce data layer and GTM container
+remain in the storefront. Before cutover, inspect GTM and each Events Manager
+for automatic or overlapping rules and retire any old storefront copies there.
+
+Advertising is disabled by default. The footer offers an explicit, revocable
+choice only when a destination is configured. The APIs and the browser both
+honor that choice. The browser loads the SDKs within a same-origin frame using
+query-free section paths, without sending checkout-return parameters, product
+slugs, or raw referrers. Search terms suggesting phone numbers, email addresses
+or VINs are omitted. Automatic capture and advanced matching settings in the
+ad accounts must be reviewed against the approved consent policy before
+activation. Customer phone, email, name, and address are excluded from this
+integration, including from hashed matching.
+
+| Browser event | Source | Server copy |
+|---|---|---|
+| PageView | Initial eligible load and committed storefront navigation | |
+| ViewContent | Loaded product and visible offer, once on the product view | |
+| Search | Loaded results for a submitted, eligible query | |
+| AddToCart | Successful API mutation receipt | Yes |
+| InitiateCheckout | New checkout-session receipt with cart contents | Yes |
+| Purchase | Recent paid-order receipt tied to the same consent grant | Yes |
+| AddToWishlist | Successful watchlist add | |
+| Lead | Accepted freight support request | Yes |
+| Contact | Accepted Ask about this part ticket, or phone/WhatsApp activation | |
+| EbayStoreClick | Designated eBay store link | |
+
+The part-page freight links and checkout freight links preselect the freight
+category. Ask about this part uses the current support-ticket flow and tracks
+when the ticket is accepted. Product view, wishlist and cart amounts use the
+offer currency. Checkout uses the initial checkout currency and the item
+subtotal. Purchase uses the paid order total (including shipping and discounts)
+and immutable order line quantities and prices.
+
+See [[api#Advertising delivery]] for configuration and rollback. Use the
+approved vendor Test Events procedure before enabling the production flag. Compare browser and server event names and IDs for a successful
+cart add, session, freight quote, and paid order. Check consent rejection and
+withdrawal, repeated cart adds, paid confirmation refresh, and a failed payment
+followed by a successful retry. A browser request and an API acceptance are
+separate from dashboard receipt and provider deduplication.

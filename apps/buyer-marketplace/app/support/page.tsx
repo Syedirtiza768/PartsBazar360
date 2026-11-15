@@ -14,11 +14,14 @@ import {
   TagIcon,
 } from "@repo/ui/icons";
 import { API_BASE_URL } from "@/lib/api";
+import { trackAdvertising, type AdvertisingEvent, type AdvertisingItem } from "@/lib/advertising";
 
 interface TicketResult {
   id: string;
   status: string;
   priority: string;
+  advertising?: AdvertisingEvent;
+  advertisingContact?: { id: string; item?: AdvertisingItem };
 }
 
 const CATEGORIES = [
@@ -66,6 +69,7 @@ function SupportForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          source: searchParams.get("source") === "ask-part" ? "ask-part" : undefined,
           orderId: form.orderId || undefined,
           canonicalPartId: form.canonicalPartId || undefined,
           estimatedWeightKg: form.estimatedWeightKg.trim()
@@ -75,7 +79,15 @@ function SupportForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not create support ticket.");
-      setResult(data);
+      const ticket = data as TicketResult;
+      if (ticket.advertising) trackAdvertising(ticket.advertising, { once: true });
+      if (ticket.advertisingContact) {
+        const { id, item } = ticket.advertisingContact;
+        trackAdvertising({
+          name: "Contact", id, contact: "seller_message", items: item ? [item] : undefined,
+        });
+      }
+      setResult(ticket);
       setForm((prev) => ({ ...prev, message: "" }));
       window.scrollTo({ top: 0 });
     } catch (err: unknown) {

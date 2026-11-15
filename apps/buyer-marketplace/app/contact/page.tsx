@@ -90,7 +90,7 @@ export default function ContactPage() {
                 Phone Number
               </dt>
               <dd className="mt-0.5 text-sm font-semibold text-slate-900">
-                <a href="tel:+971564974989" className="hover:text-brand-600">
+                <a data-pb-ad="phone" href="tel:+971564974989" className="hover:text-brand-600">
                   +971 56 497 4989
                 </a>
               </dd>

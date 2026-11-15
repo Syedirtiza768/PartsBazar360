@@ -3,7 +3,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { AdvertisingService } from '../advertising/advertising.service';
+import type {
+  AdvertisingContext,
+  Conversion,
+} from '../advertising/advertising-payload';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
@@ -33,22 +40,27 @@ export class SupportService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly audit: AuditService,
+    @Optional() private readonly advertising?: AdvertisingService,
   ) {}
 
-  async createTicket(body: {
-    orderId?: string;
-    sellerOrderId?: string;
-    canonicalPartId?: string;
-    sellerOfferId?: string;
-    customerName?: string;
-    customerEmail: string;
-    category: string;
-    subject: string;
-    message: string;
-    shippingCountry?: string;
-    estimatedWeightKg?: number | string | null;
-    cartSummary?: string;
-  }) {
+  async createTicket(
+    body: {
+      orderId?: string;
+      sellerOrderId?: string;
+      canonicalPartId?: string;
+      sellerOfferId?: string;
+      customerName?: string;
+      customerEmail: string;
+      category: string;
+      subject: string;
+      message: string;
+      shippingCountry?: string;
+      estimatedWeightKg?: number | string | null;
+      cartSummary?: string;
+      source?: string;
+    },
+    context?: AdvertisingContext,
+  ) {
     if (!body.customerEmail?.trim())
       throw new BadRequestException('customerEmail is required');
     if (!body.subject?.trim())
@@ -84,23 +96,95 @@ export class SupportService {
       orderId = order.id;
     }
 
-    const ticket = await this.prisma.supportTicket.create({
-      data: {
-        orderId,
-        sellerOrderId: body.sellerOrderId || null,
-        canonicalPartId: body.canonicalPartId || null,
-        sellerOfferId: body.sellerOfferId || null,
-        customerName: body.customerName || null,
-        customerEmail: body.customerEmail,
-        category: body.category || 'GENERAL',
-        subject: body.subject,
-        message: body.message,
-        priority,
-        shippingCountry: isFreightQuote ? body.shippingCountry || null : null,
-        estimatedWeightKg,
-        cartSummary: isFreightQuote ? body.cartSummary || null : null,
-      },
-    });
+    const create = (db: Prisma.TransactionClient) =>
+      db.supportTicket.create({
+        data: {
+          orderId,
+          sellerOrderId: body.sellerOrderId || null,
+          canonicalPartId: body.canonicalPartId || null,
+          sellerOfferId: body.sellerOfferId || null,
+          customerName: body.customerName || null,
+          customerEmail: body.customerEmail,
+          category: body.category || 'GENERAL',
+          subject: body.subject,
+          message: body.message,
+          priority,
+          shippingCountry: isFreightQuote ? body.shippingCountry || null : null,
+          estimatedWeightKg,
+          cartSummary: isFreightQuote ? body.cartSummary || null : null,
+        },
+      });
+
+    const advertising = this.advertising;
+    const { ticket, conversion, contact } =
+      advertising && context
+        ? await this.prisma.$transaction(async (tx) => {
+            const ticket = await create(tx);
+            const tracking = await advertising.capture(tx, async () => {
+              const partId = ticket.canonicalPartId;
+              if (
+                !isFreightQuote &&
+                (ticket.category !== 'GENERAL' ||
+                  body.source !== 'ask-part' ||
+                  !partId)
+              )
+                return;
+              const offer = partId
+                ? await tx.sellerOffer.findFirst({
+                    where: {
+                      canonicalPartId: partId,
+                      ...(ticket.sellerOfferId
+                        ? { id: ticket.sellerOfferId }
+                        : {}),
+                      status: 'ACTIVE',
+                      seller: { onboardingStatus: 'ACTIVE' },
+                    },
+                    select: {
+                      id: true,
+                      price: true,
+                      currency: true,
+                      canonicalPart: { select: { title: true } },
+                    },
+                    orderBy: [{ price: 'asc' }, { id: 'asc' }],
+                  })
+                : null;
+              const item =
+                partId && offer
+                  ? {
+                      partId,
+                      offerId: offer.id,
+                      name: offer.canonicalPart.title,
+                      price: Number(offer.price),
+                      quantity: 1,
+                    }
+                  : undefined;
+              if (!isFreightQuote)
+                return { contact: { id: 'contact_' + ticket.id, item } };
+              const conversion: Conversion = {
+                name: 'Lead',
+                id: 'quote_' + ticket.id,
+                ...(offer && item
+                  ? {
+                      items: [item],
+                      currency: offer.currency.toUpperCase(),
+                      value: item.price,
+                    }
+                  : {}),
+              };
+              await advertising.enqueue(tx, conversion, context);
+              return { conversion };
+            });
+            return {
+              ticket,
+              conversion: tracking?.conversion,
+              contact: tracking?.contact,
+            };
+          })
+        : {
+            ticket: await create(this.prisma),
+            conversion: undefined,
+            contact: undefined,
+          };
 
     // Notify admin of new ticket
     this.emailService.sendNewTicketAdminNotification({
@@ -125,6 +209,8 @@ export class SupportService {
       status: ticket.status,
       priority: ticket.priority,
       createdAt: ticket.createdAt,
+      ...(conversion ? { advertising: conversion } : {}),
+      ...(contact ? { advertisingContact: contact } : {}),
     };
   }
 

@@ -1295,3 +1295,37 @@ model BlogPost {
   @@index([status, publishedAt])
   @@index([updatedAt])
 }
+
+model AdvertisingConsent {
+  id        String    @id
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([expiresAt])
+}
+
+model AdvertisingCheckout {
+  checkoutId  String   @id
+  consentId   String
+  attribution Json
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+model AdvertisingDelivery {
+  id            String    @id @default(uuid())
+  vendor        String
+  eventId       String
+  event         Json
+  attribution   Json
+  consentId     String
+  attempts      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  nextAttemptAt DateTime  @default(now())
+  finishedAt    DateTime?
+  result        String?
+
+  @@unique([vendor, eventId])
+  @@index([finishedAt, nextAttemptAt])
+}

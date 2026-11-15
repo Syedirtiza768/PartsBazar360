@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Optional,
   ConflictException,
   Injectable,
   Logger,
@@ -37,7 +38,12 @@ import {
 import { CheckoutIdentityService } from './checkout-identity.service';
 import { OrderNotificationService } from '../order/order-notification.service';
 import { normalizePhone, normalizeUnvalidatedPhone } from '../auth/phone.util';
-import { buildPurchaseTrackingPayload } from './purchase-tracking.util';
+import {
+  buildPurchaseConversion,
+  buildPurchaseTrackingPayload,
+} from './purchase-tracking.util';
+import { AdvertisingService } from '../advertising/advertising.service';
+import type { Request } from 'express';
 import {
   acknowledgmentsMatch,
   CHECKOUT_VALIDATION_POLICY_VERSION,
@@ -62,6 +68,7 @@ export class CheckoutService {
     private prisma: PrismaService,
     private orderNotifications: OrderNotificationService,
     private checkoutIdentity: CheckoutIdentityService,
+    @Optional() private readonly advertising?: AdvertisingService,
   ) {
     this.buyerAppUrl = process.env.BUYER_APP_URL || 'http://localhost:3000';
   }
@@ -1938,7 +1945,19 @@ export class CheckoutService {
       include: {
         order: {
           include: {
-            sellerOrders: { include: { items: true } },
+            sellerOrders: {
+              include: {
+                items: {
+                  include: {
+                    sellerOffer: {
+                      select: {
+                        canonicalPart: { select: { id: true, title: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
             checkoutSession: { select: { cartId: true } },
           },
         },
@@ -2045,6 +2064,20 @@ export class CheckoutService {
             },
           });
         }
+        const advertising = this.advertising;
+        const checkoutId = payment.order.checkoutSessionId;
+        if (advertising?.enabled() && checkoutId) {
+          await advertising.capture(tx, async () => {
+            const context = await advertising.checkoutContext(tx, checkoutId);
+            const conversion = buildPurchaseConversion({
+              ...payment.order,
+              status: 'PAID',
+              paymentIntent: current,
+            });
+            if (context && conversion)
+              await advertising.enqueue(tx, conversion, context);
+          });
+        }
       }
       return current;
     });
@@ -2146,6 +2179,7 @@ export class CheckoutService {
       checkoutSessionId?: string;
       checkoutToken?: string;
     },
+    request?: Request,
   ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -2185,9 +2219,15 @@ export class CheckoutService {
       authorized = true;
     }
     if (!authorized) throw new UnauthorizedException('Order access denied');
+    const ecommerce = buildPurchaseTrackingPayload(order);
+    const advertising =
+      ecommerce && request
+        ? await this.advertising?.purchaseReceipt(order.id, request)
+        : undefined;
     return {
       ...this.toBuyerOrder(order),
-      ecommerce: buildPurchaseTrackingPayload(order),
+      ecommerce,
+      ...(advertising ? { advertising } : {}),
     };
   }
 

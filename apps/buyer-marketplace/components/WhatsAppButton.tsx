@@ -3,6 +3,7 @@
 export function WhatsAppButton() {
   return (
     <a
+      data-pb-ad="whatsapp"
       href="https://wa.me/971588443114"
       target="_blank"
       rel="noopener noreferrer"

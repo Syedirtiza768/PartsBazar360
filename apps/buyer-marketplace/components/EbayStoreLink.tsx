@@ -38,6 +38,7 @@ export function EbayStoreLink({
 }) {
   return (
     <a
+      data-pb-ad="ebay"
       href={EBAY_STORE_URL}
       target="_blank"
       rel="noopener noreferrer"

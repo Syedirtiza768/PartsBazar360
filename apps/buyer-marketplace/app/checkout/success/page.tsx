@@ -19,6 +19,7 @@ import {
 } from "@/lib/checkout-session";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/api";
+import { trackAdvertising, type AdvertisingEvent } from "@/lib/advertising";
 import {
   pushPurchaseOnce,
   type PurchaseEcommercePayload,
@@ -82,6 +83,7 @@ function SuccessContent() {
             status?: string;
             orderNumber?: string | null;
             ecommerce?: PurchaseEcommercePayload | null;
+            advertising?: AdvertisingEvent;
           };
           if (cancelled) return;
           setOrder((previous) =>
@@ -95,6 +97,7 @@ function SuccessContent() {
           );
           if (current.status === "PAID") {
             setPaymentState("paid");
+            if (current.advertising) trackAdvertising(current.advertising, { once: true });
             if (current.ecommerce) {
               pushPurchaseOnce(current.ecommerce);
               return;

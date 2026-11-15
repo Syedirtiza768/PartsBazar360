@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -24,6 +25,17 @@ import {
   normalizeUnvalidatedPhone,
 } from '../auth/phone.util';
 import { SmsGlobalService } from '../sms/smsglobal.service';
+import { AdvertisingService } from '../advertising/advertising.service';
+import type {
+  AdvertisingContext,
+  Conversion,
+} from '../advertising/advertising-payload';
+import {
+  convertAmount,
+  isChargeCurrency,
+  resolveChargeCurrency,
+  roundMoney,
+} from './currency.util';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 45 * 1000;
@@ -66,25 +78,86 @@ export class CheckoutIdentityService {
     private readonly prisma: PrismaService,
     private readonly sms: SmsGlobalService,
     private readonly auth: AuthService,
+    @Optional() private readonly advertising?: AdvertisingService,
   ) {}
 
-  async createSession(cartId: string, draft?: Record<string, unknown>) {
+  async createSession(
+    cartId: string,
+    draft?: Record<string, unknown>,
+    context?: AdvertisingContext,
+    chargeCurrency?: string,
+  ) {
     const cart = await this.prisma.cart.findUnique({ where: { id: cartId } });
     if (!cart || cart.status !== 'ACTIVE') {
       throw new BadRequestException('This cart is no longer available');
     }
 
-    const session = await this.prisma.checkoutSession.create({
-      data: {
-        cartId,
-        draft: this.cleanDraft(draft) as Prisma.InputJsonValue | undefined,
-      },
-    });
+    const data = {
+      cartId,
+      draft: this.cleanDraft(draft) as Prisma.InputJsonValue | undefined,
+    };
+    const advertising = this.advertising;
+    const { session, conversion } =
+      advertising && context
+        ? await this.prisma.$transaction(async (tx) => {
+            const session = await tx.checkoutSession.create({ data });
+            const conversion = await advertising.capture(tx, async () => {
+              const cartItems = await tx.cartItem.findMany({
+                where: { cartId },
+                include: {
+                  sellerOffer: {
+                    include: { canonicalPart: { select: { title: true } } },
+                  },
+                },
+              });
+              if (!cartItems.length) return;
+              const currency = resolveChargeCurrency(chargeCurrency);
+              // Preserve the checkout attribution even when some catalog items cannot yet be mapped.
+              await advertising.saveCheckout(tx, session.id, context);
+              if (
+                !cartItems.every(({ sellerOffer }) =>
+                  isChargeCurrency(sellerOffer.currency),
+                )
+              )
+                return;
+              const items = cartItems.map(({ quantity, sellerOffer }) => ({
+                partId: sellerOffer.canonicalPartId,
+                offerId: sellerOffer.id,
+                name: sellerOffer.canonicalPart.title,
+                quantity,
+                price: convertAmount(
+                  Number(sellerOffer.price),
+                  sellerOffer.currency,
+                  currency,
+                ),
+              }));
+              const conversion: Conversion = {
+                name: 'InitiateCheckout',
+                id: 'ic_' + session.id,
+                currency,
+                value: roundMoney(
+                  items.reduce(
+                    (sum, item) => sum + item.price * item.quantity,
+                    0,
+                  ),
+                ),
+                items,
+              };
+              await advertising.enqueue(tx, conversion, context);
+              return conversion;
+            });
+            return { session, conversion };
+          })
+        : {
+            session: await this.prisma.checkoutSession.create({ data }),
+            conversion: undefined,
+          };
     await this.trackEvent(session.id, 'checkout_started');
     return {
       checkoutSessionId: session.id,
       status: session.status,
       otpRequired: !this.isOtpBypassed(),
+      ...(conversion ? { advertising: conversion } : {}),
     };
   }
 

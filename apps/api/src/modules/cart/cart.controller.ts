@@ -7,9 +7,13 @@ import {
   Body,
   Param,
   Query,
+  Optional,
+  Req,
 } from '@nestjs/common';
 import { IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 import { CartService } from './cart.service';
+import type { Request } from 'express';
+import { AdvertisingService } from '../advertising/advertising.service';
 
 class AddCartItemDto {
   @IsUUID()
@@ -32,7 +36,10 @@ class CartLineVehicleDto {
 
 @Controller('cart')
 export class CartController {
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    @Optional() private readonly advertising?: AdvertisingService,
+  ) {}
 
   @Get()
   async getCart(
@@ -44,14 +51,21 @@ export class CartController {
   }
 
   @Post(':cartId/items')
-  async addItem(@Param('cartId') cartId: string, @Body() body: AddCartItemDto) {
-    await this.cartService.addItem(
+  async addItem(
+    @Param('cartId') cartId: string,
+    @Body() body: AddCartItemDto,
+    @Req() req: Request,
+  ) {
+    const context = await this.advertising?.context(req);
+    const conversion = await this.cartService.addItemAndTrack(
       cartId,
       body.offerId,
       body.quantity,
       body.vehicleConfigId,
+      context,
     );
-    return this.cartService.getBuyerCart(cartId);
+    const cart = await this.cartService.getBuyerCart(cartId);
+    return { ...cart, advertising: conversion };
   }
 
   @Patch(':cartId/items/:itemId')

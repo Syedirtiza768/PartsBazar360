@@ -2,12 +2,16 @@ import {
   Body,
   Controller,
   Get,
+  Optional,
+  Req,
   Param,
   Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { AdvertisingService } from '../advertising/advertising.service';
 import { SupportService } from './support.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -17,7 +21,10 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 
 @Controller('support')
 export class SupportController {
-  constructor(private readonly support: SupportService) {}
+  constructor(
+    private readonly support: SupportService,
+    @Optional() private readonly advertising?: AdvertisingService,
+  ) {}
 
   // POST /support/tickets � public (buyers submit tickets without auth)
   @Post('tickets')
@@ -36,9 +43,12 @@ export class SupportController {
       shippingCountry?: string;
       estimatedWeightKg?: number | string | null;
       cartSummary?: string;
+      source?: string;
     },
+    @Req() req: Request,
   ) {
-    return this.support.createTicket(body);
+    const context = await this.advertising?.context(req);
+    return this.support.createTicket(body, context);
   }
 
   // GET /support/tickets � admin or support agent

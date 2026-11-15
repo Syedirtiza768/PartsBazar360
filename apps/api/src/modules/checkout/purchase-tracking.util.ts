@@ -1,4 +1,5 @@
 import { roundMoney } from './currency.util';
+import type { Conversion } from '../advertising/advertising-payload';
 
 type PurchaseTrackingOrder = {
   id: string;
@@ -92,6 +93,29 @@ export function buildPurchaseTrackingPayload(
     currency: order.currency.trim().toUpperCase(),
     tax,
     shipping,
+    items,
+  };
+}
+
+export function buildPurchaseConversion(
+  order: PurchaseTrackingOrder,
+): Conversion | undefined {
+  const payload = buildPurchaseTrackingPayload(order);
+  if (!payload) return;
+  const items = order.sellerOrders.flatMap((sellerOrder) =>
+    sellerOrder.items.map((item) => ({
+      partId: item.sellerOffer?.canonicalPart?.id?.trim() || undefined,
+      offerId: item.sellerOfferId,
+      name: item.sellerOffer?.canonicalPart?.title?.trim() || undefined,
+      quantity: item.quantity,
+      price: roundMoney(Number(item.unitPrice)),
+    })),
+  );
+  return {
+    name: 'Purchase',
+    id: 'order_' + order.id,
+    value: payload.value,
+    currency: payload.currency,
     items,
   };
 }

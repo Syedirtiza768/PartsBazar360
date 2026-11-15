@@ -12,6 +12,7 @@ import {
 import { API_BASE_URL } from "./api";
 import { useCurrency } from "./currency-context";
 import { ecommerceMoney, pushAddToCart } from "./ecommerce-tracking";
+import { trackAdvertising, type AdvertisingEvent } from "./advertising";
 
 const SESSION_STORAGE_KEY = "pb360_session_id";
 
@@ -127,7 +128,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
           throw new Error(err.message || "Failed to add item to cart");
         }
 
-        const data = (await res.json()) as { id: string; items?: CartItem[] };
+        const data = (await res.json()) as {
+          id: string;
+          items?: CartItem[];
+          advertising?: AdvertisingEvent;
+        };
+        if (data.advertising) trackAdvertising(data.advertising);
         const nextItems = data.items ?? [];
         setCart({ id: data.id, items: nextItems });
 

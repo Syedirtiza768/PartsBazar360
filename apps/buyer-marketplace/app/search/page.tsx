@@ -1,3 +1,4 @@
+import { SearchAdvertisingTracker } from "@/components/SearchAdvertisingTracker";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -276,6 +277,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="mx-auto max-w-wide gutter py-6 sm:py-8">
+      {results && params.q && <SearchAdvertisingTracker query={params.q} />}
       <div className="space-y-3">
         {isFitmentMode && <VehicleModeBanner configId={params.vehicleConfigId!} compact />}
         <div className="min-w-0">

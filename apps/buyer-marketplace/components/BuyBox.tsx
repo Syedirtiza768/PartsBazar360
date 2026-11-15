@@ -374,7 +374,7 @@ function OfferRow({
         </div>
       )}
       <Link
-        href={`/support?partId=${part.id}&category=GENERAL&subject=${encodeURIComponent(`Question about ${part.title}`)}`}
+        href={`/support?partId=${part.id}&category=GENERAL&source=ask-part&subject=${encodeURIComponent(`Question about ${part.title}`)}`}
         className="mt-3 flex min-h-touch items-center justify-center gap-2 border border-stone-300 text-sm font-semibold text-graphite-700 hover:border-slate-500 hover:text-graphite-950"
       >
         <MessageIcon className="h-4 w-4" /> Ask about this part

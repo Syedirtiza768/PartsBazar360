@@ -5,11 +5,24 @@ import { buyerVisibleOffers } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { ecommerceMoney, pushViewItem } from "@/lib/ecommerce-tracking";
 import type { Part } from "@/lib/types";
+import { trackAdvertising } from "@/lib/advertising";
 
 export function ViewItemTracker({ part }: { part: Part }) {
   const offer = buyerVisibleOffers(part.offers)[0];
   const { currency, convert, ready } = useCurrency();
   const trackedKey = useRef<string | null>(null);
+  const advertisedPart = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!offer?.currency || advertisedPart.current === part.id) return;
+    advertisedPart.current = part.id;
+    const price = ecommerceMoney(Number(offer.price));
+    trackAdvertising({
+      name: "ViewContent", id: crypto.randomUUID(),
+      currency: offer.currency.toUpperCase(), value: price,
+      items: [{ partId: part.id, offerId: offer.id, name: part.title, price, quantity: 1 }],
+    });
+  }, [offer, part.id, part.title]);
 
   useEffect(() => {
     if (!ready || !offer) return;

@@ -1,3 +1,4 @@
+import type { AdvertisingEvent } from "./advertising";
 import { API_BASE_URL } from "./api";
 
 const STATE_PREFIX = "pb360_checkout_state_v2:";
@@ -134,16 +135,18 @@ export function loadCheckoutAccountStatus(checkoutSessionId: string) {
 export async function createCheckoutSession(
   cartId: string,
   draft: CheckoutDraft,
+  chargeCurrency?: string,
 ) {
   const response = await fetch(`${API_BASE_URL}/checkout/${cartId}/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ draft }),
+    body: JSON.stringify({ draft, chargeCurrency }),
   });
   if (!response.ok) throw new Error(await responseError(response));
   return (await response.json()) as {
     checkoutSessionId: string;
     otpRequired: boolean;
+    advertising?: AdvertisingEvent;
   };
 }
 

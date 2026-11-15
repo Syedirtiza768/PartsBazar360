@@ -2,12 +2,24 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
+import { AdvertisingService } from '../advertising/advertising.service';
+import type {
+  AdvertisingContext,
+  Conversion,
+} from '../advertising/advertising-payload';
+import { roundMoney } from '../checkout/currency.util';
 
 @Injectable()
 export class CartService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly advertising?: AdvertisingService,
+  ) {}
 
   async getCart(cartId: string) {
     const cart = await this.prisma.cart.findUnique({
@@ -123,10 +135,74 @@ export class CartService {
     quantity: number,
     vehicleConfigId?: string | null,
   ) {
+    await this.addItemAndTrack(cartId, offerId, quantity, vehicleConfigId);
+    return this.getCart(cartId);
+  }
+
+  async addItemAndTrack(
+    cartId: string,
+    offerId: string,
+    quantity: number,
+    vehicleConfigId: string | null | undefined,
+    context?: AdvertisingContext,
+  ) {
+    const advertising = this.advertising;
+    if (!advertising || !context) {
+      await this.writeCartItem(
+        this.prisma,
+        cartId,
+        offerId,
+        quantity,
+        vehicleConfigId,
+      );
+      return;
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const offer = await this.writeCartItem(
+        tx,
+        cartId,
+        offerId,
+        quantity,
+        vehicleConfigId,
+      );
+      const price = roundMoney(Number(offer.price));
+      const conversion: Conversion = {
+        name: 'AddToCart',
+        id: 'atc_' + randomUUID(),
+        value: roundMoney(price * quantity),
+        currency: offer.currency.toUpperCase(),
+        items: [
+          {
+            partId: offer.canonicalPartId,
+            offerId,
+            name: offer.canonicalPart.title,
+            price,
+            quantity,
+          },
+        ],
+      };
+      return advertising.capture(tx, async () => {
+        await advertising.enqueue(tx, conversion, context);
+        return conversion;
+      });
+    });
+  }
+
+  private async writeCartItem(
+    db: Prisma.TransactionClient,
+    cartId: string,
+    offerId: string,
+    quantity: number,
+    vehicleConfigId?: string | null,
+  ) {
     // 1. Validate offer and stock
-    const offer = await this.prisma.sellerOffer.findUnique({
+    const offer = await db.sellerOffer.findUnique({
       where: { id: offerId },
-      include: { inventory: true, seller: true },
+      include: {
+        inventory: true,
+        seller: true,
+        canonicalPart: { select: { title: true } },
+      },
     });
 
     if (
@@ -144,7 +220,7 @@ export class CartService {
     const intentSpecified = vehicleConfigId !== undefined;
     const intendedVehicleConfigId = vehicleConfigId ?? null;
     if (intendedVehicleConfigId) {
-      const configuration = await this.prisma.vehicleConfiguration.findUnique({
+      const configuration = await db.vehicleConfiguration.findUnique({
         where: { id: intendedVehicleConfigId },
         select: { id: true },
       });
@@ -156,7 +232,7 @@ export class CartService {
     // Keep separate cart lines when the buyer intends the same offer for
     // different vehicles; otherwise one line could silently represent two
     // incompatible purchase decisions.
-    const existingItems = await this.prisma.cartItem.findMany({
+    const existingItems = await db.cartItem.findMany({
       where: { cartId, sellerOfferId: offerId },
     });
     const existingQuantity = existingItems.reduce(
@@ -175,12 +251,12 @@ export class CartService {
     );
 
     if (existingItem) {
-      await this.prisma.cartItem.update({
+      await db.cartItem.update({
         where: { id: existingItem.id },
         data: { quantity: existingItem.quantity + quantity },
       });
     } else {
-      await this.prisma.cartItem.create({
+      await db.cartItem.create({
         data: {
           cartId,
           sellerOfferId: offerId,
@@ -193,7 +269,7 @@ export class CartService {
       });
     }
 
-    return this.getCart(cartId);
+    return offer;
   }
 
   async updateItemQuantity(cartId: string, itemId: string, quantity: number) {
