@@ -764,6 +764,18 @@ uses the same recorded event only with the matching active grant, within the
 delivery age limit and after account or checkout-token authorization. Terminal
 records lose attribution immediately and are pruned after two days.
 
+Server events carry advanced matching: `withCustomer()` /`matchUser()` in
+`advertising-payload.ts` normalize and SHA-256 hash customer details into
+`AdvertisingContext.user` before anything is stored, so attribution rows only
+ever hold digests (and are cleared when delivery finishes). Meta receives
+`em`, `ph` (digits with country code), `fn`, `ln`, `ct`, `zp`, `country`,
+`external_id`; TikTok receives `email`, `phone` (`+` E.164) and `external_id`.
+Sources: AddToCart — the cart's signed-in account; InitiateCheckout — account
+plus the checkout draft (saved with the checkout attribution); Purchase — the
+order's `shippingAddress` name/email/phone/city/postal code/country, falling
+back to `verifiedPhone`, with the account (or customer) ID as `external_id`;
+Lead — the ticket email, name and shipping country.
+
 Production activation uses API and worker environment settings in
 `docker-compose.yml`:
 

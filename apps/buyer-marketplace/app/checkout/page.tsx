@@ -1,6 +1,6 @@
 "use client";
 
-import { trackAdvertising } from "@/lib/advertising";
+import { setAdvertisingCustomer, trackAdvertising } from "@/lib/advertising";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -843,6 +843,14 @@ function CheckoutContent() {
     setServerError(null);
     try {
       const submittedPhone = phoneCandidate(form.phone, phoneCountryCode);
+      setAdvertisingCustomer({
+        name: form.name,
+        email: form.email,
+        phone: submittedPhone,
+        city: form.city,
+        postalCode: form.postalCode,
+        country: form.country,
+      });
       if (!otpRequired) {
         const bypassResult = await requestCheckoutOtp(
           checkoutSessionId,

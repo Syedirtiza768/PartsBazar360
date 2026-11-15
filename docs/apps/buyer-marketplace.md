@@ -280,8 +280,19 @@ query-free section paths, without sending checkout-return parameters, product
 slugs, or raw referrers. Search terms suggesting phone numbers, email addresses
 or VINs are omitted. Automatic capture and advanced matching settings in the
 ad accounts must be reviewed against the approved consent policy before
-activation. Customer phone, email, name, and address are excluded from this
-integration, including from hashed matching.
+activation.
+
+**Advanced matching (since 2026-11-15).** `setAdvertisingCustomer()` in
+`lib/advertising.ts` normalizes and SHA-256 hashes customer details in the
+storefront window, keeps only the hashes (memory + `sessionStorage`
+`pb_ad_user`, cleared on opt-out) and sends them with each event to the pixel
+frame, which passes them to `fbq('init', …)` and `ttq.identify()`. Raw details
+never reach the frame. Sources: the signed-in account (email, phone, name,
+user ID as `external_id`), the checkout submit (name, email, phone, city,
+postal code, country) and a submitted support ticket (email, name, country).
+Phones are only hashed when they carry a country code; guest placeholder
+emails (`@guest.partsbazar360.com`) are skipped. The server events do the same
+in the API; see [[api#Advertising delivery]].
 
 | Browser event | Source | Server copy |
 |---|---|---|

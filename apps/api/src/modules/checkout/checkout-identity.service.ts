@@ -26,9 +26,10 @@ import {
 } from '../auth/phone.util';
 import { SmsGlobalService } from '../sms/smsglobal.service';
 import { AdvertisingService } from '../advertising/advertising.service';
-import type {
-  AdvertisingContext,
-  Conversion,
+import {
+  withCustomer,
+  type AdvertisingContext,
+  type Conversion,
 } from '../advertising/advertising-payload';
 import {
   convertAmount,
@@ -112,8 +113,26 @@ export class CheckoutIdentityService {
               });
               if (!cartItems.length) return;
               const currency = resolveChargeCurrency(chargeCurrency);
+              const account = cart.userId
+                ? await tx.user.findUnique({
+                    where: { id: cart.userId },
+                    select: { id: true, email: true, phone: true, name: true },
+                  })
+                : null;
+              const typed = data.draft as Record<string, string> | undefined;
+              const matched = withCustomer(
+                context,
+                account && { ...account, externalId: account.id },
+                typed && {
+                  email: typed.email,
+                  name: typed.name,
+                  city: typed.city,
+                  postalCode: typed.postalCode,
+                  country: typed.country,
+                },
+              );
               // Preserve the checkout attribution even when some catalog items cannot yet be mapped.
-              await advertising.saveCheckout(tx, session.id, context);
+              await advertising.saveCheckout(tx, session.id, matched);
               if (
                 !cartItems.every(({ sellerOffer }) =>
                   isChargeCurrency(sellerOffer.currency),
@@ -143,7 +162,7 @@ export class CheckoutIdentityService {
                 ),
                 items,
               };
-              await advertising.enqueue(tx, conversion, context);
+              await advertising.enqueue(tx, conversion, matched);
               return conversion;
             });
             return { session, conversion };

@@ -7,9 +7,10 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AdvertisingService } from '../advertising/advertising.service';
-import type {
-  AdvertisingContext,
-  Conversion,
+import {
+  withCustomer,
+  type AdvertisingContext,
+  type Conversion,
 } from '../advertising/advertising-payload';
 import { PrismaService } from '../../prisma.service';
 import { EmailService } from '../email/email.service';
@@ -171,7 +172,15 @@ export class SupportService {
                     }
                   : {}),
               };
-              await advertising.enqueue(tx, conversion, context);
+              await advertising.enqueue(
+                tx,
+                conversion,
+                withCustomer(context, {
+                  email: body.customerEmail,
+                  name: body.customerName,
+                  country: body.shippingCountry,
+                }),
+              );
               return { conversion };
             });
             return {

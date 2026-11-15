@@ -6,10 +6,12 @@ import {
   advertisingStatus,
   captureClickIds,
   observeAdvertisingConsent,
+  setAdvertisingCustomer,
   trackAdvertising,
   updateAdvertisingConsent,
   trackAdvertisingClick,
 } from "@/lib/advertising";
+import { useAuth } from "@/lib/auth-context";
 
 export function AdvertisingPreferences() {
   const pathname = usePathname();
@@ -18,6 +20,18 @@ export function AdvertisingPreferences() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const lastPage = useRef<string | null>(null);
+  const { user } = useAuth();
+
+  // Signed-in customers: hashed email/phone/name feed advanced matching.
+  useEffect(() => {
+    if (!status.granted || !user) return;
+    setAdvertisingCustomer({
+      email: user.email,
+      phone: user.phone,
+      name: user.name,
+      externalId: user.id,
+    });
+  }, [status.granted, user]);
 
   useEffect(() => {
     const sync = () => void advertisingStatus().then(setStatus);

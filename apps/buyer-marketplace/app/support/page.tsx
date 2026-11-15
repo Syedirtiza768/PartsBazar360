@@ -14,7 +14,7 @@ import {
   TagIcon,
 } from "@repo/ui/icons";
 import { API_BASE_URL } from "@/lib/api";
-import { trackAdvertising, type AdvertisingEvent, type AdvertisingItem } from "@/lib/advertising";
+import { setAdvertisingCustomer, trackAdvertising, type AdvertisingEvent, type AdvertisingItem } from "@/lib/advertising";
 
 interface TicketResult {
   id: string;
@@ -80,6 +80,11 @@ function SupportForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not create support ticket.");
       const ticket = data as TicketResult;
+      setAdvertisingCustomer({
+        email: form.customerEmail,
+        name: form.customerName,
+        country: form.shippingCountry,
+      });
       if (ticket.advertising) trackAdvertising(ticket.advertising, { once: true });
       if (ticket.advertisingContact) {
         const { id, item } = ticket.advertisingContact;

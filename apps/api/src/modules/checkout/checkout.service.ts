@@ -43,6 +43,7 @@ import {
   buildPurchaseTrackingPayload,
 } from './purchase-tracking.util';
 import { AdvertisingService } from '../advertising/advertising.service';
+import { withCustomer } from '../advertising/advertising-payload';
 import type { Request } from 'express';
 import {
   acknowledgmentsMatch,
@@ -2074,8 +2075,35 @@ export class CheckoutService {
               status: 'PAID',
               paymentIntent: current,
             });
-            if (context && conversion)
-              await advertising.enqueue(tx, conversion, context);
+            if (context && conversion) {
+              const address = (payment.order.shippingAddress ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const text = (key: string) =>
+                typeof address[key] === 'string'
+                  ? (address[key] as string)
+                  : undefined;
+              const account = payment.order.customerId
+                ? await tx.user.findUnique({
+                    where: { customerId: payment.order.customerId },
+                    select: { id: true },
+                  })
+                : null;
+              await advertising.enqueue(
+                tx,
+                conversion,
+                withCustomer(context, {
+                  email: text('email'),
+                  phone: text('phone') ?? payment.order.verifiedPhone,
+                  name: text('name'),
+                  city: text('city'),
+                  postalCode: text('postalCode'),
+                  country: text('country'),
+                  externalId: account?.id ?? payment.order.customerId,
+                }),
+              );
+            }
           });
         }
       }

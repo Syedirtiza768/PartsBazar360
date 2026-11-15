@@ -9,6 +9,26 @@ const html = String.raw`<!doctype html>
   const metaId = '1629408292294202';
   const tiktokId = 'DBS6C7RC77U657ENO7K0';
   let revoked = false;
+  let metaUser = '';
+  let tiktokUser = '';
+
+  // Hashed advanced-matching fields from the storefront (SHA-256 hex only).
+  function cleanUser(user) {
+    if (!user || typeof user !== 'object') return {};
+    const out = {};
+    for (const key of ['em', 'ph', 'phE164', 'fn', 'ln', 'ct', 'zp', 'country', 'external_id']) {
+      if (typeof user[key] === 'string' && /^[a-f0-9]{64}$/.test(user[key])) out[key] = user[key];
+    }
+    return out;
+  }
+
+  function metaMatching(user) {
+    const out = {};
+    for (const key of ['em', 'ph', 'fn', 'ln', 'ct', 'zp', 'country', 'external_id']) {
+      if (user[key]) out[key] = user[key];
+    }
+    return out;
+  }
 
   function load(src) {
     const script = document.createElement('script');
@@ -18,8 +38,18 @@ const html = String.raw`<!doctype html>
     document.head.append(script);
   }
 
-  function meta() {
-    if (window.fbq) return window.fbq;
+  function meta(user) {
+    const matching = metaMatching(user);
+    const key = JSON.stringify(matching);
+    if (window.fbq) {
+      // Re-init updates advanced matching once new customer details arrive.
+      if (key !== metaUser && key !== '{}') {
+        metaUser = key;
+        window.fbq('init', metaId, matching);
+      }
+      return window.fbq;
+    }
+    metaUser = key;
     const fbq = function () {
       if (fbq.callMethod) fbq.callMethod.apply(fbq, arguments);
       else fbq.queue.push(arguments);
@@ -30,7 +60,7 @@ const html = String.raw`<!doctype html>
     fbq.queue = [];
     window.fbq = window._fbq = fbq;
     fbq('set', 'autoConfig', false, metaId);
-    fbq('init', metaId);
+    fbq('init', metaId, matching);
     load('https://connect.facebook.net/en_US/fbevents.js');
     return fbq;
   }
@@ -110,17 +140,28 @@ const html = String.raw`<!doctype html>
     }
     if (revoked || message.data?.type !== 'pb-ad-event') return;
     const { event, path, config } = message.data;
+    const user = cleanUser(message.data.user);
     if (!allowedEvents.includes(event?.name) || !route.test(path)) return;
     history.replaceState(null, '', path);
     if (config.meta) {
       const data = details(event, config.meta, 'meta');
-      if (data) meta()(event.name === 'EbayStoreClick' ? 'trackSingleCustom' : 'trackSingle',
+      if (data) meta(user)(event.name === 'EbayStoreClick' ? 'trackSingleCustom' : 'trackSingle',
         metaId, event.name, data, { eventID: event.id });
     }
     if (config.tiktok) {
       const data = details(event, config.tiktok, 'tiktok');
       if (data) {
         const ttq = tiktok();
+        const identity = {
+          ...(user.em ? { email: user.em } : {}),
+          ...(user.phE164 ? { phone_number: user.phE164 } : {}),
+          ...(user.external_id ? { external_id: user.external_id } : {}),
+        };
+        const key = JSON.stringify(identity);
+        if (key !== '{}' && key !== tiktokUser) {
+          tiktokUser = key;
+          ttq.identify(identity);
+        }
         if (event.name === 'PageView') ttq.page();
         else ttq.track(event.name, data, { event_id: event.id });
       }

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export type Vendor = 'meta' | 'tiktok';
 export type CatalogKey = 'partId' | 'offerId';
 export type ConversionName =
@@ -27,7 +29,102 @@ export type AdvertisingContext = {
   fbc?: string;
   ttp?: string;
   ttclid?: string;
+  user?: MatchUser;
 };
+
+/**
+ * Advanced-matching identifiers. Every value is a SHA-256 hex digest of the
+ * vendor-normalized field; raw customer details are never stored or sent.
+ * `ph` is the digits-only form Meta expects, `phE164` the `+`-prefixed form
+ * TikTok expects.
+ */
+export type MatchUser = {
+  em?: string;
+  ph?: string;
+  phE164?: string;
+  fn?: string;
+  ln?: string;
+  ct?: string;
+  zp?: string;
+  country?: string;
+  external_id?: string;
+};
+
+export type CustomerDetails = {
+  email?: string | null;
+  phone?: string | null;
+  name?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  externalId?: string | null;
+};
+
+const sha256 = (value: string) =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
+
+const letters = (value: string) =>
+  value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}]/gu, '');
+
+/** Normalize and hash customer details per Meta/TikTok advanced-matching rules. */
+export function matchUser(details: CustomerDetails): MatchUser | undefined {
+  const user: MatchUser = {};
+  const email = details.email?.trim().toLowerCase();
+  // Guest placeholders like <phone>@guest.partsbazar360.com identify nobody.
+  if (
+    email &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+    !email.endsWith('@guest.partsbazar360.com')
+  )
+    user.em = sha256(email);
+  const phone = details.phone?.trim();
+  // Only a number that already carries its country code can be matched.
+  const digits = phone?.replace(/\D/g, '') ?? '';
+  if (
+    phone &&
+    (phone.startsWith('+') || phone.startsWith('00')) &&
+    digits.length >= 8
+  ) {
+    const national = phone.startsWith('00') ? digits.slice(2) : digits;
+    user.ph = sha256(national);
+    user.phE164 = sha256('+' + national);
+  }
+  const parts = (details.name ?? '').trim().split(/\s+/).map(letters);
+  const named = parts.filter(Boolean);
+  if (named.length) user.fn = sha256(named[0]);
+  if (named.length > 1) user.ln = sha256(named[named.length - 1]);
+  const city = letters(details.city ?? '');
+  if (city) user.ct = sha256(city);
+  const zip = (details.postalCode ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (zip) user.zp = sha256(zip);
+  const country = details.country?.trim().toLowerCase();
+  if (country && /^[a-z]{2}$/.test(country)) user.country = sha256(country);
+  const externalId = details.externalId?.trim();
+  if (externalId) user.external_id = sha256(externalId);
+  return Object.keys(user).length ? user : undefined;
+}
+
+/** Add hashed customer details to a context; earlier non-empty values win. */
+export function withCustomer(
+  context: AdvertisingContext,
+  ...details: Array<CustomerDetails | null | undefined>
+): AdvertisingContext {
+  const user: MatchUser = {};
+  for (const detail of details) {
+    const hashed = detail && matchUser(detail);
+    if (!hashed) continue;
+    for (const [key, value] of Object.entries(hashed) as Array<
+      [keyof MatchUser, string]
+    >) {
+      user[key] ??= value;
+    }
+  }
+  const merged = { ...user, ...context.user };
+  return Object.keys(merged).length ? { ...context, user: merged } : context;
+}
 
 export type Destination = { catalogKey: CatalogKey; currencies: string[] };
 
@@ -131,8 +228,18 @@ export function conversionPayload(
   const event_time = Math.floor(createdAt.getTime() / 1000);
   const event_id = event.id;
   const page = marketingOrigin() + pages[event.name];
+  const user = context.user ?? {};
+  const list = (value?: string) => (value ? [value] : undefined);
   if (vendor === 'meta') {
     const user_data = {
+      em: list(user.em),
+      ph: list(user.ph),
+      fn: list(user.fn),
+      ln: list(user.ln),
+      ct: list(user.ct),
+      zp: list(user.zp),
+      country: list(user.country),
+      external_id: list(user.external_id),
       client_ip_address: context.ip,
       client_user_agent: context.agent,
       fbp: context.fbp,
@@ -169,6 +276,9 @@ export function conversionPayload(
         properties,
         page: { url: page },
         user: {
+          email: user.em,
+          phone: user.phE164,
+          external_id: user.external_id,
           ip: context.ip,
           user_agent: context.agent,
           ttp: context.ttp,

@@ -8,9 +8,10 @@ import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { AdvertisingService } from '../advertising/advertising.service';
-import type {
-  AdvertisingContext,
-  Conversion,
+import {
+  withCustomer,
+  type AdvertisingContext,
+  type Conversion,
 } from '../advertising/advertising-payload';
 import { roundMoney } from '../checkout/currency.util';
 
@@ -182,7 +183,24 @@ export class CartService {
         ],
       };
       return advertising.capture(tx, async () => {
-        await advertising.enqueue(tx, conversion, context);
+        const cart = await tx.cart.findUnique({
+          where: { id: cartId },
+          select: { userId: true },
+        });
+        const account = cart?.userId
+          ? await tx.user.findUnique({
+              where: { id: cart.userId },
+              select: { id: true, email: true, phone: true, name: true },
+            })
+          : null;
+        await advertising.enqueue(
+          tx,
+          conversion,
+          withCustomer(
+            context,
+            account && { ...account, externalId: account.id },
+          ),
+        );
         return conversion;
       });
     });
