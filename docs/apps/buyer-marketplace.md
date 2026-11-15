@@ -267,9 +267,15 @@ TikTok DBS6C7RC77U657ENO7K0. The GA4 ecommerce data layer and GTM container
 remain in the storefront. Before cutover, inspect GTM and each Events Manager
 for automatic or overlapping rules and retire any old storefront copies there.
 
-Advertising is disabled by default. The footer offers an explicit, revocable
-choice only when a destination is configured. The APIs and the browser both
-honor that choice. The browser loads the SDKs within a same-origin frame using
+Advertising is off until a destination is configured (`ADVERTISING_ENABLED`).
+Once configured, measurement is **on by default (opt-out)** since 2026-11-15:
+on the first status check `lib/advertising.ts` posts a consent grant for any
+visitor without an existing grant, unless the `pb_ad_optout=1` cookie is set
+or the browser reports `navigator.webdriver`. The footer link then reads
+"Opt out of Meta and TikTok advertising measurement"; opting out revokes the
+server grant, clears ad cookies and sets `pb_ad_optout` for a year so the
+default grant is not re-applied. The APIs and the browser both honor that
+choice. The browser loads the SDKs within a same-origin frame using
 query-free section paths, without sending checkout-return parameters, product
 slugs, or raw referrers. Search terms suggesting phone numbers, email addresses
 or VINs are omitted. Automatic capture and advanced matching settings in the

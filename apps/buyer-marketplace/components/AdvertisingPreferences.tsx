@@ -87,7 +87,7 @@ export function AdvertisingPreferences() {
         onClick={() => void change()}
       >
         {status.granted
-          ? "Withdraw marketing consent"
+          ? "Opt out of Meta and TikTok advertising measurement"
           : "Allow Meta and TikTok advertising measurement"}
       </button>
       {error && <p role="alert">{error}</p>}

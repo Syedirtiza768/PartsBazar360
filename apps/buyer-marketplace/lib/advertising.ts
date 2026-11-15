@@ -79,6 +79,35 @@ function syncConsent(result: ConsentStatus) {
   return result;
 }
 
+// Measurement is on by default; this first-party cookie records an explicit
+// opt-out from the footer so the default grant is never re-applied.
+const optOutCookie = "pb_ad_optout";
+
+function optedOut() {
+  return document.cookie
+    .split(";")
+    .some((part) => part.trim() === optOutCookie + "=1");
+}
+
+function rememberOptOut(value: boolean) {
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = value
+    ? optOutCookie + "=1; Max-Age=31536000; Path=/; SameSite=Lax" + secure
+    : optOutCookie + "=; Max-Age=0; Path=/; SameSite=Lax" + secure;
+}
+
+async function postConsent(granted: boolean) {
+  const response = await fetch(consentUrl, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ granted }),
+  });
+  if (!response.ok)
+    throw new Error("Could not save your preference. Please try again.");
+  return (await response.json()) as ConsentStatus;
+}
+
 export function advertisingStatus(refresh = false) {
   if (!refresh && consent && (!consent.granted || hasConsent(consent))) {
     return Promise.resolve(consent);
@@ -90,6 +119,13 @@ export function advertisingStatus(refresh = false) {
     .then(async (response) =>
       response.ok ? ((await response.json()) as ConsentStatus) : disabled,
     )
+    .then(async (status) => {
+      // Default grant: every visitor is measured unless they opted out.
+      // Automated browsers are skipped so crawlers don't create grants.
+      if (!status.enabled || hasConsent(status) || optedOut()) return status;
+      if (navigator.webdriver) return status;
+      return postConsent(true).catch(() => status);
+    })
     .catch(() => disabled)
     .then(syncConsent)
     .finally(() => {
@@ -107,6 +143,7 @@ export function observeAdvertisingConsent(notify: () => void) {
 
 export async function updateAdvertisingConsent(granted: boolean) {
   await loading;
+  rememberOptOut(!granted);
   if (!granted) {
     syncConsent({ ...(consent ?? disabled), granted: false });
     for (const key of ["pb_ad_fbc", "pb_ad_ttclid", "_fbp", "_fbc", "_ttp"]) {
@@ -118,15 +155,7 @@ export async function updateAdvertisingConsent(granted: boolean) {
       }
     }
   }
-  const response = await fetch(consentUrl, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ granted }),
-  });
-  if (!response.ok)
-    throw new Error("Could not save your preference. Please try again.");
-  const result = syncConsent((await response.json()) as ConsentStatus);
+  const result = syncConsent(await postConsent(granted));
   try {
     localStorage.setItem(consentNotice, String(Date.now()));
   } catch {
