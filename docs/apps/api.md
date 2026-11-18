@@ -63,6 +63,17 @@ A push also **replaces** the part's image list with the pushed gallery (the pull
 override the salvage-OEM defaults so a new aftermarket part is not stored as used. Pushed
 `listing.price` is the seller base price; `PricingService.quote` applies the marketplace policy.
 
+**Feed locks (`CanonicalPart.feedLockedFields`, 2026-11-18).** Pull and push ingestion
+(`processListing`) and RealTrack Trading enrichment (`EnrichmentProcessor`) rewrite a part's
+`title`, `brand`, `category` and `description` from the feed on every run. A part can list any of
+those four names in `feedLockedFields`. The feed writers spread `preserveFeedLockedFields(part)`
+(`ingestion/feed-locks.util.ts`) last in their update, so locked columns keep their stored value.
+A title lock also keeps `normalizedTitle`. Unknown names are ignored. Everything else
+(images, price, stock, offers, weights, compatibility) still syncs. Staff paths (admin listings,
+merchant uploads) do not read the locks. To let the feed own a field again, remove it from the
+array. The repaired Superior Auto Parts listings are the first users of these locks (see
+[[decisions]] 2026-11-18).
+
 Limits: Express' 100 kB JSON body (RealTrack trims its payload to 90 kB), batch ≤ 20 (RealTrack
 sends one per request). Client-side guide: RealTrack repo `docs/integrations/partsbazar360-publish.md`.
 Set `REALTRACK_PUSH_API_KEY` on the `api` service only; the worker never needs it.
@@ -704,7 +715,11 @@ relational `Fitment` rows. The targeted 499-request FCPEuro gap refresh cost
 $0.15614822; four product URLs were verified and the remaining requests were
 blocked or returned 404/429, so no compatibility was invented from an MPN alone.
 The gap-refresh and prior MVL rollback backups remain in the enrichment-workbench
-temporary area. Buyer search uses the `parts_search` alias (`canonical_parts_v3`).
+temporary area. The `SearchOutbox` indexer and `/v1/search` use the `parts_search` alias
+(`canonical_parts_v3`). The buyer's `/search/parts` (`OpenSearchService`) still reads the
+legacy `canonical_parts` index. So a bulk database repair needs both an outbox UPSERT per part
+and an upsert-only `scripts/reindex-active-from-db.mjs` run (`SKIP_DELETE=1`, standalone
+container). Without the second step, buyer search keeps serving the old text (seen 2026-11-18).
 
 The live buyer marketplace no longer renders the `unknown` fitment badge, so the
 warning pill is removed altogether; compatibility tables remain

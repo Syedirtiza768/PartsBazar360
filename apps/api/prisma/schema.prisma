@@ -212,6 +212,10 @@ model CanonicalPart {
   // Shape is SeoOverrides in @repo/catalog-contracts. JSON so adding another
   // overridable field never needs a migration.
   seo                      Json?
+  // Listing fields a feed sync (RealTrack pull/push ingestion and RealTrack
+  // Trading enrichment) must not overwrite because staff repaired them, e.g.
+  // ["title","brand","category","description"]. See feed-locks.util.ts.
+  feedLockedFields         String[]  @default([])
   title                    String
   brand                    String?
   manufacturer             String?

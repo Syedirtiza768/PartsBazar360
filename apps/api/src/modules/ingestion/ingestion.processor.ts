@@ -42,6 +42,7 @@ import {
   looksLikeEnglishTitle,
 } from './listing-title.util';
 import { MvlFitmentService } from './mvl-fitment.service';
+import { preserveFeedLockedFields } from './feed-locks.util';
 import { Prisma } from '@prisma/client';
 import { PricingService } from '../pricing/pricing.service';
 import {
@@ -886,6 +887,9 @@ export class IngestionProcessor extends WorkerHost {
               : canonicalPart.compatibility === null
                 ? Prisma.JsonNull
                 : (canonicalPart.compatibility as Prisma.InputJsonValue),
+          // Last on purpose: staff-repaired text (feedLockedFields) keeps its
+          // stored value, so the feed values above never land.
+          ...preserveFeedLockedFields(canonicalPart),
         },
       });
     } else {

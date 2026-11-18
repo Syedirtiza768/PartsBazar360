@@ -26,6 +26,23 @@
 
 **Revisit when:** A UAE heavy-freight rate or a courier heavy-freight tariff is provided, or when the EMX sheet is re-issued.
 
+## 2026-11-18 — Repair Superior Auto Parts listing text, brand, category and weight data in place
+
+**Decision:** The 68,928 canonical parts sold by Superior Auto Parts were corrected directly in production with one transaction (`UPDATE "CanonicalPart"`), not through the API. Changed: `title` / `normalizedTitle` (feed composites `Brand | Name | OE … | Fits …` split, marketing labels and feed codes removed, brand prefixed when missing), `brand` (label values such as `ORIGINAL`, `Genuine OEM`, `Unknown` replaced from the title or cleared), `category` (generic `General Automotive Parts` / `General` / make-name categories replaced by the part class's category), `partClassKey`, `weight` / `weightSource` (class estimate), `dimensionalWeightKg` / `billableWeightKg`, and `description` (factual template built from verified fields only; no "trusted supplier" claim). `slug`, `fitment` rows and `dimensions` JSON were not touched. A `SearchOutbox` UPSERT was queued for each part, which refreshes the `parts_search` alias (`canonical_parts_v3`). The public `/api/search/parts` endpoint reads the legacy `canonical_parts` index, so it was also refreshed with the upsert-only reindex (`SKIP_DELETE=1`).
+
+**Why:** Superior's feed carried label text in brand and title fields, template descriptions that claimed OEM status for aftermarket parts, and a generic category for about a third of its parts. Dimensional weight was null for every part.
+
+**Consequences:**
+- Checkout computes shipping live from `partClassKey`, `weight` and `dimensions`, so about 4,260 parts that were re-classified get new shipping weights and quotes. Their billable weight is estimated from typical carton dimensions with the app's 0.8 dampening, so it is an estimate, not a measurement.
+- Shared canonical parts also change on other sellers' offers.
+- Compatibility was not repaired. 40,852 Superior parts still have no verified fitment rows, and 449 have a title-make conflict that needs review.
+- Backup: `/home/ubuntu/backups/superior-20261118/canonical_parts_superior_before.csv` on the production host (full pre-change rows).
+- On its own, the repair did not hold for the 8,916 parts that RealTrack feeds. `IngestionProcessor.processListing` (pull and push) and the RealTrack Trading enrichment rewrite `title`, `brand`, `category` and `description` from the feed. Within hours, 95 brands went back to labels such as `Genuine OEM` and 192 descriptions went back to eBay HTML. The fix is the `CanonicalPart.feedLockedFields` lock (see below). The later RealTrack shipping-policy weight write (2,749 Superior parts, `weightSource = 'SELLER'`) landed after this repair and is the intended value.
+
+**Follow-up — feed locks:** `CanonicalPart.feedLockedFields` (migration `20261118120000_add_canonical_part_feed_locked_fields`) lists fields that feed writers must keep. Both feed writers spread `preserveFeedLockedFields(part)` last in their update. The repaired Superior parts are locked on `title`, `brand`, `category` and `description`. **Trade-off:** a title or description that Superior later edits in RealTrack no longer reaches these parts until the lock is removed. Prices, stock, images, offers and weights still sync.
+
+**Revisit when:** Superior sends measured dimensions or weights (replace `CLASS_DEFAULT`), a fitment backfill is approved for these parts, or Superior's RealTrack listings are cleaned at the source (then drop the locks so the feed owns the text again).
+
 ## 2026-11-14 — Part numbers are not phone numbers; OE numbers must look like part numbers
 
 **Decision:**
