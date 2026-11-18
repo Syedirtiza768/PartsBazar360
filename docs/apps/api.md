@@ -1,6 +1,6 @@
 # api
 
-**Last reviewed:** 2026-11-15
+**Last reviewed:** 2026-11-18
 
 NestJS backend for the whole marketplace. Lives at `apps/api`.
 
@@ -100,10 +100,11 @@ computes and enforces the authoritative per-line decision.
 Shipping quotes return an unavailable reason with no payable amount or ETA for
 unsupported destinations. Explicit special-handling flags require review, and
 checkout re-evaluates both shipping and freight eligibility before reservation
-and on payment retry. International quotes stop at the EMX rate sheet's highest
-weight band; the UAE flat tiers stop at their explicit 25 kg limit. Over-band
-parcels receive no estimated charge or delivery promise and require manual
-freight review. Rate, dangerous-goods, origin, packaging, quote expiry and
+and on payment retry. International quotes extend the EMX rate sheet's 2 kg
+slope linearly for heavier parcels, so they get a freight cost rather than a
+quote (see [[../decisions]], 2026-11-18). The UAE flat tiers stop at their
+explicit 25 kg limit; heavier UAE parcels still receive no estimated charge and
+require manual freight review. Rate, dangerous-goods, origin, packaging, quote expiry and
 unknown-restriction profiles still require operations-owned policy and data.
 The legacy search writer now indexes manufacturer/OE identifiers in its
 normalized exact-number field; existing documents require a controlled

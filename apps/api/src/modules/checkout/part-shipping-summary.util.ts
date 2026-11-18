@@ -9,6 +9,7 @@
  */
 
 import {
+  UAE_MAX_PARCEL_KG,
   estimatedVolumetricFactorFromEnv,
   isExactWeightSource,
   maxParcelKgFromEnv,
@@ -92,7 +93,10 @@ export function buildPartShippingSummary(
     state = 'estimated';
   }
 
-  const maxParcelKg = options.maxParcelKg ?? maxParcelKgFromEnv();
+  // The PDP is destination-agnostic. Flag only what the UAE tiers cannot price;
+  // international destinations are priced at checkout by the rate sheet.
+  const maxParcelKg =
+    options.maxParcelKg ?? Math.min(maxParcelKgFromEnv(), UAE_MAX_PARCEL_KG);
 
   return {
     state,

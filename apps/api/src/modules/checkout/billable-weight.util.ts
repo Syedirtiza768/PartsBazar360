@@ -311,12 +311,17 @@ export function estimatedVolumetricFactorFromEnv(): number {
 }
 
 /**
- * Practical per-parcel ceiling for the courier products in the EMX sheet.
+ * Upper bound for the UAE flat-rate tiers (the 25 kg tier). Heavier UAE parcels
+ * still need a freight quote because no UAE freight rate is on file.
+ */
+export const UAE_MAX_PARCEL_KG = 25;
+
+/**
+ * Per-parcel ceiling used for UAE eligibility and the buyer PDP freight flag.
  *
- * The sheet only defines bands up to 2kg and rate lookup extrapolates linearly
- * past that, which produces meaningless numbers at freight weights (a 184kg
- * engine came out near AED 28,000). Anything above this needs a real freight
- * quote instead.
+ * International destinations no longer use this ceiling: their rates are the
+ * EMX sheet's 2 kg band extended linearly, so heavier parcels get a freight
+ * cost rather than a quote. Override with SHIPPING_MAX_PARCEL_KG.
  */
 export const DEFAULT_MAX_PARCEL_KG = 30;
 
