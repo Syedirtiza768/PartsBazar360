@@ -2,6 +2,14 @@
 
 **Last reviewed:** 2026-11-18
 
+## 2026-11-18 — PDP keeps Add to cart and Buy now visible
+
+**Decision:** The product page shows **Add to cart** and **Buy now** whenever the part can be bought. It hides them only for a real block: no delivery to the chosen country, a freight or specialist-review quote, or a known conflict with the selected vehicle. A missing delivery country no longer replaces the buttons with "Choose a delivery destination", and a buyer without a vehicle is no longer sent to the garage before buying.
+
+**Why:** Buyers whose country was not saved or detected saw a price but no way to buy. The 2026-10-09 policy also turned "Buy now" into "Check fitment" for buyers without a vehicle. The client asked for an intuitive journey. Checkout already collects the address, re-quotes shipping, and requires the server acknowledgment for no-vehicle and unverified lines, so these PDP gates added friction without adding safety.
+
+**Consequences:** Unconfirmed fitment is shown as a short note under the buttons instead of a gate. A missing destination shows "+ shipping at checkout". Geo detection now maps any listed country, not only the 15 hard-coded ISO codes.
+
 ## 2026-11-18 — RealTrack shipping-policy weights and freight cost for heavy international parcels
 
 **Decision:** Each part linked to an active RealTrack offer takes its listing weight from the upper kg limit in its RealTrack shipping-policy name (for example `BLAP shipping policy 3 KG` → 3 kg, `SUPERIOR AUTO Weight 1-1.99kg` → 1.99 kg). The write set 29,617 `CanonicalPart` rows to `weight`, `weightSource = 'SELLER'` and `billableWeightKg`, in one production transaction. Parts with several RealTrack offers take the largest limit (no conflicts were found). The full list, with each part's prior weight, is in `tmp/realtrack_policy_weights_2026-11-18.csv` (gitignored). International checkout no longer returns `FREIGHT_QUOTE_REQUIRED` above 2 kg. It extends the EMX sheet's 2 kg slope linearly, as `lookupAmount` already did for the sheet's upper band, so heavier parcels get a freight cost. UAE parcels above 25 kg still need a freight quote, because no UAE freight rate is on file.

@@ -16,9 +16,25 @@ export type PurchaseActionPolicy = {
   blockedLabel: string | null;
   blockedHref: string | null;
   buyHref: string | null;
+  /** Short helper line shown under the purchase buttons, if any. */
+  note: string | null;
 };
 
-/** Shared display policy for the PDP offer actions and sticky mobile action. */
+/** Shipping states that genuinely stop a purchase for the chosen destination. */
+type BlockingShippingStatus = Extract<
+  PurchaseShippingStatus,
+  "UNAVAILABLE" | "FREIGHT_QUOTE" | "REVIEW"
+>;
+
+/**
+ * Shared display policy for the PDP offer actions and sticky mobile action.
+ *
+ * "Add to cart" and "Buy now" stay visible unless something definitely blocks
+ * the purchase (no delivery to the chosen country, freight or specialist
+ * review, or a known fitment conflict). A missing destination or an unconfirmed
+ * fitment does not hide them: checkout collects the address, re-quotes shipping
+ * and asks the buyer to acknowledge unconfirmed fitment before payment.
+ */
 export function selectPurchaseActionPolicy(input: {
   fitment: FitmentState | null;
   hasSelectedVehicle: boolean;
@@ -28,45 +44,38 @@ export function selectPurchaseActionPolicy(input: {
   alternativesHref: string;
   freightQuoteHref: string;
 }): PurchaseActionPolicy {
-  if (input.shipping !== "AVAILABLE") {
-    const copy: Record<Exclude<PurchaseShippingStatus, "AVAILABLE">, string> = {
-      CHECKING: "Checking delivery",
-      DESTINATION_REQUIRED: "Choose a delivery destination",
+  if (
+    input.shipping === "UNAVAILABLE" ||
+    input.shipping === "FREIGHT_QUOTE" ||
+    input.shipping === "REVIEW"
+  ) {
+    const copy: Record<BlockingShippingStatus, string> = {
       UNAVAILABLE: "Delivery is unavailable",
       FREIGHT_QUOTE: "Request a freight quote",
       REVIEW: "Request a shipping review",
     };
-    const freight = input.shipping === "FREIGHT_QUOTE";
-    const review = input.shipping === "REVIEW";
-    const destinationRequired = input.shipping === "DESTINATION_REQUIRED";
+    const quoteable = input.shipping !== "UNAVAILABLE";
     return {
       canPurchase: false,
       requiresFitmentAcknowledgment: false,
       addLabel: copy[input.shipping],
       buyLabel: copy[input.shipping],
-      blockedLabel:
-        freight || review || destinationRequired ? copy[input.shipping] : null,
-      blockedHref:
-        freight || review
-          ? input.freightQuoteHref
-          : destinationRequired
-            ? "#shipping-destination"
-            : null,
+      blockedLabel: quoteable ? copy[input.shipping] : null,
+      blockedHref: quoteable ? input.freightQuoteHref : null,
       buyHref: null,
+      note: null,
     };
   }
 
-  if (input.fitment === null && input.hasSelectedVehicle) {
-    return {
-      canPurchase: false,
-      requiresFitmentAcknowledgment: false,
-      addLabel: "Checking compatibility",
-      buyLabel: "Checking compatibility",
-      blockedLabel: null,
-      blockedHref: null,
-      buyHref: null,
-    };
-  }
+  const buyable = {
+    canPurchase: true,
+    addLabel: "Add to cart",
+    buyLabel: "Buy now",
+    blockedLabel: null,
+    blockedHref: null,
+    buyHref: null,
+  } as const;
+
   if (input.fitment === "incompatible") {
     return {
       canPurchase: false,
@@ -76,55 +85,29 @@ export function selectPurchaseActionPolicy(input: {
       blockedLabel: "This part conflicts with your selected vehicle.",
       blockedHref: input.alternativesHref,
       buyHref: null,
+      note: null,
     };
   }
   if (input.fitment === "verified" || input.fitment === "universal") {
-    return {
-      canPurchase: true,
-      requiresFitmentAcknowledgment: false,
-      addLabel: "Add to cart",
-      buyLabel: "Buy now",
-      blockedLabel: null,
-      blockedHref: null,
-      buyHref: null,
-    };
+    return { ...buyable, requiresFitmentAcknowledgment: false, note: null };
   }
-
-  if (!input.hasSelectedVehicle) {
-    if (!input.hasExactIdentifier) {
-      return {
-        canPurchase: false,
-        requiresFitmentAcknowledgment: false,
-        addLabel: "Select a vehicle to check fitment",
-        buyLabel: "Check fitment",
-        blockedLabel: "Select a vehicle to check fitment",
-        blockedHref: input.garageHref,
-        buyHref: input.garageHref,
-      };
-    }
-
+  if (input.fitment === null && input.hasSelectedVehicle) {
+    // Compatibility is still loading; keep the buttons and let the result
+    // replace this note (or switch to alternatives on a conflict).
     return {
-      canPurchase: true,
+      ...buyable,
       requiresFitmentAcknowledgment: true,
-      addLabel: "Add without a vehicle",
-      buyLabel: "Check fitment",
-      blockedLabel: null,
-      blockedHref: null,
-      buyHref: input.garageHref,
+      note: "Checking compatibility with your vehicle…",
     };
   }
 
   return {
-    canPurchase: true,
+    ...buyable,
     requiresFitmentAcknowledgment: true,
-    addLabel: input.hasSelectedVehicle
-      ? "Add for compatibility review"
-      : "Add without a vehicle",
-    buyLabel: input.hasSelectedVehicle
-      ? "Continue with fitment review"
-      : "Continue without a vehicle",
-    blockedLabel: null,
-    blockedHref: null,
-    buyHref: null,
+    note: input.hasSelectedVehicle
+      ? "Fitment for your vehicle isn't confirmed. You'll confirm it at checkout."
+      : input.hasExactIdentifier
+        ? "Match the part number to your old part, or select your vehicle to check fitment."
+        : "Select your vehicle to check fitment before you buy.",
   };
 }

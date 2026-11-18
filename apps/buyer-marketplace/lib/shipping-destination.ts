@@ -239,11 +239,23 @@ export function setShippingCountry(country: string) {
   }
 }
 
-/** Prefer saved destination; otherwise map geo ISO code when known. */
+const SHIPPING_COUNTRY_SET = new Set(SHIPPING_COUNTRIES);
+
+/** English region name for an ISO code, when it matches a dropdown entry. */
+function isoToListedCountry(code: string): string {
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "region" }).of(code);
+    return name && SHIPPING_COUNTRY_SET.has(name) ? name : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Prefer saved destination; otherwise map the geo ISO code to a listed country. */
 export function resolveShippingCountry(detectedIso?: string | null): string {
   const saved = getShippingCountry();
   if (saved) return saved;
   if (!detectedIso) return "";
   const code = detectedIso.trim().toUpperCase();
-  return ISO_TO_DESTINATION[code] || "";
+  return ISO_TO_DESTINATION[code] || isoToListedCountry(code);
 }

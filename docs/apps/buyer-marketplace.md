@@ -1,6 +1,6 @@
 # buyer-marketplace
 
-**Last reviewed:** 2026-11-15
+**Last reviewed:** 2026-11-18
 
 Public storefront — the buyer-facing marketplace app. Lives at `apps/buyer-marketplace`, Next.js, dev port 3000.
 
@@ -93,11 +93,16 @@ acknowledgment only for no-vehicle or unverified lines. Checkout acknowledgments
 survive a refresh only when a fresh validation returns the same opaque
 fingerprint; a changed address, vehicle, coupon, currency, provider, price,
 stock, shipping quote or fitment policy invalidates the saved choice. One PDP
-purchase context drives desktop offer actions and the sticky mobile bar. It
-prioritizes shipping blocks, waits for the selected vehicle's server fitment
-result, and directs buyers without a vehicle to fitment setup first. When a
-public MPN/OE identifier exists, an explicitly labeled add-without-vehicle path
-remains available and checkout requires its server acknowledgment. PDP add/buy
+purchase context drives desktop offer actions and the sticky mobile bar
+(`lib/purchase-action-policy.ts`). Since 2026-11-18 it always shows **Add to
+cart** and **Buy now** unless something definitely blocks the purchase: no
+delivery to the chosen country, a freight or specialist-review quote, or a
+known conflict with the selected vehicle. A missing destination shows "+
+shipping at checkout", and an unconfirmed fitment (no vehicle, or a result
+still loading) shows a short note under the buttons; checkout re-quotes
+shipping and requires the server acknowledgment for those lines. The default
+destination is the saved country, else the geo-detected country when it is in
+the shipping list. PDP add/buy
 actions send the selected canonical vehicle configuration to the cart;
 adding the same offer for another vehicle creates a separate line. Cart review
 and checkout continue to rely on server validation rather than this display

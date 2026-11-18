@@ -307,7 +307,11 @@ function OfferRow({
             <p className="mt-0.5 text-xs font-medium text-amber-600">
               + freight quote
             </p>
-          ) : !destination ? null : shippingLoading && !shippingQuote ? (
+          ) : !destination ? (
+            <p className="mt-0.5 text-xs text-graphite-600">
+              + shipping at checkout
+            </p>
+          ) : shippingLoading && !shippingQuote ? (
             <p className="mt-0.5 text-xs text-graphite-500">+ shipping…</p>
           ) : shippingQuote?.available && shippingQuote.amount != null ? (
             <p className="mt-0.5 text-xs text-graphite-600">
@@ -372,6 +376,11 @@ function OfferRow({
         >
           {actionPolicy.blockedLabel || actionPolicy.addLabel}
         </div>
+      )}
+      {actionPolicy.canPurchase && actionPolicy.note && (
+        <p className="mt-2 text-center text-xs text-graphite-600">
+          {actionPolicy.note}
+        </p>
       )}
       <Link
         href={`/support?partId=${part.id}&category=GENERAL&source=ask-part&subject=${encodeURIComponent(`Question about ${part.title}`)}`}
@@ -586,6 +595,7 @@ export function StickyMobileBar({ part }: { part: Part }) {
   const { addToCart } = useCart();
   const { push } = useToast();
   const { format } = useCurrency();
+  const router = useRouter();
   const {
     activeVehicleConfigId,
     destination,
@@ -596,6 +606,22 @@ export function StickyMobileBar({ part }: { part: Part }) {
   const [adding, setAdding] = useState(false);
 
   if (!best) return null;
+
+  const handleBuyNow = async () => {
+    setAdding(true);
+    try {
+      await addToCart(best.id, 1, activeVehicleConfigId);
+      router.push("/checkout");
+    } catch (err: unknown) {
+      push({
+        title: "Couldn't start checkout",
+        description: err instanceof Error ? err.message : "Please try again.",
+        tone: "error",
+      });
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const handleAdd = async () => {
     setAdding(true);
@@ -631,17 +657,30 @@ export function StickyMobileBar({ part }: { part: Part }) {
           <p className="truncate text-[11px] text-graphite-600">
             {shippingStatus === "AVAILABLE" && shippingQuote?.amount != null
               ? `${destination}: ${format(shippingQuote.amount, shippingQuote.currency)} shipping`
-              : actionPolicy.blockedLabel || actionPolicy.addLabel}
+              : actionPolicy.blockedLabel ||
+                (destination
+                  ? "Calculating shipping…"
+                  : "Shipping calculated at checkout")}
           </p>
         </div>
-        {actionPolicy.canPurchase && actionPolicy.buyHref ? (
+        {actionPolicy.canPurchase ? (
           <div className="flex shrink-0 flex-col items-center gap-1">
-            <Link
-              href={actionPolicy.buyHref}
-              className="inline-flex min-h-touch items-center justify-center rounded-lg bg-brand-700 px-3 py-2 text-center text-xs font-semibold text-white"
-            >
-              {actionPolicy.buyLabel}
-            </Link>
+            {actionPolicy.buyHref ? (
+              <Link
+                href={actionPolicy.buyHref}
+                className="inline-flex min-h-touch items-center justify-center rounded-lg bg-brand-700 px-3 py-2 text-center text-xs font-semibold text-white"
+              >
+                {actionPolicy.buyLabel}
+              </Link>
+            ) : (
+              <Button
+                onClick={handleBuyNow}
+                disabled={adding}
+                className="shrink-0"
+              >
+                {actionPolicy.buyLabel}
+              </Button>
+            )}
             <button
               type="button"
               onClick={handleAdd}
@@ -651,10 +690,6 @@ export function StickyMobileBar({ part }: { part: Part }) {
               {adding ? "Adding…" : actionPolicy.addLabel}
             </button>
           </div>
-        ) : actionPolicy.canPurchase ? (
-          <Button onClick={handleAdd} loading={adding} className="shrink-0">
-            {actionPolicy.addLabel}
-          </Button>
         ) : actionPolicy.blockedHref ? (
           <Link
             href={actionPolicy.blockedHref}
