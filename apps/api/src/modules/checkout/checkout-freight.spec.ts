@@ -81,7 +81,8 @@ describe('CheckoutService freight gate', () => {
     return { service, reserveStock, releaseStock };
   }
 
-  it('rejects an over-ceiling cart without reserving stock', async () => {
+  it('rejects an over-ceiling UAE cart without reserving stock', async () => {
+    const uaeAddress = { country: 'United Arab Emirates', line1: '1 Test St' };
     const { service, reserveStock } = buildService({
       id: 'part-1',
       title: 'Complete Engine Assembly for Ford F-150 5.0L',
@@ -92,10 +93,10 @@ describe('CheckoutService freight gate', () => {
       dimensions: null,
     });
 
-    const review = await service.validateCheckout('cart-1', address, 'AED');
+    const review = await service.validateCheckout('cart-1', uaeAddress, 'AED');
 
     await expect(
-      service.processCheckout('cart-1', buyer, address, 'AED', undefined, {
+      service.processCheckout('cart-1', buyer, uaeAddress, 'AED', undefined, {
         idempotencyKey: 'freight-test',
         validationId: review.validationId,
         acknowledgedCartItemIds: review.requiredAcknowledgmentCartItemIds,

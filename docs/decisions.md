@@ -1,6 +1,22 @@
 # Decision log
 
-**Last reviewed:** 2026-11-13
+**Last reviewed:** 2026-11-18
+
+## 2026-11-18 — RealTrack shipping-policy weights and freight cost for heavy international parcels
+
+**Decision:** Each part linked to an active RealTrack offer takes its listing weight from the upper kg limit in its RealTrack shipping-policy name (for example `BLAP shipping policy 3 KG` → 3 kg, `SUPERIOR AUTO Weight 1-1.99kg` → 1.99 kg). The write set 29,617 `CanonicalPart` rows to `weight`, `weightSource = 'SELLER'` and `billableWeightKg`, in one production transaction. Parts with several RealTrack offers take the largest limit (no conflicts were found). The full list, with each part's prior weight, is in `tmp/realtrack_policy_weights_2026-11-18.csv` (gitignored). International checkout no longer returns `FREIGHT_QUOTE_REQUIRED` above 2 kg. It extends the EMX sheet's 2 kg slope linearly, as `lookupAmount` already did for the sheet's upper band, so heavier parcels get a freight cost. UAE parcels above 25 kg still need a freight quote, because no UAE freight rate is on file.
+
+**Why:** The seller's shipping policy is the best weight source available. Most of the RealTrack-linked catalog had no weight at all, so checkout used class defaults. The client asked for a freight cost, not a quote, and chose to extend the EMX slope after seeing the examples below. The EMX sheet is the only courier rate on file. No freight tariff for heavy parcels exists in the PartsBazar360 or RealTrack databases.
+
+**Coverage:** 68,339 active RealTrack-linked offers were checked. 29,617 parts got a policy weight. About 37k offers have no shipping profile in RealTrack's own tables (`catalog_products.shipping_profile` and `listing_records.shippingProfileName` are empty for them), and about 1k offers carry a price-only policy such as `Flat: … $145` or `Engine Shipping Policy 1000$`. Those keep their previous weight.
+
+**Consequences:**
+- EMX extrapolation prices get high for heavy parcels. Afghanistan: 3 kg ≈ AED 356, 30 kg ≈ AED 3,455, 50 kg ≈ AED 5,750. Staff should check these before relying on them for sales of heavy parts.
+- About 24,400 policy-weighted parts are over 2 kg. Before the code change is deployed, they show `FREIGHT_QUOTE_REQUIRED` on international checkout, because the running API still has the 2 kg ceiling.
+- The PDP's part-level freight flag now uses the UAE 25 kg limit (`buildPartShippingSummary`). The PDP estimate is destination-aware, so international buyers see the EMX price at checkout.
+- The EMX rate sheet still lives in code (`checkout/emx-rate-sheet.ts`), not in the database. Moving it into a table is a separate change.
+
+**Revisit when:** A UAE heavy-freight rate or a courier heavy-freight tariff is provided, or when the EMX sheet is re-issued.
 
 ## 2026-11-06 — Use the current RealTrack US feed origin and store IDs
 

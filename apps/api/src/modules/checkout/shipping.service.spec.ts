@@ -45,19 +45,20 @@ describe('ShippingService', () => {
       expect(quote.billableWeightGrams).toBe(1000);
     });
 
-    it('requires a manual quote beyond the largest defined rate band', () => {
+    it('extends the largest defined rate band instead of quoting freight', () => {
       const quote = service.quoteSellerShipping([dense(2.4)], 'Australia');
 
       expect(quote.billableWeightGrams).toBe(2400);
       expect(quote).toMatchObject({
-        available: false,
-        requiresFreightQuote: true,
-        availabilityReason: 'FREIGHT_QUOTE_REQUIRED',
-        serviceType: 'FREIGHT_QUOTE_REQUIRED',
-        leadTime: null,
+        available: true,
+        requiresFreightQuote: false,
+        availabilityReason: null,
+        serviceType: 'REGISTERED (POD)',
+        leadTime: '04 to 06 Business Days',
         quotedWeightKg: 2.4,
-        amount: 0,
       });
+      // Australia 2000g rate (AED 321.30) + 2 × the 200g step (AED 31.05 each).
+      expect(quote.amount).toBeCloseTo(383.4, 2);
     });
   });
 
@@ -227,12 +228,12 @@ describe('ShippingService', () => {
         'Australia',
       );
 
-      // 56 × 42 × 26 / 6000 ≈ 10.2kg volumetric vs 2.2kg actual. The
-      // international rate sheet stops at 2kg, so the shipment needs review.
+      // 56 × 42 × 26 / 6000 ≈ 10.2kg volumetric vs 2.2kg actual. The rate sheet
+      // is extended past its 2kg band, so the shipment is priced, not quoted.
       expect(quote.weightBasis).toBe('VOLUMETRIC');
-      expect(quote.requiresFreightQuote).toBe(true);
-      expect(quote.available).toBe(false);
-      expect(quote.amount).toBe(0);
+      expect(quote.requiresFreightQuote).toBe(false);
+      expect(quote.available).toBe(true);
+      expect(quote.amount).toBeGreaterThan(0);
       expect(quote.billableWeightGrams).toBeGreaterThan(10_000);
     });
 
@@ -343,7 +344,7 @@ describe('ShippingService', () => {
   });
 
   describe('freight ceiling', () => {
-    it('does not extrapolate the 2kg rate sheet into freight weights', () => {
+    it('prices heavy international parcels by extending the rate sheet slope', () => {
       const quote = service.quoteSellerShipping(
         [
           {
@@ -356,13 +357,15 @@ describe('ShippingService', () => {
         'Australia',
       );
 
-      expect(quote.requiresFreightQuote).toBe(true);
-      // The eligibility weight is reported, but no ceiling/floor is charged.
+      expect(quote.requiresFreightQuote).toBe(false);
       expect(quote.quotedWeightKg).toBe(211.6);
       expect(quote.totalWeightGrams).toBe(184_000);
-      expect(quote.amount).toBe(0);
-      expect(quote.available).toBe(false);
-      expect(quote.leadTime).toBeNull();
+      expect(quote.available).toBe(true);
+      expect(quote.availabilityReason).toBeNull();
+      expect(quote.leadTime).not.toBeNull();
+      expect(quote.amount).toBeGreaterThan(
+        service.quoteSellerShipping([dense(2)], 'Australia').amount,
+      );
     });
 
     it('flags oversized UAE parcels too', () => {
@@ -390,7 +393,7 @@ describe('ShippingService', () => {
       ).toBe(false);
     });
 
-    it('flags a cart that only exceeds the ceiling in aggregate', () => {
+    it('flags a UAE cart that only exceeds the 25kg ceiling in aggregate', () => {
       const quote = service.quoteSellerShipping(
         [
           {
@@ -401,7 +404,7 @@ describe('ShippingService', () => {
             dimensionsCm: { lengthCm: 50, widthCm: 50, heightCm: 25 },
           },
         ],
-        'Australia',
+        'United Arab Emirates',
       );
 
       expect(quote.requiresFreightQuote).toBe(true);

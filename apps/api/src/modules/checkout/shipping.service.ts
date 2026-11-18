@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PAYMENT_TEST_PART_ID } from '@repo/catalog-contracts';
 import { EMX_RATE_BANDS, EMX_RATE_SHEET } from './emx-rate-sheet';
 import {
+  UAE_MAX_PARCEL_KG,
   estimateMarginPctFromEnv,
   estimatedVolumetricFactorFromEnv,
   isExactWeightSource,
@@ -159,13 +160,14 @@ export class ShippingService {
 
     const row = this.rowsByCountry.get(countryKey);
     const isUae = this.isUae(countryKey);
-    const supportedParcelGrams = Math.min(
-      maxParcelKgFromEnv() * 1000,
-      isUae ? 25_000 : this.highestBand,
-    );
-    const countrySupported = isUae || Boolean(row);
+    // International parcels are priced by extending the EMX rate sheet's
+    // slope past its 2 kg band (see lookupAmount), so they have no freight
+    // ceiling. Only the UAE flat tiers stop, at their 25 kg limit.
+    const supportedParcelGrams = isUae
+      ? Math.min(maxParcelKgFromEnv() * 1000, UAE_MAX_PARCEL_KG * 1000)
+      : Number.POSITIVE_INFINITY;
     const requiresFreightQuote =
-      countrySupported && resolved.chargeableGrams > supportedParcelGrams;
+      isUae && resolved.chargeableGrams > supportedParcelGrams;
 
     const common = {
       destinationCountry: destinationCountry.trim(),
