@@ -24,6 +24,15 @@ now get "<name> Parts".
 **Revisit when:** Parts without photos are hidden from buyer search. Then the
 two counts converge and `listingCount` can go.
 
+**Follow-up (same day):** listing the blog in the sitemap exposed two posts on
+one topic. `genuine-oem-fuel-system-parts` was merged into the older
+`genuine-oem-fuel-system` (its sections on how the system works, failure signs,
+Audi A6 / Infiniti Q50 / injector parts and safety now live there), set to
+`DRAFT` in the DB (not deleted; both original rows are backed up on the server
+in `/home/ubuntu/blog-merge-fuel-20261119.backup.jsonl`), and 301-redirected in
+`nginx/nginx.conf`. Blog posts have no redirect table, so future merges need
+the same nginx rule.
+
 ## 2026-11-18 — PDP keeps Add to cart and Buy now visible
 
 **Decision:** The product page shows **Add to cart** and **Buy now** whenever the part can be bought. It hides them only for a real block: no delivery to the chosen country, a freight or specialist-review quote, or a known conflict with the selected vehicle. A missing delivery country no longer replaces the buttons with "Choose a delivery destination", and a buyer without a vehicle is no longer sent to the garage before buying.
