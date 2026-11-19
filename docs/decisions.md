@@ -1,6 +1,28 @@
 # Decision log
 
-**Last reviewed:** 2026-11-18
+**Last reviewed:** 2026-11-19
+
+## 2026-11-19 — Taxonomy page copy states the search total; blog is in the sitemap
+
+**Decision:** A taxonomy landing page's meta description and on-page
+description state the unfiltered search total (`listingCount`, from
+`/search/parts`), the same number as the "of N listings" line and the homepage
+system tiles (`/search/facets`). `productCount` (from `/seo/taxonomy`) is still
+used for indexability and sitemap eligibility only. `static.xml` now lists
+`/blog/` and every published post.
+
+**Why:** The two counts come from different sources by design.
+`/seo/taxonomy` counts Postgres `CanonicalPart` rows that qualify for the
+sitemap (slug, at least one image, an ACTIVE offer with price > 0 from an
+ACTIVE seller). The search index keeps any part with a buyer-visible offer,
+including parts with no photo. On 2026-11-19 Fuel System was 921 in search
+(442 with a photo, 479 without) and 442 in `/seo/taxonomy`, so one page said
+"of 921 listings" and "Browse 442 listings". The categoryGroup heading also
+read "Fuel System System Parts"; group names already ending in "System(s)"
+now get "<name> Parts".
+
+**Revisit when:** Parts without photos are hidden from buyer search. Then the
+two counts converge and `listingCount` can go.
 
 ## 2026-11-18 — PDP keeps Add to cart and Buy now visible
 

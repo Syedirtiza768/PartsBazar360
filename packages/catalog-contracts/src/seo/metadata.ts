@@ -260,7 +260,9 @@ export function taxonomyHeading(node: SeoTaxonomyInput): string {
     case 'modelYear':
       return `${label} Parts`;
     case 'categoryGroup':
-      return `${label} System Parts`;
+      // Most group names already end in "System" ("Fuel System"); appending
+      // it again produced "Fuel System System Parts".
+      return /\bsystems?$/i.test(label) ? `${label} Parts` : `${label} System Parts`;
     case 'category':
     default:
       // A category name is already the noun a buyer searches ("Brake Pads").
@@ -296,7 +298,9 @@ export function taxonomyDescription(node: SeoTaxonomyInput): string {
   if (override) return clip(override, limits.description);
 
   const label = taxonomyLabel(node) || 'auto';
-  const count = node.productCount;
+  // The buyer-visible total when the caller knows it, so the description says
+  // the same number as the listing grid and the homepage tile.
+  const count = node.listingCount ?? node.productCount;
   // Only state a count when there is one; "Browse 0 listings" is worse than
   // saying nothing, and an approximate count would be a false claim.
   const countClause =

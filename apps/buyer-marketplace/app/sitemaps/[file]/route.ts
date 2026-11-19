@@ -7,6 +7,7 @@ import {
   type SeoTaxonomyKind,
   type SitemapEntry,
 } from "@repo/catalog-contracts";
+import { getPublishedPosts } from "@/lib/content";
 import { getSitemapParts } from "@/lib/sitemap-source";
 import { getTaxonomy, type TaxonomyNode } from "@/lib/taxonomy";
 
@@ -40,7 +41,27 @@ const STATIC_ROUTES: SitemapEntry[] = [
   { url: absoluteUrl("/support"), changeFrequency: "monthly", priority: 0.3 },
   { url: absoluteUrl("/contact"), changeFrequency: "monthly", priority: 0.3 },
   { url: absoluteUrl("/privacy-policy"), changeFrequency: "yearly", priority: 0.2 },
+  // The blog index is an indexable page (robots index,follow; canonical set),
+  // so it belongs here. Individual posts are added from the CMS below.
+  { url: absoluteUrl("/blog/"), changeFrequency: "weekly", priority: 0.5 },
 ];
+
+/**
+ * Published blog posts. Only what `/blog/posts` returns is listed — that is
+ * the same list the blog index renders, so a draft never reaches the sitemap.
+ * A failed CMS call yields no post entries rather than failing static.xml.
+ */
+async function blogEntries(): Promise<SitemapEntry[]> {
+  const posts = await getPublishedPosts();
+  return posts
+    .filter((post) => post.slug)
+    .map((post) => ({
+      url: absoluteUrl(`/blog/${post.slug}/`),
+      lastModified: post.updatedAt || post.publishedAt || null,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    }));
+}
 
 function taxonomyEntries(
   nodes: TaxonomyNode[],
@@ -94,7 +115,7 @@ export async function GET(
 
   switch (file) {
     case "static.xml":
-      return xml(renderSitemap(STATIC_ROUTES));
+      return xml(renderSitemap([...STATIC_ROUTES, ...(await blogEntries())]));
 
     case "categories.xml": {
       const nodes = await getTaxonomy({ indexableOnly: true });

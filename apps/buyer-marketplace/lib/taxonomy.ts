@@ -155,6 +155,32 @@ export async function getTaxonomyListings(
   }
 }
 
+/** Listings per taxonomy page. Shared so the total lookup below reuses the page-1 fetch. */
+export const TAXONOMY_PAGE_SIZE = 48;
+
+/**
+ * The unfiltered number of listings on a node's landing page: the same total
+ * the "of N listings" line, the homepage system tiles and /search show (all
+ * read the search index).
+ *
+ * `node.productCount` is a different number on purpose: it counts only parts
+ * that qualify for the sitemap (image, positive price, active seller), and it
+ * drives indexability. Stating it in page copy made one page say "of 921
+ * listings" and "Browse 442 listings" at once.
+ *
+ * The request matches the unfiltered page-1 fetch exactly, so Next dedupes it
+ * with the grid fetch instead of making a second call.
+ */
+export async function getTaxonomyListingTotal(
+  node: TaxonomyNode,
+): Promise<number | null> {
+  const results = await getTaxonomyListings(node, {
+    page: 1,
+    pageSize: TAXONOMY_PAGE_SIZE,
+  });
+  return results ? results.total : null;
+}
+
 /**
  * Sibling and child nodes to link to from a landing page.
  *

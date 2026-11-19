@@ -26,11 +26,13 @@ import { taxonomySeo } from "@/lib/seo";
 import type { FacetsResponse } from "@/lib/types";
 import {
   getSiblingLinks,
+  getTaxonomyListingTotal,
   getTaxonomyListings,
+  TAXONOMY_PAGE_SIZE,
   type TaxonomyNode,
 } from "@/lib/taxonomy";
 
-const PAGE_SIZE = 48;
+const PAGE_SIZE = TAXONOMY_PAGE_SIZE;
 function taxonomyScopeParams(node: TaxonomyNode): SearchParamsShape {
   switch (node.kind) {
     case "category":
@@ -57,18 +59,22 @@ function taxonomyScopeParams(node: TaxonomyNode): SearchParamsShape {
 /**
  * Turn a resolved taxonomy node into the engine's input shape.
  *
- * The listing count comes from the catalog, not from the current page of
+ * `productCount` comes from the catalog, not from the current page of
  * results, because eligibility is a property of the node's whole inventory.
+ * `listingCount` is the unfiltered search total, the number the page copy
+ * states, so it matches the grid and the homepage tile.
  */
 export function toTaxonomyInput(
   node: TaxonomyNode,
   page: number,
   totalPages: number,
+  listingCount?: number | null,
 ): SeoTaxonomyInput {
   return {
     kind: node.kind,
     name: node.name,
     productCount: node.productCount,
+    ...(listingCount != null ? { listingCount } : {}),
     ...(node.parents ? { parents: node.parents } : {}),
     ...(node.year !== undefined ? { year: node.year } : {}),
     ...(node.updatedAt ? { updatedAt: node.updatedAt } : {}),
@@ -122,7 +128,10 @@ export async function TaxonomyLanding({
   // an empty one, so crawlers cannot walk into unbounded pagination.
   if (page > totalPages) notFound();
 
-  const input = toTaxonomyInput(node, page, totalPages);
+  // Deduped with the grid fetch on an unfiltered page 1; on a filtered or
+  // later page it is one more cached request for the category-wide total.
+  const listingCount = await getTaxonomyListingTotal(node);
+  const input = toTaxonomyInput(node, page, totalPages, listingCount);
   const seo = taxonomySeo(input, {
     items: results.items.map((part) => ({
       url: part.slug

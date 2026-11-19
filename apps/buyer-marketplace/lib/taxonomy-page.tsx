@@ -13,7 +13,7 @@ import type { SeoTaxonomyKind } from "@repo/catalog-contracts";
 import type { SearchParamsShape } from "@/lib/filter-params";
 import { TaxonomyLanding, toTaxonomyInput } from "@/components/TaxonomyLanding";
 import { taxonomySeo, toMetadata } from "@/lib/seo";
-import { resolveTaxonomyNode } from "@/lib/taxonomy";
+import { getTaxonomyListingTotal, resolveTaxonomyNode } from "@/lib/taxonomy";
 
 /**
  * Landing pages are ISR at 15 minutes: fresh enough for inventory, cheap
@@ -70,7 +70,12 @@ export async function taxonomyMetadata(options: {
     };
   }
   const page = options.page ?? 1;
-  return toMetadata(taxonomySeo(toTaxonomyInput(node, page, page)));
+  // Same request as the page's own grid fetch, so it is deduped — and the
+  // meta description states the number buyers see, not the sitemap count.
+  const listingCount = await getTaxonomyListingTotal(node);
+  return toMetadata(
+    taxonomySeo(toTaxonomyInput(node, page, page, listingCount)),
+  );
 }
 
 /** Resolve and render, or 404. */

@@ -112,6 +112,13 @@ export interface SeoTaxonomyInput {
   name: string;
   /** Number of *indexable* listings in this node. Drives eligibility. */
   productCount: number;
+  /**
+   * Number of listings a buyer actually sees on the page (the search total).
+   * When set, page copy states this count instead of `productCount`, so the
+   * meta description can never disagree with the "of N listings" line or the
+   * homepage tile. Eligibility still uses `productCount`.
+   */
+  listingCount?: number | null;
   /** Parent chain, outermost first, for breadcrumbs and nested URLs. */
   parents?: Array<{ kind: SeoTaxonomyKind; name: string }>;
   /** Only set for `modelYear`. */
